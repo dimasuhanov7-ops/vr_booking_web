@@ -1,0 +1,43 @@
+name: vr_booking_web
+description: "Публичный виджет онлайн-бронирования VR-клубов Effect VR и V-Ray."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.8.0
+  bloc: ^9.0.0
+  flutter_bloc: ^9.0.0
+  equatable: ^2.0.5
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  bloc_test: ^10.0.0
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-400.ttf
+          weight: 400
+        - asset: assets/fonts/Archivo-500.ttf
+          weight: 500
+        - asset: assets/fonts/Archivo-600.ttf
+          weight: 600
+        - asset: assets/fonts/Archivo-700.ttf
+          weight: 700
+        - asset: assets/fonts/Archivo-800.ttf
+          weight: 800

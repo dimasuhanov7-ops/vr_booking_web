@@ -1,0 +1,331 @@
+<!-- Извлечено дословно из Claude Design canvas «Виджет бронирования VR.dc.html»
+     (проект 8d5d5ffe-dca2-44b9-9385-3fac38fbaae5), снято 2026-09-03.
+     Разметка прототипа: {{ }} — биндинги, <sc-if>/<sc-for> — условия/циклы.
+     Логика-компаньон: booking-widget.logic.js -->
+
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#08090A; color:#F2F2F5; font-family:'Archivo', system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:#A9F04A; }
+  a:hover { color:#CDF98F; }
+  input, button { font-family:inherit; }
+  input:focus { outline:none; }
+  ::placeholder { color:#5B5B66; }
+  @keyframes podIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+</style>
+</helmet>
+
+<div style="min-height:100vh; background:radial-gradient(1200px 600px at 50% -200px, #062018 0%, #08090A 70%); padding:0 0 80px">
+
+  <div style="position:sticky; top:0; z-index:40; background:rgba(13,13,15,0.88); backdrop-filter:blur(12px); border-bottom:1px solid #222228">
+    <div style="max-width:1140px; margin:0 auto; padding:14px 20px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-size:13px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#A9F04A">VR booking</span>
+        <span style="font-size:13px; color:#6E6E7A">прототип виджета · Effect VR / V-Ray</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center">
+        <div style="display:flex; gap:6px; align-items:center">
+          <span style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5B5B66; margin-right:4px">Сценарий</span>
+          <sc-for list="{{ scenarios }}" as="sc"><button onclick="{{ sc.onClick }}" style="{{ sc.style }}">{{ sc.label }}</button></sc-for>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center">
+          <sc-for list="{{ viewports }}" as="vp"><button onclick="{{ vp.onClick }}" style="{{ vp.style }}">{{ vp.label }}</button></sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; justify-content:center; padding:28px 16px 0">
+    <div style="{{ frameStyle }}"><!-- max-width: mobile 412px / desktop 760px; border-radius:22px; bg #101015; shadow 0 30px 80px rgba(0,0,0,.55) -->
+
+      <!-- ===== ЭКРАН УСПЕХА ===== -->
+      <sc-if value="{{ isDone }}">
+        <div style="padding:22px 18px 30px">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px">
+            <div style="width:38px; height:38px; border-radius:12px; background:#A9F04A; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:700; color:#08090A">✓</div>
+            <div>
+              <div style="font-size:20px; font-weight:700; letter-spacing:-0.01em">Бронь подтверждена</div>
+              <div style="font-size:13px; color:#8A8A96">Номер {{ bookingNo }} · ждём вас</div>
+            </div>
+          </div>
+          <div style="border:1px solid #2A2A33; border-radius:16px; overflow:hidden; background:#15151A"><!-- чек: секции через 1px dashed #2A2A33 -->
+            <div style="padding:16px 16px 14px; border-bottom:1px dashed #2A2A33">
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:8px">Где и когда</div>
+              <div style="font-size:17px; font-weight:700">{{ sum.club }} · {{ sum.hall }}</div>
+              <div style="font-size:15px; color:#C9C9D2; margin-top:4px">{{ sum.dateLong }}, {{ sum.timeRange }} · {{ sum.durationLabel }}</div>
+            </div>
+            <div style="padding:16px; border-bottom:1px dashed #2A2A33; display:flex; flex-direction:column; gap:10px">
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66">Забронировано</div>
+              <sc-for list="{{ sum.lines }}" as="ln">
+                <div style="display:flex; justify-content:space-between; gap:12px; font-size:15px">
+                  <span style="color:#F2F2F5">{{ ln.label }}</span>
+                  <span style="color:#8A8A96; font-variant-numeric:tabular-nums">{{ ln.price }}</span>
+                </div>
+              </sc-for>
+              <div style="font-size:13px; color:#8A8A96">На {{ sum.people }} — по одному человеку на станцию, можно меняться внутри компании.</div>
+            </div>
+            <sc-if value="{{ sum.hasDiscount }}">
+              <div style="padding:14px 16px; background:rgba(169,240,74,0.12); border-bottom:1px dashed #2A2A33; display:flex; justify-content:space-between; align-items:center; gap:12px">
+                <div>
+                  <div style="font-size:14px; font-weight:600; color:#CDF98F">{{ sum.discountLabel }}</div>
+                  <div style="font-size:12px; color:#8A8A96">применится на кассе автоматически</div>
+                </div>
+                <div style="font-size:16px; font-weight:700; color:#CDF98F; font-variant-numeric:tabular-nums">−{{ sum.discountSum }}</div>
+              </div>
+            </sc-if>
+            <div style="padding:16px; display:flex; justify-content:space-between; align-items:flex-end; gap:12px">
+              <div>
+                <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66">К оплате на месте</div>
+                <div style="font-size:12px; color:#8A8A96; margin-top:4px">наличными или картой в клубе</div>
+              </div>
+              <div style="font-size:26px; font-weight:800; font-variant-numeric:tabular-nums">{{ sum.total }}</div>
+            </div>
+          </div>
+          <div style="margin-top:14px; padding:14px 16px; border:1px solid #2A2A33; border-radius:14px; font-size:13px; color:#8A8A96; line-height:1.5">
+            Придите за 10 минут до начала — инструктаж и настройка шлемов входят в сеанс. Контакт для связи: {{ sum.contact }}.
+          </div>
+          <button onclick="{{ reset }}" style="margin-top:16px; width:100%; padding:14px; border-radius:12px; border:1px solid #2A2A33; background:transparent; color:#C9C9D2; font-size:14px; font-weight:600; cursor:pointer">Забронировать ещё сеанс</button>
+        </div>
+      </sc-if>
+
+      <!-- ===== ФОРМА (шаги 1..4 в одном скролле, progressive disclosure) ===== -->
+      <sc-if value="{{ isForm }}">
+        <div style="padding:22px 18px 26px">
+
+          <div style="margin-bottom:22px">
+            <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:6px">Шаг {{ stepNo }} из 4</div>
+            <div style="font-size:24px; font-weight:800; letter-spacing:-0.02em; line-height:1.15">{{ stepTitle }}</div>
+            <div style="font-size:14px; color:#8A8A96; margin-top:6px; text-wrap:pretty">{{ stepHint }}</div>
+          </div>
+
+          <!-- Плашка конфликта брони -->
+          <sc-if value="{{ conflict.show }}">
+            <div style="margin-bottom:20px; border:1px solid #4A3A1F; background:#241D10; border-radius:14px; padding:14px 16px">
+              <div style="display:flex; gap:10px; align-items:flex-start">
+                <div style="width:22px; height:22px; flex:none; border-radius:7px; background:#FFB020; color:#241D10; font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center">!</div>
+                <div>
+                  <div style="font-size:15px; font-weight:700; color:#FFD48A">{{ conflict.title }}</div>
+                  <div style="font-size:13px; color:#CDBB99; margin-top:4px; line-height:1.5">{{ conflict.text }}</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px">
+                    <button onclick="{{ conflict.onKeep }}" style="padding:10px 14px; border-radius:10px; border:none; background:#FFB020; color:#241D10; font-size:13px; font-weight:700; cursor:pointer">{{ conflict.keepLabel }}</button>
+                    <button onclick="{{ conflict.onDismiss }}" style="padding:10px 14px; border-radius:10px; border:1px solid #4A3A1F; background:transparent; color:#CDBB99; font-size:13px; font-weight:600; cursor:pointer">Выбрать другое время</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ШАГ 1: клубы -->
+          <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:26px">
+            <sc-for list="{{ clubCards }}" as="c">
+              <div onclick="{{ c.onClick }}" style="{{ c.style }}"><!-- border-radius:18px; выбран: рамка+градиент акцента, иначе bg #15151A -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px">
+                  <div>
+                    <div style="display:flex; align-items:center; gap:8px">
+                      <span style="font-size:19px; font-weight:800; letter-spacing:-0.01em">{{ c.name }}</span>
+                      <span style="{{ c.tagStyle }}">{{ c.tag }}</span>
+                    </div>
+                    <div style="font-size:13px; color:#8A8A96; margin-top:5px; line-height:1.45; max-width:34ch; text-wrap:pretty">{{ c.desc }}</div>
+                  </div>
+                  <div style="text-align:right; flex:none">
+                    <div style="font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1">{{ c.capacity }}</div>
+                    <div style="font-size:11px; color:#5B5B66; letter-spacing:0.06em; text-transform:uppercase">мест сразу</div>
+                  </div>
+                </div>
+                <div style="display:flex; gap:14px; margin-top:14px; padding-top:13px; border-top:1px solid #26262E; flex-wrap:wrap">
+                  <sc-for list="{{ c.kit }}" as="k">
+                    <div style="display:flex; align-items:center; gap:7px">
+                      <div style="{{ k.glyphStyle }}"></div><span style="font-size:13px; color:#C9C9D2">{{ k.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:12px; color:#5B5B66; margin-top:10px">{{ c.hours }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- ШАГ 2: зал + дата + длительность + время -->
+          <sc-if value="{{ showWhen }}">
+            <div style="border-top:1px solid #222228; padding-top:22px; margin-bottom:26px">
+              <sc-if value="{{ showHalls }}">
+                <div style="margin-bottom:20px">
+                  <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:10px">Зал</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:10px">
+                    <sc-for list="{{ hallCards }}" as="h"><!-- combo-зал («Весь клуб») рендерится пунктирным чипом на всю ширину -->
+                      <div onclick="{{ h.onClick }}" style="{{ h.style }}">
+                        <div style="{{ h.nameStyle }}">{{ h.name }}</div>
+                        <div style="{{ h.kitStyle }}">{{ h.kitLabel }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:10px">Дата</div>
+              <button onclick="{{ openDate }}" style="width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 15px; margin-bottom:20px; border-radius:13px; border:1px solid #2A2A33; background:#15151A; color:#F2F2F5; font-size:16px; font-weight:600; cursor:pointer; text-align:left">
+                <span>{{ dateLabel }}</span><span style="font-size:13px; font-weight:600; color:#8A8A96">изменить</span>
+              </button>
+              <!-- по клику открывается КАЛЕНДАРЬ (месяц-сетка 7 колонок, {{ cal }}): -->
+              <!-- заголовок MONN+год, стрелки ‹ ›, шапки пн..вс, лид-бланки visibility:hidden, -->
+              <!-- ячейка дня: 11px 0, br10, tabular-nums; выбранный — рамка+фон акцента; выходные color:#8A8A96 -->
+
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:10px">Длительность сеанса</div>
+              <div style="display:flex; gap:8px; margin-bottom:24px">
+                <sc-for list="{{ durationChips }}" as="dur"><button onclick="{{ dur.onClick }}" style="{{ dur.style }}">{{ dur.label }}</button></sc-for>
+                <!-- durationChips = [60→«1 ч», 120→«2 ч», 180→«3 ч»]; чип flex:1, br11 -->
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; gap:12px">
+                <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66">Время начала</div>
+                <div style="font-size:12px; color:#6E6E7A">свободных мест из {{ hallTotal }}</div>
+              </div>
+
+              <sc-if value="{{ dayEmpty }}"><!-- состояние «Всё занято» -->
+                <div style="border:1px dashed #34343E; border-radius:16px; padding:22px 18px; text-align:center; background:#131318">
+                  <div style="width:46px; height:46px; margin:0 auto 14px; border-radius:14px; border:1px solid #34343E; background:repeating-linear-gradient(135deg, #1A1A20 0 5px, #131318 5px 10px)"></div>
+                  <div style="font-size:17px; font-weight:700">{{ empty.title }}</div>
+                  <div style="font-size:13px; color:#8A8A96; margin-top:6px; line-height:1.5; max-width:38ch; margin:6px auto 0; text-wrap:pretty">{{ empty.text }}</div>
+                  <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px">
+                    <sc-for list="{{ empty.actions }}" as="a"><button onclick="{{ a.onClick }}" style="{{ a.style }}">{{ a.label }}</button></sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ hasSlots }}"><!-- сетка слотов -->
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:8px">
+                  <sc-for list="{{ slotChips }}" as="s">
+                    <button onclick="{{ s.onClick }}" style="{{ s.style }}"><!-- br13; выбран: рамка+фон акцента; занят: штриховка+not-allowed -->
+                      <span style="font-size:16px; font-weight:700; font-variant-numeric:tabular-nums">{{ s.time }}</span>
+                      <span style="display:flex; gap:2px; margin-top:7px">
+                        <sc-for list="{{ s.pips }}" as="p"><span style="{{ p.style }}"></span></sc-for><!-- точки 5x5: заполнены = свободно, #33333D = занято -->
+                      </span>
+                      <span style="{{ s.freeStyle }}">{{ s.freeLabel }}</span><!-- «N из M» либо зачёркнутое «занято» -->
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- ШАГ 3: план зала «станции × ряды» -->
+          <sc-if value="{{ showPlan }}">
+            <div style="border-top:1px solid #222228; padding-top:22px; margin-bottom:26px">
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66">План зала · {{ sum.timeRange }}</div>
+              <div style="font-size:14px; color:#C9C9D2; margin-bottom:14px">{{ planHint }}</div><!-- «Свободно N из M · выбрано K» -->
+
+              <div style="display:flex; align-items:center; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:14px">
+                <span style="font-size:12px; color:#6E6E7A; flex:none">Взять сразу:</span>
+                <sc-for list="{{ quickPicks }}" as="q"><button onclick="{{ q.onClick }}" style="{{ q.style }}">{{ q.label }}</button></sc-for>
+                <!-- быстрый выбор: чипы 2/4/6/8/12 (≤ свободных) + «все N» + «сбросить» (пунктир) -->
+              </div>
+
+              <div style="border:1px solid #26262E; border-radius:18px; background:linear-gradient(180deg, #16161C 0%, #101015 100%); padding:16px 14px 14px">
+                <div style="display:flex; flex-direction:column; gap:14px">
+                  <sc-for list="{{ planGroups }}" as="g"><!-- для combo-зала: под-залы с шапкой (имя + «N из M свободно»), фон полос-зебра -->
+                    <div style="{{ g.style }}">
+                      <sc-if value="{{ g.showHeader }}">
+                        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:12px; padding-bottom:9px; border-bottom:1px solid #2A2A33">
+                          <span style="font-size:13px; font-weight:700; letter-spacing:0.02em">{{ g.name }}</span>
+                          <span style="font-size:11px; color:#6E6E7A">{{ g.meta }}</span>
+                        </div>
+                      </sc-if>
+                      <div style="display:flex; flex-direction:column; gap:16px">
+                        <sc-for list="{{ g.rows }}" as="row"><!-- row.label: «ряд N · VR» или «приставки PS5 · диван» -->
+                          <div>
+                            <div style="font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4E4E58; margin-bottom:8px">{{ row.label }}</div>
+                            <div style="{{ row.gridStyle }}"><!-- grid: mobile repeat(min(n,4),1fr) / desktop repeat(n,1fr), gap 8 -->
+                              <sc-for list="{{ row.items }}" as="st">
+                                <div onclick="{{ st.onClick }}" style="{{ st.style }}"><!-- ячейка станции, animation podIn .18s
+                                     свободно: border 1px #33333D, bg #191920, text #C9C9D2
+                                     занято:   border 1px #232329, bg штриховка 135deg #17171C/#131318, text #55555F, not-allowed
+                                     выбрано:  border 2px акцент, bg акцент@0.22, text #F2F2F5 -->
+                                  <div style="{{ st.visorStyle }}"></div><!-- VR: 38x22 br «11 11 5 5», рамка 2px; PS5: 34x16 br4, толстые бока 8px -->
+                                  <div style="font-size:13px; font-weight:700; margin-top:8px; font-variant-numeric:tabular-nums">{{ st.name }}</div><!-- «#1»..«#12» / «PS5-1» -->
+                                  <div style="{{ st.badgeStyle }}">{{ st.badge }}</div><!-- свободно / зачёркнутое занято / «✓ моя» / «заняли» -->
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:16px; padding-top:14px; border-top:1px solid #26262E">
+                  <sc-for list="{{ legend }}" as="l">
+                    <div style="display:flex; align-items:center; gap:7px"><div style="{{ l.swatchStyle }}">{{ l.mark }}</div><span style="font-size:12px; color:#8A8A96">{{ l.label }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ШАГ 4: контакты + промокод -->
+          <sc-if value="{{ showContacts }}">
+            <div style="border-top:1px solid #222228; padding-top:22px">
+              <div style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5B5B66; margin-bottom:12px">Кто бронирует</div>
+              <div style="display:flex; flex-direction:column; gap:10px">
+                <sc-for list="{{ fields }}" as="f"><!-- Имя / Телефон (маска +7 (900) 000-00-00) / «Сколько будет всего, с учётом игроков» -->
+                  <label style="display:block">
+                    <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">{{ f.label }}</span>
+                    <input value="{{ f.value }}" onchange="{{ f.onChange }}" placeholder="{{ f.placeholder }}" style="width:100%; padding:13px 14px; border-radius:12px; border:1px solid #2A2A33; background:#15151A; color:#F2F2F5; font-size:16px">
+                  </label>
+                </sc-for>
+              </div>
+
+              <div style="margin-top:16px; border:1px solid #2A2A33; border-radius:14px; padding:14px; background:#15151A">
+                <div style="display:flex; gap:8px; align-items:center">
+                  <input value="{{ promo.value }}" onchange="{{ promo.onChange }}" placeholder="Промокод" style="flex:1; min-width:0; padding:12px 13px; border-radius:10px; border:1px solid #2A2A33; background:#101015; color:#F2F2F5; font-size:15px; letter-spacing:0.08em; text-transform:uppercase">
+                  <button onclick="{{ promo.onApply }}" style="padding:12px 16px; border-radius:10px; border:1px solid #3A3A46; background:transparent; color:#C9C9D2; font-size:14px; font-weight:600; cursor:pointer; flex:none">Применить</button>
+                </div>
+                <div style="{{ promo.msgStyle }}">{{ promo.msg }}</div><!-- принят #CDF98F / ошибка #FFB020 / подсказка #6E6E7A -->
+              </div>
+
+              <sc-if value="{{ sum.hasDiscount }}">
+                <div style="margin-top:12px; border-radius:14px; padding:14px; background:rgba(169,240,74,0.12); border:1px solid rgba(169,240,74,0.35); display:flex; justify-content:space-between; align-items:center; gap:12px">
+                  <span style="font-size:14px; font-weight:600; color:#CDF98F">{{ sum.discountLabel }}</span>
+                  <span style="font-size:15px; font-weight:700; color:#CDF98F; font-variant-numeric:tabular-nums">−{{ sum.discountSum }}</span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Липкий нижний бар: строка-контекст + итог (net) + старая цена (gross, зачёркнута) + CTA -->
+        <div style="position:sticky; bottom:0; background:rgba(16,16,21,0.94); backdrop-filter:blur(12px); border-top:1px solid #26262E; padding:14px 18px 16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:14px">
+            <div style="min-width:0">
+              <div style="font-size:13px; color:#8A8A96; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ bar.line }}</div>
+              <div style="display:flex; align-items:baseline; gap:8px">
+                <span style="font-size:20px; font-weight:800; font-variant-numeric:tabular-nums">{{ bar.total }}</span>
+                <span style="{{ bar.oldStyle }}">{{ bar.old }}</span>
+              </div>
+            </div>
+            <button onclick="{{ bar.onClick }}" style="{{ bar.btnStyle }}">{{ bar.cta }}</button><!-- «Далее» → «Заполните контакты» → «Забронировать» -->
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- Пояснительные карточки под макетом (только прототип, в проде не нужны) -->
+  <div style="max-width:1140px; margin:44px auto 0; padding:0 20px">
+    <div style="font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:#5B5B66; margin-bottom:16px">Разбор состояний</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px">
+      <sc-for list="{{ notes }}" as="n">
+        <div style="border:1px solid #222228; border-radius:16px; padding:16px; background:#121217">
+          <div style="font-size:14px; font-weight:700; margin-bottom:6px">{{ n.title }}</div>
+          <div style="font-size:13px; color:#8A8A96; line-height:1.55; text-wrap:pretty">{{ n.text }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+
+</x-dc>

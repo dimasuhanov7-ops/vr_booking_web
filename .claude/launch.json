@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "booking-web-mock",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": [
+        "run",
+        "-d",
+        "web-server",
+        "--web-port=5599",
+        "--web-hostname=127.0.0.1",
+        "--dart-define=USE_MOCK=true"
+      ],
+      "port": 5599
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# Нормализуем переводы строк — репозиторий может открываться на разных ОС.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.ico binary

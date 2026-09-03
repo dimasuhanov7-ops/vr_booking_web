@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Онлайн-бронирование VR-клубов Effect VR и V-Ray">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Бронирование VR">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Бронирование VR</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { height: 100%; margin: 0; background: #0A0F0D; }
+  </style>
+</head>
+<body>
+  <script>
+    // Виджет встраивается iframe'ом на сайт клуба и в VK Mini Apps.
+    // Сообщаем родительскому окну свою высоту, чтобы iframe подстраивался.
+    function postHeight() {
+      try {
+        var h = document.body.scrollHeight;
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'vr-booking:height', height: h }, '*');
+        }
+      } catch (e) {}
+    }
+    window.addEventListener('load', postHeight);
+    new ResizeObserver(postHeight).observe(document.body);
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
