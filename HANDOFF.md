@@ -141,12 +141,13 @@ flutter run -d chrome --dart-define=USE_MOCK=true
 `flutter build web --dart-define=USE_MOCK=true --no-tree-shake-icons`.
 ⚠️ Браузер агрессивно кэширует `main.dart.js` — после ребилда делай hard-reload.
 
-Продакшн-сборка:
+Продакшн-сборка и деплой — [`docs/DEPLOY.md`](docs/DEPLOY.md). Кратко:
 ```bash
-flutter build web --release \
-  --dart-define=SUPABASE_URL=https://cpjmirlujtfuzvdnysyx.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=<publishable key>
+FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh   # api-режим + _redirects/_headers
+npx wrangler pages deploy build/web --project-name=vr-booking-web
 ```
+Виджет собирается в **api-режиме** (`BOOKING_BACKEND=api`) — ходит только в
+Edge Function `booking-intake`, Supabase SDK не инициализируется.
 
 ## TODO / полировка (по убыванию важности)
 
