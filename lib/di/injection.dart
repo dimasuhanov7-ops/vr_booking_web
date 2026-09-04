@@ -4,6 +4,7 @@ import '../app/config/booking_config.dart';
 import '../features/admin/data/repository/admin_repository_mock.dart';
 import '../features/admin/domain/repository/i_admin_repository.dart';
 import '../features/booking/data/repository/booking_repository.dart';
+import '../features/booking/data/repository/booking_repository_api.dart';
 import '../features/booking/data/repository/booking_repository_mock.dart';
 import '../features/booking/domain/repository/i_booking_repository.dart';
 
@@ -19,9 +20,9 @@ class Injection {
   IBookingRepository? _bookingRepository;
   IAdminRepository? _adminRepository;
 
-  /// Инициализирует Supabase. Вызывается один раз из `main`.
+  /// Инициализирует Supabase SDK — только если виджет ходит в него напрямую.
   Future<void> init() async {
-    if (BookingConfig.useMock) return;
+    if (BookingConfig.useMock || BookingConfig.useApi) return;
     await Supabase.initialize(
       url: BookingConfig.supabaseUrl,
       // Ключ анонимный/публикуемый — предназначен для клиентского бандла.
@@ -30,11 +31,21 @@ class Injection {
     );
   }
 
-  /// Репозиторий бронирования (mock или Supabase — по флагу сборки).
-  IBookingRepository get bookingRepository => _bookingRepository ??=
-      BookingConfig.useMock
-          ? BookingRepositoryMock()
-          : BookingRepository(Supabase.instance.client);
+  /// Репозиторий бронирования — выбор источника по конфигу сборки:
+  /// mock (демо) / api (HTTP-контракт) / supabase (PostgREST напрямую).
+  IBookingRepository get bookingRepository =>
+      _bookingRepository ??= _buildBookingRepository();
+
+  IBookingRepository _buildBookingRepository() {
+    if (BookingConfig.useMock) return BookingRepositoryMock();
+    if (BookingConfig.useApi) {
+      return BookingRepositoryApi(
+        base: BookingConfig.bookingApiBase,
+        apiKey: BookingConfig.bookingApiKey,
+      );
+    }
+    return BookingRepository(Supabase.instance.client);
+  }
 
   /// Репозиторий админки (пока только in-memory — раздел на моках).
   IAdminRepository get adminRepository =>

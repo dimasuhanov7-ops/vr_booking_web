@@ -103,6 +103,23 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 RLS-правило «authenticated staff может писать» на `booking_*`, схема под
 `booking_packages` / послотовое закрытие / флаг паузы приёма, реальное сохранение.
 
+## Слой интеграции (виджет ↔ бэкенд)
+
+Виджет **backend-агностик**: домен знает только `IBookingRepository`. Реализации:
+- `BookingRepositoryMock` — `--dart-define=USE_MOCK=true`
+- `BookingRepository` — Supabase PostgREST/RPC напрямую (по умолчанию)
+- `BookingRepositoryApi` — HTTP-контракт «приёма брони», `--dart-define=BOOKING_BACKEND=api`
+  + `BOOKING_API_BASE=<url>` + `BOOKING_API_KEY=<key>`
+
+Точка развода — Supabase Edge Function [`supabase/functions/booking-intake/index.ts`](supabase/functions/booking-intake/index.ts):
+принимает бронь, вызывает `booking_create_order`, уведомляет Telegram, дальше можно
+добавить получателей (приложение, CRM) не трогая клиентов. Telegram-бот = ещё один
+клиент того же контракта. Полное описание — [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+
+Деплой функции — после применения миграции `booking_*`:
+`supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx` +
+`supabase secrets set TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=…`.
+
 ## Как запустить (демо без БД)
 
 ```bash

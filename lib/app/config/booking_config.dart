@@ -28,7 +28,32 @@ abstract final class BookingConfig {
   /// На сколько дней вперёд открыта запись.
   static const int bookingHorizonDays = 30;
 
-  /// Использовать in-memory данные вместо Supabase (демо UI).
+  /// Использовать in-memory данные вместо реального бэкенда (демо UI).
   /// Сборка: `--dart-define=USE_MOCK=true`.
   static const bool useMock = bool.fromEnvironment('USE_MOCK');
+
+  /// Куда виджет отправляет бронь и откуда читает справочник:
+  /// `supabase` — напрямую в PostgREST/RPC; `api` — только на [bookingApiBase].
+  /// См. `docs/INTEGRATION.md`.
+  static const String bookingBackend = String.fromEnvironment(
+    'BOOKING_BACKEND',
+    defaultValue: 'supabase',
+  );
+
+  /// Виджет ходит только на HTTP-контракт «приёма брони».
+  static bool get useApi => !useMock && bookingBackend == 'api';
+
+  /// База URL точки интеграции (Edge Function / API приложения / вебхук).
+  static const String bookingApiBase = String.fromEnvironment(
+    'BOOKING_API_BASE',
+    defaultValue:
+        'https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake',
+  );
+
+  /// Ключ для заголовка `Authorization: Bearer …` на точке интеграции.
+  /// По умолчанию — тот же анонимный ключ Supabase.
+  static const String bookingApiKey = String.fromEnvironment(
+    'BOOKING_API_KEY',
+    defaultValue: supabaseAnonKey,
+  );
 }
