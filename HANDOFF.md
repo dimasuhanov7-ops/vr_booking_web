@@ -143,11 +143,13 @@ flutter run -d chrome --dart-define=USE_MOCK=true
 
 Продакшн-сборка и деплой — [`docs/DEPLOY.md`](docs/DEPLOY.md). Кратко:
 ```bash
-FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh   # api-режим + _redirects/_headers
-npx wrangler pages deploy build/web --project-name=vr-booking-web
+FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh
+# -> build/web + build/vr_booking_web.zip ; залить содержимое на поддомен booking.<клуб>.ru
 ```
+Хостинг — поддомен на инфраструктуре сайта клуба (**не Cloudflare** — РКН).
 Виджет собирается в **api-режиме** (`BOOKING_BACKEND=api`) — ходит только в
-Edge Function `booking-intake`, Supabase SDK не инициализируется.
+Edge Function `booking-intake` напрямую (`supabase.co` доступен из РФ),
+Supabase SDK не инициализируется.
 
 ## TODO / полировка (по убыванию важности)
 

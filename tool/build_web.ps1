@@ -18,8 +18,15 @@ try {
     --dart-define=BOOKING_API_BASE=$ApiBase
   if ($LASTEXITCODE -ne 0) { throw "flutter build web failed ($LASTEXITCODE)" }
 
-  Copy-Item web/_redirects, web/_headers build/web/ -Force
-  Write-Host "OK: build/web готов к деплою (Cloudflare Pages)." -ForegroundColor Green
+  # flutter build web не переносит файлы с префиксом `_` и `.` из web/
+  Copy-Item web/_redirects, web/_headers, web/.htaccess build/web/ -Force
+
+  # Архив для передачи тому, кто заливает сайт клуба
+  if (Test-Path build/vr_booking_web.zip) { Remove-Item build/vr_booking_web.zip }
+  # -Force чтобы .htaccess попал в архив
+  Get-ChildItem build/web -Force | Compress-Archive -DestinationPath build/vr_booking_web.zip
+
+  Write-Host "OK: build/web готов. Архив: build/vr_booking_web.zip" -ForegroundColor Green
 } finally {
   Pop-Location
 }
