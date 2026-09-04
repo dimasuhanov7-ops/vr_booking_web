@@ -20,7 +20,7 @@
 -- (Effect VR — 10 мин, V-Ray — 0). Оплата на месте; суммы в виджете справочные.
 -- =============================================================================
 
-create extension if not exists btree_gist;
+create extension if not exists btree_gist with schema extensions;
 
 -- -----------------------------------------------------------------------------
 -- Справочник: клубы -> залы -> станции
@@ -83,6 +83,8 @@ create table if not exists public.booking_prices (
 
 comment on table public.booking_prices is 'Цена за час. Меняется без миграций (через админку/SQL)';
 
+create index if not exists booking_prices_club_id_idx on public.booking_prices(club_id);
+
 -- -----------------------------------------------------------------------------
 -- Скидки (инфраструктура на будущее; сейчас без данных и без UI)
 -- -----------------------------------------------------------------------------
@@ -111,7 +113,8 @@ create table if not exists public.booking_orders (
   client_phone  text not null check (length(btrim(client_phone)) between 5 and 30),
   people_count  int check (people_count is null or people_count between 1 and 100),
   comment       text,
-  source        text not null default 'site' check (source in ('site', 'vk', 'staff')),
+  source        text not null default 'site'
+                  check (source in ('site', 'vk', 'tg', 'app', 'staff')),
   discount_id   uuid references public.booking_discounts(id),
   status        text not null default 'confirmed'
                   check (status in ('confirmed', 'cancelled', 'completed', 'no_show')),
@@ -120,6 +123,9 @@ create table if not exists public.booking_orders (
 
 comment on table public.booking_orders is 'Онлайн-бронь (оплата на месте, здесь только резерв станций)';
 
+create index if not exists booking_orders_club_id_idx     on public.booking_orders(club_id);
+create index if not exists booking_orders_discount_id_idx  on public.booking_orders(discount_id);
+
 create table if not exists public.booking_order_items (
   id          uuid primary key default gen_random_uuid(),
   order_id    uuid not null references public.booking_orders(id) on delete cascade,
@@ -127,6 +133,9 @@ create table if not exists public.booking_order_items (
   starts_at   timestamptz not null,
   ends_at     timestamptz not null,
   price       numeric not null default 0 check (price >= 0),
+  -- Зеркалит booking_orders.status <> 'cancelled' (поддерживается триггером).
+  -- Нужно, чтобы отменённая бронь освобождала слот: EXCLUDE ниже — частичный.
+  is_active   boolean not null default true,
   time_range  tstzrange generated always as (tstzrange(starts_at, ends_at, '[)')) stored,
   check (ends_at > starts_at)
 );
@@ -135,11 +144,34 @@ comment on table public.booking_order_items is 'Одна станция на о�
 
 create index if not exists booking_order_items_order_id_idx on public.booking_order_items(order_id);
 
+-- Синхронизация is_active с booking_orders.status.
+-- SECURITY DEFINER: инвариант поддерживается независимо от прав того, кто меняет статус.
+create or replace function public.booking_sync_item_activity()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.booking_order_items
+     set is_active = (new.status <> 'cancelled')
+   where order_id = new.id
+     and is_active <> (new.status <> 'cancelled');
+  return new;
+end;
+$$;
+
+drop trigger if exists booking_orders_status_sync on public.booking_orders;
+create trigger booking_orders_status_sync
+  after update of status on public.booking_orders
+  for each row execute function public.booking_sync_item_activity();
+
 alter table public.booking_order_items
   drop constraint if exists booking_no_overlapping_items;
 alter table public.booking_order_items
   add constraint booking_no_overlapping_items
-  exclude using gist (station_id with =, time_range with &&);
+  exclude using gist (station_id with =, time_range with &&)
+  where (is_active);
 
 -- =============================================================================
 -- Вспомогательные функции ценообразования
@@ -149,7 +181,8 @@ alter table public.booking_order_items
 create or replace function public.booking_day_kind(p_when timestamptz, p_tz text)
 returns text
 language sql
-immutable
+stable
+set search_path = pg_catalog
 as $$
   select case
     when extract(dow from (p_when at time zone p_tz))::int in (0, 6) then 'weekend'
@@ -217,9 +250,8 @@ as $$
   join public.booking_stations   s on s.id = i.station_id
   join public.booking_rooms      r on r.id = s.room_id
   join public.booking_clubs      c on c.id = r.club_id
-  join public.booking_orders     o on o.id = i.order_id
   where c.id = p_club_id
-    and o.status <> 'cancelled'
+    and i.is_active
     and i.time_range && tstzrange(
           (p_day::timestamp)       at time zone c.timezone,
           ((p_day + 1)::timestamp) at time zone c.timezone,
@@ -490,11 +522,16 @@ grant select on public.booking_clubs, public.booking_rooms,
                 public.booking_stations, public.booking_prices to anon;
 grant insert on public.booking_orders, public.booking_order_items to anon;
 
-revoke all on function public.booking_resolve_discount(text, int) from anon, public;
-revoke all on function public.booking_station_price(uuid, timestamptz, int) from anon, public;
-grant execute on function public.booking_busy_intervals(uuid, date)                      to anon, authenticated;
-grant execute on function public.booking_quote(uuid[], timestamptz, int)                 to anon, authenticated;
-grant execute on function public.booking_validate_discount(text, int)                    to anon, authenticated;
+-- Внутренние helper-функции: только через SECURITY DEFINER RPC (как владелец), не напрямую.
+revoke all on function public.booking_resolve_discount(text, int)            from public, anon, authenticated;
+revoke all on function public.booking_station_price(uuid, timestamptz, int)  from public, anon, authenticated;
+revoke all on function public.booking_day_kind(timestamptz, text)            from public, anon, authenticated;
+revoke all on function public.booking_sync_item_activity()                   from public, anon, authenticated;
+-- booking_quote пока не в публичном API (цена считается на клиенте от booking_prices).
+revoke all on function public.booking_quote(uuid[], timestamptz, int)        from public, anon, authenticated;
+
+grant execute on function public.booking_busy_intervals(uuid, date)          to anon, authenticated;
+grant execute on function public.booking_validate_discount(text, int)        to anon, authenticated;
 grant execute on function public.booking_create_order(uuid, text, text, uuid[], timestamptz, int, int, text, text, text) to anon, authenticated;
 
 -- =============================================================================

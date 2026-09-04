@@ -43,15 +43,20 @@
 ## Состояние (что сделано)
 
 ### Backend
-`supabase/migrations/20260903120000_online_booking_feature.sql` — **НЕ ПРИМЕНЁН.**
-Заказчик хочет ревью SQL перед применением. Таблицы с префиксом `booking_` в
-схеме `public` (чтобы не конфликтовать с существующей `public.bookings` —
-зеркало Bukza, на которое подписан realtime в менеджере).
+**Миграции ПРИМЕНЕНЫ к проекту `cpjmirlujtfuzvdnysyx` (продакшн) 2026-09-04:**
+`20260904081507_online_booking_feature` + `..._harden_privileges` + `..._unexpose_quote`.
+Таблицы `booking_*` в схеме `public` (не конфликтуют с `public.bookings` — зеркало Bukza).
+Сид: 2 клуба, 3 зала, 24 станции, 8 тарифов, 0 скидок. Проверено сквозным тестом
+(бронь, конфликт 23P01, отмена освобождает слот, рабочие часы, расчёт цены).
 
-Применить: `supabase db push` **или** MCP `apply_migration` в проект
-`cpjmirlujtfuzvdnysyx` («Vray/Effect info», продакшн) — только после «ок» заказчика.
-После применения: `get_advisors` (security + performance), затем убрать
-`--dart-define=USE_MOCK=true` и проверить со всеми боевыми ключами.
+Правки после ревью: `btree_gist` → схема `extensions`; `is_active` на
+`booking_order_items` + триггер (отменённая бронь освобождает слот, EXCLUDE частичный);
+`source` расширен на `tg`/`app`; helper-функции и `booking_quote` сняты с публичного
+API (revoke); FK-индексы. `get_advisors` — на объектах фичи остаётся только намеренное:
+RLS-без-политик на `booking_discounts` (INFO) и SECURITY DEFINER на 3 публичных RPC (WARN).
+
+Дальше: убрать `--dart-define=USE_MOCK=true`, собрать с боевыми ключами, проверить
+виджет на реальной БД. Деплой Edge Function `booking-intake` (см. INTEGRATION.md).
 
 Объекты миграции: `booking_clubs`, `booking_rooms`, `booking_stations`
 (с `row_index`/`position_in_row`), `booking_prices`, `booking_discounts`,
