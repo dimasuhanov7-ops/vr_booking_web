@@ -116,14 +116,17 @@ RLS-правило «authenticated staff может писать» на `booking
 - `BookingRepositoryApi` — HTTP-контракт «приёма брони», `--dart-define=BOOKING_BACKEND=api`
   + `BOOKING_API_BASE=<url>` + `BOOKING_API_KEY=<key>`
 
-Точка развода — Supabase Edge Function [`supabase/functions/booking-intake/index.ts`](supabase/functions/booking-intake/index.ts):
-принимает бронь, вызывает `booking_create_order`, уведомляет Telegram, дальше можно
-добавить получателей (приложение, CRM) не трогая клиентов. Telegram-бот = ещё один
-клиент того же контракта. Полное описание — [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+Точка развода — Supabase Edge Function [`supabase/functions/booking-intake/index.ts`](supabase/functions/booking-intake/index.ts)
+— **задеплоена** на `cpjmirlujtfuzvdnysyx` (v1, `verify_jwt=true`), URL
+`https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`, все эндпоинты
+проверены. Принимает бронь, вызывает `booking_create_order`, уведомляет Telegram
+(если заданы секреты), дальше можно добавить получателей (приложение, CRM) не трогая
+клиентов. Telegram-бот = ещё один клиент того же контракта. Описание —
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md).
 
-Деплой функции — после применения миграции `booking_*`:
-`supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx` +
-`supabase secrets set TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=…`.
+Для Telegram-уведомлений: `supabase secrets set --project-ref cpjmirlujtfuzvdnysyx
+TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=…` (без них уведомления просто пропускаются).
+Чтобы переключить виджет на функцию: собрать с `--dart-define=BOOKING_BACKEND=api`.
 
 ## Как запустить (демо без БД)
 

@@ -4,12 +4,18 @@
 // (docs/INTEGRATION.md). Функция валидирует, вызывает RPC booking_create_order
 // и рассылает бронь дальше (Telegram; позже — приложение / CRM).
 //
-// Деплой (после применения миграции booking_*):
+// Задеплоена на cpjmirlujtfuzvdnysyx 2026-09-04 (v1, verify_jwt=true).
+// Обновление:
 //   supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx
+// Для Telegram-уведомлений задать секреты:
 //   supabase secrets set --project-ref cpjmirlujtfuzvdnysyx \
-//     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... BOOKING_CORS_ORIGIN=https://booking.example
+//     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... [BOOKING_INTAKE_KEY=...] [BOOKING_CORS_ORIGIN=https://booking.example]
+//
+// verify_jwt=true на уровне шлюза Supabase: вызывающий шлёт
+// `Authorization: Bearer <anon key>` (или authenticated JWT). Функция дополнительно
+// проверяет токен: при заданном BOOKING_INTAKE_KEY — точное совпадение.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

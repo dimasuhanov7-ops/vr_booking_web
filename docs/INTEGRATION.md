@@ -111,6 +111,10 @@ CORS: функция отдаёт `Access-Control-Allow-Origin` (по умолч
 ## Edge Function `booking-intake`
 
 Код: [`supabase/functions/booking-intake/index.ts`](../supabase/functions/booking-intake/index.ts).
+**Задеплоена** на `cpjmirlujtfuzvdnysyx` (2026-09-04, v1, `verify_jwt=true`).
+URL: `https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`.
+Проверены все эндпоинты (clubs/stations/prices/availability/discount/reservations,
+конфликт → 409 SLOT_TAKEN, без токена → 401).
 
 Переменные окружения функции:
 | var | зачем |
