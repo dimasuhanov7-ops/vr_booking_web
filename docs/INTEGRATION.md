@@ -48,8 +48,9 @@ flutter build web --release \
 CORS: функция отдаёт `Access-Control-Allow-Origin` (по умолчанию `*`) и обрабатывает `OPTIONS`.
 
 ### `GET /clubs`
+Отсортированы по `sort_order` (меньше — выше).
 ```json
-[{ "id","slug","name","timezone","open_time","close_time","slot_gap_minutes" }]
+[{ "id","slug","name","timezone","open_time","close_time","slot_gap_minutes","sort_order" }]
 ```
 
 ### `GET /stations?club_id=<uuid>`

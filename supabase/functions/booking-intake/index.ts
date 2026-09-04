@@ -93,8 +93,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (req.method === "GET" && path === "/clubs") {
       const { data, error } = await db
         .from("booking_clubs")
-        .select("id,slug,name,timezone,open_time,close_time,slot_gap_minutes")
+        .select("id,slug,name,timezone,open_time,close_time,slot_gap_minutes,sort_order")
         .eq("is_active", true)
+        .order("sort_order")
         .order("name");
       if (error) return json({ error: "DB", detail: error.message }, 500);
       return json(data);

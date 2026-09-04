@@ -33,6 +33,7 @@ create table if not exists public.booking_clubs (
   open_time          time not null default '11:00',
   close_time         time not null default '23:00',
   slot_gap_minutes   int  not null default 0 check (slot_gap_minutes between 0 and 60),
+  sort_order         int  not null default 0,
   is_active          boolean not null default true
 );
 
@@ -537,14 +538,14 @@ grant execute on function public.booking_create_order(uuid, text, text, uuid[], 
 -- =============================================================================
 -- Сид: клубы, залы, станции, тарифы
 -- =============================================================================
-insert into public.booking_clubs (slug, name, timezone, open_time, close_time, slot_gap_minutes)
+insert into public.booking_clubs (slug, name, timezone, open_time, close_time, slot_gap_minutes, sort_order)
 values
-  ('effect_vr', 'Effect VR', 'Europe/Moscow', '11:00', '22:30', 10),
-  ('v_ray',     'V-Ray',     'Europe/Moscow', '11:00', '23:00', 0)
+  ('effect_vr', 'Effect VR', 'Europe/Moscow', '11:00', '22:30', 10, 10),
+  ('v_ray',     'V-Ray',     'Europe/Moscow', '11:00', '23:00', 0, 20)
 on conflict (slug) do update
   set name = excluded.name, timezone = excluded.timezone,
       open_time = excluded.open_time, close_time = excluded.close_time,
-      slot_gap_minutes = excluded.slot_gap_minutes;
+      slot_gap_minutes = excluded.slot_gap_minutes, sort_order = excluded.sort_order;
 
 -- Тарифы (₽/час): одинаковые для обоих клубов, редактируются позже.
 insert into public.booking_prices (club_id, station_type, day_kind, price_per_hour)

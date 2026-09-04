@@ -48,7 +48,9 @@ class BookingRepositoryApi implements IBookingRepository {
         return rows
             .map((dynamic e) =>
                 ClubDto.fromJson(e as Map<String, dynamic>).toEntity())
-            .toList(growable: false);
+            .toList()
+          ..sort((ClubEntity a, ClubEntity b) =>
+              a.sortOrder.compareTo(b.sortOrder));
       });
 
   @override

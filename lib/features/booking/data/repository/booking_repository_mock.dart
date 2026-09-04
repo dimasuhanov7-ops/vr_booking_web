@@ -25,6 +25,7 @@ class BookingRepositoryMock implements IBookingRepository {
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 22, minutes: 30),
       slotGapMinutes: 10,
+      sortOrder: 10,
     ),
     ClubEntity(
       id: 'club-vray',
@@ -34,6 +35,7 @@ class BookingRepositoryMock implements IBookingRepository {
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 23),
       slotGapMinutes: 0,
+      sortOrder: 20,
     ),
   ];
 

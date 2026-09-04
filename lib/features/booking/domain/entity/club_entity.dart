@@ -11,6 +11,7 @@ class ClubEntity extends Equatable {
     required this.openTime,
     required this.closeTime,
     required this.slotGapMinutes,
+    this.sortOrder = 0,
   });
 
   /// Идентификатор клуба.
@@ -34,7 +35,18 @@ class ClubEntity extends Equatable {
   /// Пауза между сеансами: шаг сетки слотов = длительность + пауза.
   final int slotGapMinutes;
 
+  /// Порядок отображения в списке клубов.
+  final int sortOrder;
+
   @override
-  List<Object?> get props =>
-      <Object?>[id, slug, name, timezone, openTime, closeTime, slotGapMinutes];
+  List<Object?> get props => <Object?>[
+        id,
+        slug,
+        name,
+        timezone,
+        openTime,
+        closeTime,
+        slotGapMinutes,
+        sortOrder,
+      ];
 }

@@ -28,8 +28,11 @@ class BookingRepository implements IBookingRepository {
 
   @override
   Future<List<ClubEntity>> fetchClubs() => _guard(() async {
-        final List<dynamic> rows =
-            await _client.from('booking_clubs').select().order('name');
+        final List<dynamic> rows = await _client
+            .from('booking_clubs')
+            .select()
+            .order('sort_order', ascending: true)
+            .order('name', ascending: true);
         return rows
             .map((dynamic e) =>
                 ClubDto.fromJson(e as Map<String, dynamic>).toEntity())
@@ -42,7 +45,7 @@ class BookingRepository implements IBookingRepository {
             .from('booking_rooms')
             .select()
             .eq('club_id', clubId)
-            .order('sort_order');
+            .order('sort_order', ascending: true);
         return rows
             .map((dynamic e) =>
                 RoomDto.fromJson(e as Map<String, dynamic>).toEntity())
@@ -55,7 +58,7 @@ class BookingRepository implements IBookingRepository {
             .from('booking_stations')
             .select('*, booking_rooms!inner(name, club_id, sort_order)')
             .eq('booking_rooms.club_id', clubId)
-            .order('sort_order');
+            .order('sort_order', ascending: true);
         return rows
             .map((dynamic e) =>
                 StationDto.fromJson(e as Map<String, dynamic>).toEntity())
