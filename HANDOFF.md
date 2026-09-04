@@ -3,8 +3,9 @@
 > Прочитай этот файл целиком перед работой. Затем открой `design/DESIGN_SPEC.md`
 > и вызови скилл `flutter-dev` (стандарты Friflex — им следует весь код).
 >
-> **Следующая задача** — раздел «Админка» (`/admin`): подробный промт в
-> [`docs/ADMIN_TASK.md`](docs/ADMIN_TASK.md).
+> **Раздел «Админка»** (`?admin=1`) — UI на моках готов (`lib/features/admin/`).
+> Осталось: Supabase Auth для персонала + реальные записи/правки в БД. Контекст:
+> [`docs/ADMIN_TASK.md`](docs/ADMIN_TASK.md), [`design/ADMIN_DESIGN_SPEC.md`](design/ADMIN_DESIGN_SPEC.md).
 
 ## Что это
 
@@ -89,11 +90,25 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 выбора, показывает `ConflictBanner` с заменой из того же зала. Остальной выбор
 сохраняется.
 
+## Раздел «Админка» (`?admin=1`)
+
+`lib/features/admin/` — та же слоёная структура. Полноширинная панель персонала:
+вкладки **Цены · Пакеты · Доступность · Брони · Записи**, переключатель клуба,
+все расчёты («по часам», KPI, суммы) реактивны от вкладки «Цены». Данные —
+`AdminRepositoryMock` (повторяет прототип, единый датасет `LOG`). Роутинг —
+`BookingApp._isAdmin` по query `?admin=1` (без пакета роутинга). Правки цен/пакетов/
+доступности/отмены живут в `AdminBloc`, на сервер ничего не уходит.
+
+**Осталось за скоупом этой итерации:** Supabase Auth (email+пароль для персонала),
+RLS-правило «authenticated staff может писать» на `booking_*`, схема под
+`booking_packages` / послотовое закрытие / флаг паузы приёма, реальное сохранение.
+
 ## Как запустить (демо без БД)
 
 ```bash
 cd C:\Sait\vr_booking_web
 flutter run -d chrome --dart-define=USE_MOCK=true
+# виджет бронирования: обычный URL; админка: добавить ?admin=1
 ```
 
 Или превью-сервер (для агента): в `C:\Sait\.claude\launch.json` есть конфиг

@@ -4,31 +4,33 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../di/injection.dart';
+import '../features/admin/domain/state/admin_bloc.dart';
+import '../features/admin/presentation/screens/admin_screen.dart';
 import '../features/booking/domain/state/booking_bloc.dart';
 import '../features/booking/presentation/screens/booking_screen.dart';
 import 'theme/app_theme.dart';
 
-/// Корневой виджет публичного приложения бронирования.
+/// Корневой виджет приложения. Публичный виджет бронирования и служебная
+/// админка живут в одном бандле; раздел выбирается по query-параметру.
 class BookingApp extends StatelessWidget {
   /// Создаёт приложение.
   const BookingApp({super.key});
 
-  /// Источник брони: `vk`, если запущено во фрейме VK Mini App, иначе `site`.
-  static String get _source {
-    if (kIsWeb) {
-      final Uri uri = Uri.base;
-      if (uri.queryParameters.containsKey('vk_app_id') ||
-          uri.queryParameters['source'] == 'vk') {
-        return 'vk';
-      }
-    }
-    return 'site';
-  }
+  /// Query-параметры запуска (VK-детект, `?admin=1`).
+  static Map<String, String> get _params =>
+      kIsWeb ? Uri.base.queryParameters : const <String, String>{};
+
+  /// Открыт ли раздел админки (`?admin=1`).
+  static bool get _isAdmin => _params['admin'] == '1';
+
+  /// Источник брони: `vk` во фрейме VK Mini App, иначе `site`.
+  static String get _source =>
+      _params.containsKey('vk_app_id') || _params['source'] == 'vk' ? 'vk' : 'site';
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Бронирование VR',
+      title: _isAdmin ? 'Админка · Бронирование VR' : 'Бронирование VR',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       locale: const Locale('ru'),
@@ -38,13 +40,20 @@ class BookingApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: BlocProvider<BookingBloc>(
-        create: (_) => BookingBloc(
-          repository: Injection.instance.bookingRepository,
-          source: _source,
-        )..add(const BookingStarted()),
-        child: const BookingScreen(),
-      ),
+      home: _isAdmin
+          ? BlocProvider<AdminBloc>(
+              create: (_) => AdminBloc(
+                repository: Injection.instance.adminRepository,
+              )..add(const AdminStarted()),
+              child: const AdminScreen(),
+            )
+          : BlocProvider<BookingBloc>(
+              create: (_) => BookingBloc(
+                repository: Injection.instance.bookingRepository,
+                source: _source,
+              )..add(const BookingStarted()),
+              child: const BookingScreen(),
+            ),
     );
   }
 }
