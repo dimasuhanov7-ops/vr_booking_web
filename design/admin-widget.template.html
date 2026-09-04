@@ -1,0 +1,311 @@
+<!-- Извлечено дословно из Claude Design canvas «Админка VR.dc.html»
+     (проект 8d5d5ffe-dca2-44b9-9385-3fac38fbaae5), снято 2026-09-04.
+     Разметка прототипа: {{ }} — биндинги, <sc-if>/<sc-for> — условия/циклы.
+     Логика-компаньон: admin-widget.logic.js -->
+
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#08090A; color:#F2F2F5; font-family:'Archivo', system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:#A9F04A; }
+  a:hover { color:#CDF98F; }
+  input, button, select { font-family:inherit; }
+  input:focus, select:focus { outline:none; }
+  ::placeholder { color:#5B5B66; }
+</style>
+</helmet>
+
+<div style="min-height:100vh; background:radial-gradient(1100px 520px at 20% -220px, #062018 0%, #08090A 68%)">
+
+  <!-- Липкая шапка: «АДМИНКА» + подзаголовок + переключатель клуба -->
+  <div style="position:sticky; top:0; z-index:30; background:rgba(8,9,10,0.9); backdrop-filter:blur(12px); border-bottom:1px solid #1E1F24">
+    <div style="max-width:1080px; margin:0 auto; padding:14px 20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-size:13px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#A9F04A">Админка</span>
+        <span style="font-size:13px; color:#6E6E7A">бронирование Effect VR / V-Ray</span>
+      </div>
+      <div style="display:flex; gap:6px">
+        <sc-for list="{{ clubTabs }}" as="c"><button onclick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1080px; margin:0 auto; padding:22px 20px 40px">
+
+    <!-- Вкладки: Цены · Пакеты · Доступность · Брони · Записи -->
+    <div style="display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:22px">
+      <sc-for list="{{ tabs }}" as="t"><button onclick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+    </div>
+
+    <!-- ===== ВКЛАДКА «ЦЕНЫ» ===== -->
+    <sc-if value="{{ isPrices }}">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin-bottom:14px">
+        <sc-for list="{{ priceCards }}" as="p"><!-- карточка на зал -->
+          <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:18px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:4px">
+              <div style="font-size:17px; font-weight:700">{{ p.title }}</div>
+              <div style="font-size:12px; color:#6E6E7A">{{ p.meta }}</div>
+            </div>
+            <div style="font-size:13px; color:#8A8A96; margin-bottom:16px">{{ p.hint }}</div>
+            <div style="display:grid; grid-template-columns:1fr 104px 104px; gap:10px 8px; align-items:center">
+              <div></div>
+              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5B5B66; text-align:center">будни</div>
+              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5B5B66; text-align:center">выходные</div>
+              <sc-for list="{{ p.rows }}" as="r"><!-- строка на тип станции -->
+                <div style="display:grid; grid-column:1 / -1; grid-template-columns:1fr 104px 104px; gap:8px; align-items:center">
+                  <div>
+                    <div style="font-size:14px; font-weight:600">{{ r.label }}</div>
+                    <div style="font-size:12px; color:#6E6E7A">{{ r.sub }}</div>
+                  </div>
+                  <sc-for list="{{ r.cells }}" as="c">
+                    <input value="{{ c.value }}" onchange="{{ c.onChange }}" style="width:100%; padding:10px 11px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12px; color:#5B5B66; margin-top:12px">Выходные — суббота и воскресенье. Значения в рублях за час.</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:18px">
+        <div style="font-size:17px; font-weight:700; margin-bottom:4px">Расчёт длительности</div>
+        <div style="font-size:13px; color:#8A8A96; margin-bottom:16px">Цена указана за 1 час на одну станцию. Так виджет посчитает остальные сеансы:</div>
+        <div style="display:flex; flex-wrap:wrap; gap:10px">
+          <sc-for list="{{ durPreview }}" as="d"><!-- 1ч / 2ч / 3ч, вычисляются от ставки VR -->
+            <div style="border:1px solid #212227; border-radius:13px; padding:12px 14px; background:#0C0E11; min-width:132px">
+              <div style="font-size:12px; color:#6E6E7A">{{ d.label }}</div>
+              <div style="font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:4px">{{ d.price }}</div>
+              <div style="font-size:11px; color:#5B5B66; margin-top:2px">{{ d.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== ВКЛАДКА «ПАКЕТЫ» ===== -->
+    <sc-if value="{{ isPacks }}">
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:18px">
+        <div style="font-size:17px; font-weight:700; margin-bottom:4px">Пакеты</div>
+        <div style="font-size:13px; color:#8A8A96; margin-bottom:16px; max-width:52ch; text-wrap:pretty">Фиксированная цена за компанию и время вместо расчёта по часам. Пакеты свои у каждого клуба и зала — состав ограничен вместимостью.</div>
+        <div style="font-size:12px; color:#6E6E7A; margin-bottom:16px">{{ packsHint }}</div>
+        <sc-if value="{{ packsEmpty }}">
+          <div style="padding:22px; border-radius:14px; border:1px dashed #26282F; text-align:center; font-size:14px; color:#8A8A96; margin-bottom:16px">У этого клуба пока нет пакетов.</div>
+        </sc-if>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px">
+          <sc-for list="{{ packs }}" as="p">
+            <div style="{{ p.rowStyle }}"><!-- выключенный пакет: opacity 0.55, фон темнее -->
+              <div style="min-width:0">
+                <div style="font-size:16px; font-weight:700">{{ p.name }}</div>
+                <div style="font-size:12px; color:#6E6E7A; margin-top:2px">{{ p.meta }}</div>
+                <div style="{{ p.compareStyle }}">{{ p.compare }}</div><!-- «по часам вышло бы X ₽» акцентом, если пакет дешевле -->
+                <div style="{{ p.noteStyle }}">{{ p.note }}</div><!-- красным: «Не вмещается...» -->
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; flex:none">
+                <sc-for list="{{ p.fields }}" as="fl"><!-- шлемов / PS5 / минут / ₽ за пакет -->
+                  <label style="display:block">
+                    <span style="display:block; font-size:11px; color:#5B5B66; margin-bottom:5px">{{ fl.label }}</span>
+                    <input value="{{ fl.value }}" onchange="{{ fl.onChange }}" style="width:96px; padding:10px 11px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+                  </label>
+                </sc-for>
+                <button onclick="{{ p.onToggle }}" style="{{ p.toggleStyle }}">{{ p.toggleLabel }}</button>
+                <button onclick="{{ p.onDelete }}" style="padding:9px 11px; border-radius:9px; border:1px solid #2A2C33; background:transparent; color:#8A8A96; font-size:13px; cursor:pointer">Удалить</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <!-- Форма добавления пакета -->
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; padding-top:16px; border-top:1px solid #1E1F24">
+          <label style="display:block; flex:1; min-width:150px">
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">Новый пакет</span>
+            <input value="{{ newPack.name }}" onchange="{{ newPack.onName }}" placeholder="Например, Выпускной" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px">
+          </label>
+          <div>
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">зал</span>
+            <div style="display:flex; gap:6px">
+              <sc-for list="{{ newHalls }}" as="h"><button onclick="{{ h.onClick }}" style="{{ h.style }}">{{ h.label }}</button></sc-for>
+            </div>
+          </div>
+          <label style="display:block">
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">шлемов</span>
+            <input value="{{ newPack.vr }}" onchange="{{ newPack.onVr }}" style="width:86px; padding:11px 12px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+          </label>
+          <label style="display:block">
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">PS5</span>
+            <input value="{{ newPack.ps5 }}" onchange="{{ newPack.onPs5 }}" style="width:86px; padding:11px 12px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+          </label>
+          <label style="display:block">
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">минут</span>
+            <input value="{{ newPack.dur }}" onchange="{{ newPack.onDur }}" style="width:86px; padding:11px 12px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+          </label>
+          <label style="display:block">
+            <span style="display:block; font-size:12px; color:#8A8A96; margin-bottom:6px">цена, ₽</span>
+            <input value="{{ newPack.price }}" onchange="{{ newPack.onPrice }}" style="width:106px; padding:11px 12px; border-radius:10px; border:1px solid #2A2C33; background:#0A0C0E; color:#F2F2F5; font-size:15px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums">
+          </label>
+          <button onclick="{{ newPack.onAdd }}" style="{{ newPack.addStyle }}">Добавить</button>
+        </div>
+        <div style="{{ newPack.msgStyle }}">{{ newPack.msg }}</div>
+      </div>
+    </sc-if>
+
+    <!-- ===== ВКЛАДКА «ДОСТУПНОСТЬ» ===== -->
+    <sc-if value="{{ isAvail }}">
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:18px; margin-bottom:14px">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:16px">
+          <div>
+            <div style="font-size:17px; font-weight:700">Приём заявок</div>
+            <div style="font-size:13px; color:#8A8A96; margin-top:4px">{{ intake.hint }}</div>
+          </div>
+          <button onclick="{{ intake.onToggle }}" style="{{ intake.switchStyle }}"><!-- тумблер 50×29, круглый knob 23px -->
+            <span style="{{ intake.knobStyle }}"></span>
+          </button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <sc-for list="{{ halls }}" as="h"><!-- закрытый зал: фон #16110C, рамка #3A2A1C -->
+            <div style="{{ h.rowStyle }}">
+              <div>
+                <div style="font-size:15px; font-weight:600">{{ h.name }}</div>
+                <div style="font-size:12px; color:#6E6E7A; margin-top:2px">{{ h.meta }}</div>
+              </div>
+              <button onclick="{{ h.onToggle }}" style="{{ h.btnStyle }}">{{ h.btnLabel }}</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:18px">
+        <div style="font-size:17px; font-weight:700; margin-bottom:4px">Закрыть отдельные слоты</div>
+        <div style="font-size:13px; color:#8A8A96; margin-bottom:16px">{{ slotHint }}</div>
+        <div style="display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:14px"><!-- лента дат (14 дней) -->
+          <sc-for list="{{ dayChips }}" as="d">
+            <button onclick="{{ d.onClick }}" style="{{ d.style }}">
+              <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.7">{{ d.dow }}</span>
+              <span style="font-size:17px; font-weight:700; font-variant-numeric:tabular-nums">{{ d.day }}</span>
+              <span style="font-size:10px; opacity:0.6">{{ d.mon }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px"><!-- часовые слоты -->
+          <sc-for list="{{ slotCells }}" as="s">
+            <button onclick="{{ s.onClick }}" style="{{ s.style }}"><!-- закрытый: штриховка 135deg #16110C/#120E0A -->
+              <span style="font-size:15px; font-weight:700; font-variant-numeric:tabular-nums">{{ s.time }}</span>
+              <span style="{{ s.tagStyle }}">{{ s.tag }}</span><!-- открыт / закрыт -->
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid #1E1F24">
+          <button onclick="{{ closeAllDay }}" style="padding:11px 14px; border-radius:11px; border:1px solid #3A2A1C; background:#1E1610; color:#FFC98A; font-size:13px; font-weight:600; cursor:pointer">Закрыть весь день</button>
+          <button onclick="{{ openAllDay }}" style="padding:11px 14px; border-radius:11px; border:1px solid #2A2C33; background:transparent; color:#C9C9D2; font-size:13px; font-weight:600; cursor:pointer">Открыть весь день</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== ВКЛАДКА «ЗАПИСИ» ===== -->
+    <sc-if value="{{ isLog }}">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:14px"><!-- 6 KPI-плиток -->
+        <sc-for list="{{ logStats }}" as="s">
+          <div style="border:1px solid #212227; border-radius:15px; background:#101216; padding:14px 15px">
+            <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5B5B66">{{ s.label }}</div>
+            <div style="{{ s.valStyle }}">{{ s.value }}</div><!-- 24px 800, цвет = акцент-tint -->
+            <div style="font-size:12px; color:#6E6E7A; margin-top:2px">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; padding:16px 18px; margin-bottom:14px; display:flex; flex-direction:column; gap:12px"><!-- фильтры: день/зал/тип/статус -->
+        <sc-for list="{{ logFilters }}" as="f">
+          <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center">
+            <span style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5B5B66; width:74px; flex:none">{{ f.label }}</span>
+            <sc-for list="{{ f.options }}" as="o"><button onclick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button></sc-for>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; overflow:hidden">
+        <div style="padding:16px 18px 13px; border-bottom:1px solid #1E1F24; display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:baseline">
+          <div style="font-size:17px; font-weight:700">Записи</div>
+          <div style="font-size:12px; color:#6E6E7A">{{ logMeta }}</div>
+        </div>
+        <sc-if value="{{ logEmpty }}">
+          <div style="padding:32px 20px; text-align:center">
+            <div style="font-size:15px; font-weight:600">Ничего не найдено</div>
+            <div style="font-size:13px; color:#8A8A96; margin-top:5px">Смягчите фильтры выше или выберите другой клуб.</div>
+          </div>
+        </sc-if>
+        <div style="display:flex; flex-direction:column">
+          <sc-for list="{{ logRows }}" as="r"><!-- отменённая: opacity 0.45 -->
+            <div style="{{ r.rowStyle }}">
+              <div style="display:flex; gap:13px; min-width:0; flex:1">
+                <div style="flex:none; text-align:center">
+                  <div style="{{ r.timeStyle }}">{{ r.time }}</div>
+                  <div style="font-size:11px; color:#5B5B66; margin-top:4px">{{ r.date }}</div>
+                </div>
+                <div style="min-width:0; flex:1">
+                  <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center">
+                    <span style="font-size:15px; font-weight:700">{{ r.name }}</span>
+                    <span style="{{ r.statusStyle }}">{{ r.status }}</span><!-- НОВАЯ/ПОДТВЕРЖДЕНА/ОПЛАЧЕНА, uppercase -->
+                  </div>
+                  <div style="font-size:12px; color:#7C7C88; margin-top:3px">{{ r.contact }}</div><!-- телефон · виджет|звонок -->
+                  <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:9px">
+                    <sc-for list="{{ r.chips }}" as="c"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="flex:none; text-align:right; min-width:130px">
+                <div style="font-size:16px; font-weight:700; font-variant-numeric:tabular-nums">{{ r.total }}</div>
+                <div style="font-size:11px; color:#5B5B66; margin-top:2px">{{ r.pay }}</div><!-- «фикс. цена пакета» / «почасовая оплата» / «состав не совпал...» -->
+                <button onclick="{{ r.onCancel }}" style="{{ r.cancelStyle }}">{{ r.cancelLabel }}</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== ВКЛАДКА «БРОНИ» (операционный список на день) ===== -->
+    <sc-if value="{{ isBookings }}">
+      <div style="border:1px solid #212227; border-radius:18px; background:#101216; overflow:hidden">
+        <div style="padding:18px 18px 14px; border-bottom:1px solid #1E1F24; display:flex; justify-content:space-between; align-items:baseline; gap:12px">
+          <div style="font-size:17px; font-weight:700">Брони на {{ dayLabel }}</div>
+          <div style="font-size:12px; color:#6E6E7A">{{ bookingsMeta }}</div><!-- «N активных из M · тариф будней/выходного дня» -->
+        </div>
+        <sc-if value="{{ noBookings }}">
+          <div style="padding:34px 20px; text-align:center">
+            <div style="font-size:15px; font-weight:600">На этот день броней нет</div>
+            <div style="font-size:13px; color:#8A8A96; margin-top:5px">Выберите другой день или другой клуб в шапке.</div>
+          </div>
+        </sc-if>
+        <div style="display:flex; flex-direction:column">
+          <sc-for list="{{ bookings }}" as="b">
+            <div style="{{ b.rowStyle }}">
+              <div style="display:flex; align-items:center; gap:12px; min-width:0">
+                <div style="{{ b.timeStyle }}">{{ b.time }}</div>
+                <div style="min-width:0">
+                  <div style="font-size:15px; font-weight:600">{{ b.name }}</div>
+                  <div style="font-size:12px; color:#6E6E7A; margin-top:2px">{{ b.meta }}</div><!-- телефон · зал · N мест · K ч -->
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; flex:none">
+                <div style="text-align:right">
+                  <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end">
+                    <span style="{{ b.grossStyle }}">{{ b.gross }}</span><!-- зачёркнутая цена «по часам», если есть скидка -->
+                    <span style="font-size:15px; font-weight:700; font-variant-numeric:tabular-nums">{{ b.total }}</span>
+                  </div>
+                  <div style="{{ b.discStyle }}">{{ b.disc }}</div><!-- «пакет «...»» акцентом / «почасовая оплата» -->
+                </div>
+                <button onclick="{{ b.onCancel }}" style="{{ b.cancelStyle }}">{{ b.cancelLabel }}</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+
+</x-dc>
