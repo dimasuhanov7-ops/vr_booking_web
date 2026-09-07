@@ -39,18 +39,23 @@ class HallSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: <Widget>[
-            for (final HallOptionEntity o in rooms)
-              _RoomChip(
-                option: o,
-                selected: o.id == selectedId,
-                accent: accent,
-                onTap: () => onSelected(o),
-              ),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (int i = 0; i < rooms.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: _RoomChip(
+                    option: rooms[i],
+                    selected: rooms[i].id == selectedId,
+                    accent: accent,
+                    onTap: () => onSelected(rooms[i]),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         if (combo != null) ...<Widget>[
           const SizedBox(height: 10),
@@ -92,7 +97,6 @@ class _RoomChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(11),
       child: Container(
-        constraints: const BoxConstraints(minWidth: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
           color: selected ? accent.withValues(alpha: 0.18) : Colors.transparent,
