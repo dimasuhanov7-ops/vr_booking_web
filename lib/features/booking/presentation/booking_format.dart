@@ -69,12 +69,13 @@ abstract final class BookingFormat {
     return DateTime(w.year, w.month, w.day);
   }
 
-  /// «1 ч» / «1,5 ч» / «2 ч» / «3 ч».
+  /// «1 ч» / «2 ч» / «3 ч» / «4 ч» (90 — для показа старых броней).
   static String duration(int minutes) => switch (minutes) {
         60 => '1 ч',
         90 => '1,5 ч',
         120 => '2 ч',
         180 => '3 ч',
+        240 => '4 ч',
         _ => '${minutes ~/ 60} ч',
       };
 

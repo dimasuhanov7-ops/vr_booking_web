@@ -31,7 +31,7 @@ void main() {
     expect(slots.first.duration, const Duration(minutes: 60));
   });
 
-  test('PricingService: будни VR 600/ч, 90 мин = 900', () {
+  test('PricingService: будни VR 600/ч, 240 мин = 2400', () {
     const PricingService pricing = PricingService();
     // ближайший будний день
     DateTime day = DateTime.now().add(const Duration(days: 1));
@@ -55,7 +55,7 @@ void main() {
       club: _effect,
       station: station,
       startsAtUtc: startUtc,
-      minutes: 90,
+      minutes: 240,
       rates: const <PriceRateEntity>[
         PriceRateEntity(
             stationType: StationType.vrHeadset,
@@ -63,7 +63,7 @@ void main() {
             pricePerHour: 600),
       ],
     );
-    expect(price, 900);
+    expect(price, 2400);
   });
 
   testWidgets('MaterialApp собирается', (WidgetTester tester) async {

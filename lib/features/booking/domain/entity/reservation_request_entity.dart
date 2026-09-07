@@ -25,7 +25,7 @@ class ReservationRequestEntity extends Equatable {
   /// Начало сеанса (UTC).
   final DateTime startsAt;
 
-  /// Длительность сеанса, минут (60/90/120/180).
+  /// Длительность сеанса, минут (60/120/180/240).
   final int minutes;
 
   /// Имя клиента.

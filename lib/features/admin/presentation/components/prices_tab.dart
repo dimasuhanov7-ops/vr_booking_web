@@ -236,7 +236,7 @@ class _DurationPreview extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: <Widget>[
-              for (final int m in <int>[60, 120, 180])
+              for (final int m in <int>[60, 120, 180, 240])
                 Container(
                   constraints: const BoxConstraints(minWidth: 132),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

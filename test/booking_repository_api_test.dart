@@ -12,7 +12,7 @@ ReservationRequestEntity _req() => ReservationRequestEntity(
       clubId: 'c1',
       stationIds: const <String>['s1', 's2'],
       startsAt: DateTime.utc(2026, 9, 10, 15),
-      minutes: 90,
+      minutes: 240,
       clientName: 'Иван',
       clientPhone: '+7 900 000 00 00',
       source: 'site',
@@ -27,7 +27,7 @@ void main() {
       expect(r.url.path, endsWith('/reservations'));
       expect(r.headers['authorization'], 'Bearer k');
       final Map<String, dynamic> body = jsonDecode(r.body) as Map<String, dynamic>;
-      expect(body['minutes'], 90);
+      expect(body['minutes'], 240);
       expect(body['station_ids'], <String>['s1', 's2']);
       return http.Response(jsonEncode(<String, String>{'order_id': 'ord-1'}), 201);
     }));
