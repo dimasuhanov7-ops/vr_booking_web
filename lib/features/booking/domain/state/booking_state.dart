@@ -212,6 +212,7 @@ class BookingState extends Equatable {
     String? createdOrderId,
     String? errorMessage,
     bool clearSlot = false,
+    bool clearHall = false,
     bool clearError = true,
   }) {
     return BookingState(
@@ -222,7 +223,7 @@ class BookingState extends Equatable {
       stations: stations ?? this.stations,
       prices: prices ?? this.prices,
       hallOptions: hallOptions ?? this.hallOptions,
-      hall: hall ?? this.hall,
+      hall: clearHall ? null : (hall ?? this.hall),
       date: date ?? this.date,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       slots: slots ?? this.slots,

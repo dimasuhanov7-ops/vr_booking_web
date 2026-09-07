@@ -87,6 +87,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       conflictShown: false,
       quote: QuoteEntity.empty,
       clearSlot: true,
+      clearHall: true,
     ));
     try {
       final List<StationEntity> stations =
