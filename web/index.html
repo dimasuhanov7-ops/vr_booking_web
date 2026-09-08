@@ -23,18 +23,21 @@
 </head>
 <body>
   <script>
-    // Виджет встраивается iframe'ом на сайт клуба и в VK Mini Apps.
-    // Сообщаем родительскому окну свою высоту, чтобы iframe подстраивался.
-    function postHeight() {
-      try {
-        var h = document.body.scrollHeight;
-        if (window.parent !== window) {
-          window.parent.postMessage({ type: 'vr-booking:height', height: h }, '*');
-        }
-      } catch (e) {}
-    }
-    window.addEventListener('load', postHeight);
-    new ResizeObserver(postHeight).observe(document.body);
+    // Мост «виджет -> родительская страница» для встраивания через <iframe>
+    // (сайт клуба, VK Mini Apps). Контракт сообщений — docs/EMBED.md.
+    (function () {
+      function send(msg) {
+        try {
+          if (window.parent !== window) window.parent.postMessage(msg, '*');
+        } catch (e) {}
+      }
+      // Пока грузится Flutter — примерная высота, чтобы iframe не был нулевым.
+      // Дальше точную высоту шлёт сам виджет (measure по контенту).
+      window.addEventListener('load', function () {
+        send({ type: 'vr-booking:height', height: 680 });
+      });
+      window.__vrBooking = { send: send };
+    })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

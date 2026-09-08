@@ -2,17 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_theme.dart';
 
-/// Заголовок шага: «Шаг N из 4» + название + подсказка.
+/// Заголовок шага: «Шаг N из M» + название + подсказка.
+///
+/// При [steps] == 3 (клуб зафиксирован через `?club=`) первый шаг «выбор клуба»
+/// не показывается — заголовки берутся со сдвигом.
 class BookingProgress extends StatelessWidget {
   /// Создаёт заголовок.
   const BookingProgress({
     required this.step,
     required this.accent,
+    this.steps = 4,
     super.key,
   });
 
-  /// Номер шага (1..4).
+  /// Номер текущего шага (1..[steps]).
   final int step;
+
+  /// Всего шагов (3 или 4).
+  final int steps;
 
   /// Акцент клуба.
   final Color accent;
@@ -33,17 +40,21 @@ class BookingProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int i = (step - 1).clamp(0, 3);
+    final int total = steps.clamp(1, 4);
+    final int offset = 4 - total; // 0 при 4 шагах, 1 при 3
+    final int i = (step - 1).clamp(0, total - 1);
+    final int titleIndex = (i + offset).clamp(0, 3);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
-          children: List<Widget>.generate(4, (int k) {
+          children: List<Widget>.generate(total, (int k) {
             final bool on = k <= i;
             return Expanded(
               child: Container(
                 height: 4,
-                margin: EdgeInsets.only(right: k < 3 ? 4 : 0),
+                margin: EdgeInsets.only(right: k < total - 1 ? 4 : 0),
                 decoration: BoxDecoration(
                   color: on ? accent : Colors.white12,
                   borderRadius: BorderRadius.circular(2),
@@ -53,15 +64,15 @@ class BookingProgress extends StatelessWidget {
           }),
         ),
         const SizedBox(height: 12),
-        Text('ШАГ ${i + 1} ИЗ 4',
+        Text('ШАГ ${i + 1} ИЗ $total',
             style: const TextStyle(
                 fontSize: 11, letterSpacing: 1.4, color: BookingColors.textFaint)),
         const SizedBox(height: 6),
-        Text(_titles[i],
+        Text(_titles[titleIndex],
             style: const TextStyle(
                 fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4, height: 1.15)),
         const SizedBox(height: 6),
-        Text(_hints[i],
+        Text(_hints[titleIndex],
             style: const TextStyle(fontSize: 14, height: 1.4, color: BookingColors.textMuted)),
       ],
     );

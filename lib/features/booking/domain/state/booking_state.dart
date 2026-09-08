@@ -33,6 +33,7 @@ class BookingState extends Equatable {
   const BookingState({
     this.view = BookingStage.form,
     this.status = BookingStatus.initial,
+    this.clubLocked = false,
     this.clubs = const <ClubEntity>[],
     this.club,
     this.stations = const <StationEntity>[],
@@ -60,6 +61,9 @@ class BookingState extends Equatable {
 
   /// Статус.
   final BookingStatus status;
+
+  /// Клуб зафиксирован через `?club=` — селектор клуба не показываем.
+  final bool clubLocked;
 
   /// Клубы.
   final List<ClubEntity> clubs;
@@ -121,12 +125,16 @@ class BookingState extends Equatable {
   /// Текст ошибки.
   final String? errorMessage;
 
-  /// Шаг мастера (1..4) — для заголовка.
+  /// Всего шагов мастера: 3 при зафиксированном клубе, иначе 4.
+  int get stepCount => clubLocked ? 3 : 4;
+
+  /// Текущий шаг мастера (1..[stepCount]) — для заголовка.
   int get stepNo {
-    if (club == null) return 1;
-    if (slot == null) return 2;
-    if (pickedIds.isEmpty) return 3;
-    return 4;
+    final int shift = clubLocked ? 1 : 0;
+    if (!clubLocked && club == null) return 1;
+    if (slot == null) return 2 - shift;
+    if (pickedIds.isEmpty) return 3 - shift;
+    return 4 - shift;
   }
 
   /// Станции выбранного варианта зала, по порядку.
@@ -191,6 +199,7 @@ class BookingState extends Equatable {
   BookingState copyWith({
     BookingStage? view,
     BookingStatus? status,
+    bool? clubLocked,
     List<ClubEntity>? clubs,
     ClubEntity? club,
     List<StationEntity>? stations,
@@ -218,6 +227,7 @@ class BookingState extends Equatable {
     return BookingState(
       view: view ?? this.view,
       status: status ?? this.status,
+      clubLocked: clubLocked ?? this.clubLocked,
       clubs: clubs ?? this.clubs,
       club: club ?? this.club,
       stations: stations ?? this.stations,
@@ -245,6 +255,7 @@ class BookingState extends Equatable {
   List<Object?> get props => <Object?>[
         view,
         status,
+        clubLocked,
         clubs,
         club,
         stations,

@@ -95,14 +95,16 @@ gzip_types text/css application/javascript application/json image/svg+xml;
    ```
    ⚠️ Если виджет открывается ещё и из ВК (Mini App) или с других origin —
    оставить `*` либо доработать функцию под список доменов. Пока безопаснее `*`.
-2. **Встраивание** на сайт клуба и во ВК:
+2. **Встраивание** на сайт клуба и во ВК — контракт и пример слушателя
+   в [`EMBED.md`](EMBED.md). Коротко:
    ```html
-   <iframe src="https://booking.<клуб>.ru/?source=site"
-           style="width:100%;max-width:480px;height:900px;border:0"
+   <iframe src="https://book.effectvr.ru/?club=effect&source=site"
+           style="width:100%;max-width:480px;height:680px;border:0;display:block"
            loading="lazy"></iframe>
    ```
-   `?source=vk` — для ВК. `_headers`/`.htaccess` не ставят `X-Frame-Options`,
-   так что iframe с любого origin разрешён.
+   Высоту iframe родитель подгоняет по сообщению `vr-booking:height`.
+   `?club=` фиксирует клуб, `?source=vk` — для ВК. `_headers`/`.htaccess`
+   не ставят `X-Frame-Options`, iframe с любого origin разрешён.
 3. **Админка** — тот же бандл, `https://booking.<клуб>.ru/?admin=1`
    (пока на моках, без авторизации — см. HANDOFF).
 

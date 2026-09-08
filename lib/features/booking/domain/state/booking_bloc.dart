@@ -29,10 +29,16 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     SlotGeneratorService slotGenerator = const SlotGeneratorService(),
     PricingService pricingService = const PricingService(),
     String source = 'site',
+    String? lockedClubSlug,
+    DateTime? initialDate,
+    int? initialDurationMinutes,
   })  : _repository = repository,
         _slots = slotGenerator,
         _pricing = pricingService,
         _source = source,
+        _lockedClubSlug = lockedClubSlug,
+        _pendingDate = initialDate,
+        _pendingDuration = initialDurationMinutes,
         super(const BookingState()) {
     on<BookingStarted>(_onStarted);
     on<BookingClubSelected>(_onClubSelected);
@@ -56,6 +62,13 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   final PricingService _pricing;
   final String _source;
 
+  /// Slug клуба из `?club=` — селектор клуба скрыт, клуб выбирается сразу.
+  final String? _lockedClubSlug;
+
+  /// Предвыбор из `?date=` / `?duration=` — применяется один раз при выборе клуба.
+  DateTime? _pendingDate;
+  int? _pendingDuration;
+
   /// Допустимые длительности сеанса, минут.
   static const List<int> durations = <int>[60, 120, 180, 240];
 
@@ -65,7 +78,20 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     emit(state.copyWith(status: BookingStatus.loading));
     try {
       final List<ClubEntity> clubs = await _repository.fetchClubs();
-      emit(state.copyWith(status: BookingStatus.ready, clubs: clubs));
+      final ClubEntity? locked = _lockedClubSlug == null
+          ? null
+          : clubs
+              .where((ClubEntity c) => c.slug == _lockedClubSlug)
+              .cast<ClubEntity?>()
+              .firstWhere((ClubEntity? c) => true, orElse: () => null);
+
+      emit(state.copyWith(
+        status: BookingStatus.ready,
+        clubs: clubs,
+        clubLocked: locked != null,
+      ));
+
+      if (locked != null) add(BookingClubSelected(locked));
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.failure, errorMessage: e.message));
     }
@@ -75,11 +101,16 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     BookingClubSelected event,
     Emitter<BookingState> emit,
   ) async {
-    final DateTime date = state.date ?? _today();
+    final DateTime date = _pendingDate ?? state.date ?? _today();
+    final int duration = _pendingDuration ?? state.durationMinutes;
+    _pendingDate = null;
+    _pendingDuration = null;
+
     emit(state.copyWith(
       status: BookingStatus.loading,
       club: event.club,
       date: date,
+      durationMinutes: duration,
       hallOptions: const <HallOptionEntity>[],
       stations: const <StationEntity>[],
       pickedIds: const <String>{},
@@ -309,7 +340,20 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     BookingResetRequested event,
     Emitter<BookingState> emit,
   ) {
-    emit(BookingState(status: BookingStatus.ready, clubs: state.clubs));
+    final List<ClubEntity> clubs = state.clubs;
+    final bool locked = state.clubLocked;
+    emit(BookingState(
+      status: BookingStatus.ready,
+      clubs: clubs,
+      clubLocked: locked,
+    ));
+    if (locked && _lockedClubSlug != null) {
+      final ClubEntity? match = clubs
+          .where((ClubEntity c) => c.slug == _lockedClubSlug)
+          .cast<ClubEntity?>()
+          .firstWhere((ClubEntity? c) => true, orElse: () => null);
+      if (match != null) add(BookingClubSelected(match));
+    }
   }
 
   // ---------------------------------------------------------------------------

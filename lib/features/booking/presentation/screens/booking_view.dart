@@ -43,10 +43,16 @@ class BookingView extends StatelessWidget {
           ));
       },
       builder: (BuildContext context, BookingState state) {
-        if (state.status == BookingStatus.loading && state.clubs.isEmpty) {
+        final bool bootstrapping = (state.status == BookingStatus.loading &&
+                state.clubs.isEmpty) ||
+            (state.clubLocked && state.club == null &&
+                state.status != BookingStatus.failure);
+        if (bootstrapping) {
+          // Высокий плейсхолдер: iframe не «схлопывается» на время загрузки
+          // (см. docs/EMBED.md — сообщения vr-booking:height).
           return const _Frame(
-            child: Padding(
-              padding: EdgeInsets.all(60),
+            child: SizedBox(
+              height: 420,
               child: Center(child: CircularProgressIndicator()),
             ),
           );
@@ -186,22 +192,27 @@ class _FormBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        BookingProgress(step: state.stepNo, accent: accent),
+        BookingProgress(
+          step: state.stepNo,
+          steps: state.stepCount,
+          accent: accent,
+        ),
         const SizedBox(height: 22),
 
         if (state.conflictShown) _conflict(bloc),
 
-        // ── Шаг 1: клубы
-        ClubSelector(
-          clubs: state.clubs,
-          stationsByClub: _kits(),
-          selectedClubId: club?.id,
-          onSelected: (ClubEntity c) => bloc.add(BookingClubSelected(c)),
-        ),
+        // ── Шаг 1: клубы (скрыт, если клуб зафиксирован через ?club=)
+        if (!state.clubLocked)
+          ClubSelector(
+            clubs: state.clubs,
+            stationsByClub: _kits(),
+            selectedClubId: club?.id,
+            onSelected: (ClubEntity c) => bloc.add(BookingClubSelected(c)),
+          ),
 
         // ── Шаг 2: зал / дата / длительность / время
         if (club != null) ...<Widget>[
-          _divider(),
+          if (!state.clubLocked) _divider(),
           if (state.hallOptions.length > 1) ...<Widget>[
             const SectionLabel('Зал'),
             const SizedBox(height: 10),

@@ -100,6 +100,19 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 выбора, показывает `ConflictBanner` с заменой из того же зала. Остальной выбор
 сохраняется.
 
+## Встраивание в `<iframe>` — [`docs/EMBED.md`](docs/EMBED.md)
+
+Публичный контракт для сайтов клубов (`effectvr.ru`, `vrayarena.ru`) и VK.
+Разбор query — `lib/app/embed/launch_params.dart`; общение с родителем —
+`lib/app/embed/embed_channel.dart` + `web/index.html`.
+
+- **URL-параметры:** `?club=effect|vray` (фикс. клуб, мастер из 3 шагов),
+  `?source=site|vk`, `?date=YYYY-MM-DD`, `?duration=60|120|180|240`, `?admin=1`.
+- **Сообщения родителю** (`postMessage`, префикс `vr-booking:`): `ready`,
+  `height` (авто-высота iframe, дебаунс), `step`, `success`
+  (`{orderId, club, stationCount, minutes, amount}` — для целей в Метрике).
+- Модель: iframe тянется по контенту, скроллит родительская страница.
+
 ## Раздел «Админка» (`?admin=1`)
 
 `lib/features/admin/` — та же слоёная структура. Полноширинная панель персонала:
