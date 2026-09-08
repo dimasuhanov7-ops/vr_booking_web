@@ -177,6 +177,8 @@ class BookingRepository implements IBookingRepository {
           int.tryParse(m.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
       return DiscountMinStationsFailure(req);
     }
+    if (m.contains('INTAKE_CLOSED')) return const BookingIntakeClosedFailure();
+    if (m.contains('SLOT_CLOSED')) return const BookingSlotClosedFailure();
     if (m.contains('RATE_LIMITED')) return const BookingRateLimitedFailure();
     if (m.contains('TOO_MANY_ACTIVE')) return const BookingTooManyActiveFailure();
     if (m.contains('BAD_PHONE')) return const BookingBadPhoneFailure();

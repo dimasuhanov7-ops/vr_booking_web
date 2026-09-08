@@ -64,6 +64,21 @@ class BookingBadPhoneFailure extends BookingFailure {
       : super('Проверьте номер телефона — он введён не полностью.');
 }
 
+/// Клуб временно не принимает онлайн-брони (пауза из админки).
+class BookingIntakeClosedFailure extends BookingFailure {
+  /// Создаёт ошибку паузы приёма.
+  const BookingIntakeClosedFailure()
+      : super('Клуб сейчас не принимает онлайн-брони. '
+            'Позвоните нам — забронируем вручную.');
+}
+
+/// Выбранное время закрыто администратором (зал на обслуживании, событие).
+class BookingSlotClosedFailure extends BookingFailure {
+  /// Создаёт ошибку закрытого окна.
+  const BookingSlotClosedFailure()
+      : super('Это время закрыто для записи. Выберите другое.');
+}
+
 /// Прочая непредвиденная ошибка сети/сервера.
 class BookingUnexpectedFailure extends BookingFailure {
   /// Создаёт непредвиденную ошибку.

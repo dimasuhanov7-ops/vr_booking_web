@@ -212,6 +212,8 @@ class BookingRepositoryApi implements IBookingRepository {
       'RATE_LIMITED' => const BookingRateLimitedFailure(),
       'TOO_MANY_ACTIVE' => const BookingTooManyActiveFailure(),
       'BAD_PHONE' => const BookingBadPhoneFailure(),
+      'INTAKE_CLOSED' => const BookingIntakeClosedFailure(),
+      'SLOT_CLOSED' => const BookingSlotClosedFailure(),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||
       'BAD_DURATION' ||

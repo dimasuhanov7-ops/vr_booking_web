@@ -104,7 +104,7 @@ function reservationError(err: { code?: string; message?: string }): Response {
   if (msg.includes("DISCOUNT_NOT_FOUND")) return json({ error: "DISCOUNT_NOT_FOUND" }, 422);
   if (msg.includes("RATE_LIMITED")) return json({ error: "RATE_LIMITED" }, 429);
   if (msg.includes("TOO_MANY_ACTIVE")) return json({ error: "TOO_MANY_ACTIVE" }, 429);
-  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH"]) {
+  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH", "INTAKE_CLOSED", "SLOT_CLOSED"]) {
     if (msg.includes(e)) return json({ error: e }, 422);
   }
   return json({ error: "UNEXPECTED", detail: msg }, 500);
@@ -278,6 +278,32 @@ async function handle(req: Request): Promise<Response> {
           `источник: ${b.source ?? "site"} · №${String(orderId).slice(0, 8)}`,
       );
       return json({ order_id: orderId }, 201);
+    }
+
+    // ---- POST /reservations/cancel ----
+    // Клиент отменяет свою бронь: id из чека + свой телефон. Отдельной
+    // авторизации у клиента нет, поэтому пара (id, телефон) — и есть доступ.
+    if (req.method === "POST" && path === "/reservations/cancel") {
+      const b = await req.json();
+      if (!b.order_id || !b.client_phone) {
+        return json({ error: "ORDER_NOT_FOUND" }, 404);
+      }
+      const { error } = await db.rpc("booking_cancel_order", {
+        p_order_id: b.order_id,
+        p_client_phone: b.client_phone,
+      });
+      if (error) {
+        const msg = error.message ?? "";
+        if (msg.includes("ORDER_NOT_FOUND")) {
+          return json({ error: "ORDER_NOT_FOUND" }, 404);
+        }
+        if (msg.includes("TOO_LATE_TO_CANCEL")) {
+          return json({ error: "TOO_LATE_TO_CANCEL" }, 422);
+        }
+        if (msg.includes("BAD_PHONE")) return json({ error: "BAD_PHONE" }, 422);
+        return json({ error: "UNEXPECTED", detail: msg }, 500);
+      }
+      return json({ cancelled: true });
     }
 
     return json({ error: "NOT_FOUND", path }, 404);
