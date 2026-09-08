@@ -25,6 +25,7 @@ import '../components/account_block.dart';
 import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
 import '../components/package_cards.dart';
+import '../components/session_hours.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
 
@@ -549,7 +550,8 @@ class _FormBody extends StatelessWidget {
           'План зала · ${BookingFormat.range(club, state.slot!.startsAt, state.slot!.endsAt)}'),
       const SizedBox(height: 6),
       Text(
-        'Свободно ${state.freeHallStations.length} из ${state.hallCapacity} · выбрано ${state.pickedIds.length}',
+        'Свободно ${state.freeHallStations.length} из ${state.hallCapacity}'
+        '${state.multiHour ? '' : ' · выбрано ${state.pickedIds.length}'}',
         style: const TextStyle(fontSize: 14, color: BookingColors.textSoft),
       ),
       const SizedBox(height: 14),
@@ -564,19 +566,22 @@ class _FormBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
       ],
-      HallPlan(
-        stations: state.hallStations,
-        isFree: state.isFree,
-        pickedIds: state.pickedIds,
-        takenIds: state.takenIds,
-        isCombo: state.hall!.isCombo,
-        accent: accent,
-        freeCount: state.freeHallStations.length,
-        quickLabel: packRows.isNotEmpty ? 'Или по часам:' : 'Взять сразу:',
-        onToggle: (String id) => bloc.add(BookingStationToggled(id)),
-        onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
-        onClear: () => bloc.add(const BookingSelectionCleared()),
-      ),
+      if (state.multiHour)
+        SessionHours(state: state, club: club, accent: accent)
+      else
+        HallPlan(
+          stations: state.hallStations,
+          isFree: state.isFree,
+          pickedIds: state.pickedAt(0),
+          takenIds: state.takenIds,
+          isCombo: state.hall!.isCombo,
+          accent: accent,
+          freeCount: state.freeHallStations.length,
+          quickLabel: packRows.isNotEmpty ? 'Или по часам:' : 'Взять сразу:',
+          onToggle: (String id) => bloc.add(BookingStationToggled(id)),
+          onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
+          onClear: () => bloc.add(const BookingSelectionCleared()),
+        ),
     ];
   }
 
