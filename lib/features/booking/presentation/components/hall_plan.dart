@@ -351,80 +351,98 @@ class _Pod extends StatelessWidget {
         ? BookingColors.textOff
         : BookingColors.textSoft;
 
-    return FocusRing(
-      radius: 14,
-      color: accent,
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: width,
-          padding: EdgeInsets.fromLTRB(4, 12 * _k, 4, 10 * _k),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border, width: picked ? 2 : 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              _visor(
-                picked
-                    ? tint
-                    : (busy
-                          ? const Color(0xFF3A3A44)
-                          : const Color(0xFF7E7E8C)),
-              ),
-              SizedBox(height: 8 * _k),
-              Text(
-                station.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13 * _k,
-                  fontWeight: FontWeight.w700,
-                  color: fg,
+    // Скринридер иначе прочитал бы «#5 свободно» без понимания, что это и
+    // что с ним можно сделать.
+    final String kind = station.type == StationType.ps5 ? 'PS5' : 'VR-шлем';
+    final String stateLabel = taken
+        ? 'только что заняли'
+        : busy
+        ? 'занято'
+        : picked
+        ? 'выбрано вами'
+        : 'свободно';
+
+    return Semantics(
+      button: !busy,
+      selected: picked,
+      enabled: !busy,
+      label: '$kind ${station.label}, $stateLabel',
+      excludeSemantics: true,
+      child: FocusRing(
+        radius: 14,
+        color: accent,
+        child: InkWell(
+          onTap: busy ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: width,
+            padding: EdgeInsets.fromLTRB(4, 12 * _k, 4, 10 * _k),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: border, width: picked ? 2 : 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _visor(
+                  picked
+                      ? tint
+                      : (busy
+                            ? const Color(0xFF3A3A44)
+                            : const Color(0xFF7E7E8C)),
                 ),
-              ),
-              const SizedBox(height: 3),
-              // Галочка — иконкой из бандла, а не символом «✓»: его нет в Archivo,
-              // и CanvasKit ради него тянул Noto Sans с fonts.gstatic.com.
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (picked && !busy) ...<Widget>[
-                    Icon(Icons.check, size: 10 * _k, color: tint),
-                    SizedBox(width: 2 * _k),
-                  ],
-                  Flexible(
-                    child: Text(
-                      taken
-                          ? 'заняли'
-                          : busy
-                          ? 'занято'
-                          : picked
-                          ? 'моя'
-                          : 'свободно',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10 * _k,
-                        letterSpacing: 0.2,
-                        decoration: busy && !taken
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: picked
-                            ? tint
+                SizedBox(height: 8 * _k),
+                Text(
+                  station.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13 * _k,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                // Галочка — иконкой из бандла, а не символом «✓»: его нет в Archivo,
+                // и CanvasKit ради него тянул Noto Sans с fonts.gstatic.com.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (picked && !busy) ...<Widget>[
+                      Icon(Icons.check, size: 10 * _k, color: tint),
+                      SizedBox(width: 2 * _k),
+                    ],
+                    Flexible(
+                      child: Text(
+                        taken
+                            ? 'заняли'
                             : busy
-                            ? BookingColors.textDim
-                            : const Color(0xFF7C7C88),
+                            ? 'занято'
+                            : picked
+                            ? 'моя'
+                            : 'свободно',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10 * _k,
+                          letterSpacing: 0.2,
+                          decoration: busy && !taken
+                              ? TextDecoration.lineThrough
+                              : null,
+                          color: picked
+                              ? tint
+                              : busy
+                              ? BookingColors.textDim
+                              : const Color(0xFF7C7C88),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

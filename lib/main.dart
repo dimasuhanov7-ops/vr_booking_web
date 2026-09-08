@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'app/booking_app.dart';
@@ -8,6 +9,11 @@ import 'di/injection.dart';
 /// Точка входа публичного виджета онлайн-бронирования VR-клубов.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Дерево доступности во Flutter Web по умолчанию выключено и включается
+  // только когда посетитель сам нажмёт скрытую кнопку «Enable accessibility».
+  // Для формы бронирования это значит, что со скринридером ей пользоваться
+  // нельзя, — поэтому включаем сразу.
+  SemanticsBinding.instance.ensureSemantics();
   _installErrorScreen();
   await initializeDateFormatting('ru');
   final LaunchParams params = LaunchParams.fromUri();

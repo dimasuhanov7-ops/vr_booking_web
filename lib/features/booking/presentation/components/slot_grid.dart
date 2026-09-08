@@ -153,65 +153,74 @@ class _SlotChip extends StatelessWidget {
           : BookingColors.surface,
     );
 
-    return FocusRing(
-      radius: 13,
-      color: accent,
-      child: InkWell(
-        onTap: out ? null : onTap,
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
-          decoration: decoration,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                time,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: selected
-                      ? BookingColors.text
-                      : out
-                      ? BookingColors.textOff
-                      : BookingColors.textSoft,
+    return Semantics(
+      button: !out,
+      selected: selected,
+      enabled: !out,
+      label: out
+          ? 'Сеанс в $time, свободных мест нет'
+          : 'Сеанс в $time, свободно $free из $total',
+      excludeSemantics: true,
+      child: FocusRing(
+        radius: 13,
+        color: accent,
+        child: InkWell(
+          onTap: out ? null : onTap,
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+            decoration: decoration,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? BookingColors.text
+                        : out
+                        ? BookingColors.textOff
+                        : BookingColors.textSoft,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 7),
-              // 12 точек по 7 px не влезают в узкий чип — ужимаем, а не режем.
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  children: <Widget>[
-                    for (int i = 0; i < total.clamp(0, 12); i++)
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(right: 2),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(2),
-                          color: i < free ? accent : BookingColors.podBorder,
+                const SizedBox(height: 7),
+                // 12 точек по 7 px не влезают в узкий чип — ужимаем, а не режем.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    children: <Widget>[
+                      for (int i = 0; i < total.clamp(0, 12); i++)
+                        Container(
+                          width: 5,
+                          height: 5,
+                          margin: const EdgeInsets.only(right: 2),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(2),
+                            color: i < free ? accent : BookingColors.podBorder,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                out ? 'занято' : '$free из $total',
-                style: TextStyle(
-                  fontSize: 11,
-                  decoration: out ? TextDecoration.lineThrough : null,
-                  color: out
-                      ? BookingColors.textDim
-                      : selected
-                      ? tint
-                      : BookingColors.textMuted,
+                const SizedBox(height: 6),
+                Text(
+                  out ? 'занято' : '$free из $total',
+                  style: TextStyle(
+                    fontSize: 11,
+                    decoration: out ? TextDecoration.lineThrough : null,
+                    color: out
+                        ? BookingColors.textDim
+                        : selected
+                        ? tint
+                        : BookingColors.textMuted,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

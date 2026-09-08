@@ -30,6 +30,9 @@ class AdminHeader extends StatelessWidget {
   /// Колбэк «Выйти» из админки (сессия сотрудника / уход к виджету).
   final VoidCallback? onLogout;
 
+  /// Порог, ниже которого шапка складывается в две строки.
+  static const double _stackBelow = 720;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -37,68 +40,90 @@ class AdminHeader extends StatelessWidget {
         border: Border(bottom: BorderSide(color: AdminColors.divider)),
       ),
       padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          Flexible(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints c) {
+          // На телефоне заголовок и кнопки не помещаются в строку: заголовок
+          // сжимался в узкую колонку и «АДМИНКА» переносилась по слогам.
+          // Ниже порога кладём их друг под друга.
+          final bool stacked = c.maxWidth < _stackBelow;
+          if (!stacked) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text(
-                  'АДМИНКА',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.9,
-                    color: accent,
-                  ),
-                ),
-                const Text('бронирование Effect VR / V-Ray',
-                    style: TextStyle(fontSize: 13, color: AdminColors.textFaint)),
+                Flexible(child: _title()),
+                const SizedBox(width: 12),
+                _controls(),
               ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Row(
-            mainAxisSize: MainAxisSize.min,
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              for (final AdminClubEntity c in clubs)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: _ClubButton(
-                    club: c,
-                    selected: c.id == selectedClubId,
-                    onTap: () => onClubSelected(c.id),
-                  ),
-                ),
-              if (onLogout != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: InkWell(
-                    onTap: onLogout,
-                    borderRadius: BorderRadius.circular(9),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: AdminColors.borderInput),
-                      ),
-                      child: const Text('Выйти',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AdminColors.textMuted)),
-                    ),
-                  ),
-                ),
+              _title(),
+              const SizedBox(height: 10),
+              // Кнопок может не хватить места даже в две строки — даём увести
+              // их в горизонтальный скролл, а не ломать вёрстку.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _controls(),
+              ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
+
+  Widget _title() => Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        children: <Widget>[
+          Text(
+            'АДМИНКА',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.9,
+              color: accent,
+            ),
+          ),
+          const Text('бронирование Effect VR / V-Ray',
+              style: TextStyle(fontSize: 13, color: AdminColors.textFaint)),
+        ],
+      );
+
+  Widget _controls() => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final AdminClubEntity c in clubs)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _ClubButton(
+                club: c,
+                selected: c.id == selectedClubId,
+                onTap: () => onClubSelected(c.id),
+              ),
+            ),
+          if (onLogout != null)
+            InkWell(
+              onTap: onLogout,
+              borderRadius: BorderRadius.circular(9),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: AdminColors.borderInput),
+                ),
+                child: const Text('Выйти',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AdminColors.textMuted)),
+              ),
+            ),
+        ],
+      );
 }
 
 class _ClubButton extends StatelessWidget {

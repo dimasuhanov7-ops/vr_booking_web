@@ -41,6 +41,10 @@ class AdminScreen extends StatelessWidget {
               }
               final AdminBloc bloc = context.read<AdminBloc>();
               final Color accent = AdminColors.accentFor(state.accentSlug);
+              // На телефоне поля по 20 px с каждой стороны заметно съедают
+              // ширину таблиц и сетки занятости.
+              final double pad =
+                  MediaQuery.sizeOf(context).width < 600 ? 12 : 20;
 
               return Stack(
                 children: <Widget>[
@@ -51,7 +55,7 @@ class AdminScreen extends StatelessWidget {
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 1400),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            padding: EdgeInsets.symmetric(horizontal: pad),
                             child: AdminHeader(
                               clubs: state.clubs,
                               selectedClubId: state.clubId,
@@ -70,7 +74,7 @@ class AdminScreen extends StatelessWidget {
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 1400),
                               child: Padding(
-                                padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                                padding: EdgeInsets.fromLTRB(pad, 22, pad, 0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: <Widget>[
