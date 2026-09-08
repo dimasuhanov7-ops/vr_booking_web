@@ -32,50 +32,65 @@ class AdminTabBar extends StatelessWidget {
     final Color tint = AdminColors.tintFor(
       accent == AdminColors.accentFor('v_ray') ? 'v_ray' : 'effect_vr',
     );
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: <Widget>[
-                for (final AdminTab t in AdminTab.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: InkWell(
-                      onTap: () => onSelected(t),
-                      borderRadius: BorderRadius.circular(11),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: t == current
-                              ? accent.withValues(alpha: 0.16)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: t == current ? accent : AdminColors.borderInput,
-                          ),
-                        ),
-                        child: Text(
-                          t.label,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: t == current ? tint : AdminColors.textMid,
-                          ),
-                        ),
-                      ),
+
+    final Widget tabs = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: <Widget>[
+          for (final AdminTab t in AdminTab.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () => onSelected(t),
+                borderRadius: BorderRadius.circular(11),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: t == current
+                        ? accent.withValues(alpha: 0.16)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: t == current ? accent : AdminColors.borderInput,
                     ),
                   ),
-              ],
+                  child: Text(
+                    t.label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: t == current ? tint : AdminColors.textMid,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-        if (trailing != null) ...<Widget>[
-          const SizedBox(width: 10),
-          trailing!,
         ],
-      ],
+      ),
+    );
+
+    if (trailing == null) return tabs;
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints c) {
+        if (c.maxWidth < 560) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              tabs,
+              const SizedBox(height: 12),
+              trailing!,
+            ],
+          );
+        }
+        return Row(
+          children: <Widget>[
+            Expanded(child: tabs),
+            const SizedBox(width: 10),
+            trailing!,
+          ],
+        );
+      },
     );
   }
 }
