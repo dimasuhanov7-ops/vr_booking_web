@@ -120,7 +120,7 @@ class SuccessView extends StatelessWidget {
                         ],
                       ),
                     ),
-                  Text('На $peopleLabel — по одному человеку на станцию, можно меняться внутри компании.',
+                  Text('На $peopleLabel — по одному человеку на шлем или PS5, можно меняться внутри компании.',
                       style: const TextStyle(fontSize: 13, color: BookingColors.textMuted)),
                 ]),
                 if (quote.hasDiscount) ...<Widget>[
