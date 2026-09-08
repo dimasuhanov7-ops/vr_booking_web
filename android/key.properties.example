@@ -1,0 +1,17 @@
+# Шаблон конфигурации ключа подписи. Скопировать в android/key.properties
+# и заполнить своими значениями. Сам key.properties и файл .jks в .gitignore —
+# в репозиторий они попадать не должны.
+#
+# Ключ создаётся один раз командой (RuStore требует RSA не меньше 2048 бит):
+#
+#   keytool -genkey -v -keystore vr-booking-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias vr-booking
+#
+# ⚠️ Потеря ключа необратима: обновить уже опубликованное приложение будет
+# нечем, придётся публиковать новое с другим applicationId и терять установки
+# и отзывы. Сделайте копию .jks и паролей в надёжном месте (не в репозитории).
+
+storeFile=../vr-booking-release.jks
+storePassword=пароль-от-хранилища
+keyAlias=vr-booking
+keyPassword=пароль-от-ключа
