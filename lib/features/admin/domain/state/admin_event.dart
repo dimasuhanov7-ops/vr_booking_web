@@ -261,10 +261,14 @@ class AdminRowEdited extends AdminEvent {
     this.consoles,
     this.prepay,
     this.note,
+    this.clearHourly = false,
   });
 
   /// Идентификатор записи.
   final String rowId;
+
+  /// Сбросить разбивку по часам (правим состав на весь сеанс).
+  final bool clearHourly;
 
   /// Имя.
   final String? clientName;
@@ -293,6 +297,7 @@ class AdminRowEdited extends AdminEvent {
   @override
   List<Object?> get props => <Object?>[
         rowId,
+        clearHourly,
         clientName,
         phone,
         startMinutes,

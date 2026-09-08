@@ -335,7 +335,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       consoles: event.consoles,
       prepay: event.prepay,
       note: event.note,
+      clearHourly: event.clearHourly,
     );
+    // Смена длительности — сбрасываем разбивку по часам.
+    if (event.durationMinutes != null) {
+      edited = edited.copyWith(clearHourly: true);
+    }
     // Держим сеанс в рабочих часах клуба.
     final int minStart = state.club.openMinutes;
     final int maxStart = state.club.closeMinutes - edited.durationMinutes;

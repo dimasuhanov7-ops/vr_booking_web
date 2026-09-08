@@ -63,6 +63,7 @@ class BookingDetailDrawer extends StatelessWidget {
       int? consoles,
       int? prepay,
       String? note,
+      bool clearHourly = false,
     }) =>
         bloc.add(AdminRowEdited(
           rowId: row.id,
@@ -74,6 +75,7 @@ class BookingDetailDrawer extends StatelessWidget {
           consoles: consoles,
           prepay: prepay,
           note: note,
+          clearHourly: clearHourly,
         ));
 
     return AdminDrawerShell(
@@ -106,7 +108,15 @@ class BookingDetailDrawer extends StatelessWidget {
               '${AdminFormat.span(row.startMinutes, row.endMinutes)}'
                   ' · ${AdminFormat.hours(row.durationMinutes)}'
             ),
-            ('Состав', AdminFormat.composition(row.headsets, row.consoles)),
+            (
+              'Состав',
+              row.variesByHour
+                  ? <String>[
+                      for (int h = 0; h < row.hourCount; h++)
+                        '${h + 1}ч ${row.headsetsAt(h) + row.consolesAt(h)}'
+                    ].join(' · ')
+                  : AdminFormat.composition(row.headsets, row.consoles)
+            ),
             ('Расчёт', pkg != null ? 'пакет «${pkg.name}»' : 'почасовая оплата'),
             ('Источник', row.source.label),
           ]),
@@ -162,26 +172,34 @@ class BookingDetailDrawer extends StatelessWidget {
             accent: accent,
             onSelected: (int m) => edit(durationMinutes: m),
           ),
+          if (row.variesByHour) ...<Widget>[
+            const SizedBox(height: 13),
+            const Text(
+              'Состав меняется по часам. Здесь можно задать один состав на весь '
+              'сеанс — разбивку по часам меняйте через «Новую запись».',
+              style: TextStyle(fontSize: 12, color: AdminColors.warn),
+            ),
+          ],
           const SizedBox(height: 13),
           _ChipGroup(
-            label: 'Шлемов',
+            label: row.variesByHour ? 'Шлемов (весь сеанс)' : 'Шлемов',
             options: <(String, int)>[
               for (int i = 0; i <= hall.headsets; i++) ('$i', i),
             ],
-            value: row.headsets,
+            value: row.variesByHour ? row.maxHeadsets : row.headsets,
             accent: accent,
-            onSelected: (int v) => edit(headsets: v),
+            onSelected: (int v) => edit(headsets: v, clearHourly: true),
           ),
           if (hall.consoles > 0) ...<Widget>[
             const SizedBox(height: 13),
             _ChipGroup(
-              label: 'PS5',
+              label: row.variesByHour ? 'PS5 (весь сеанс)' : 'PS5',
               options: <(String, int)>[
                 for (int i = 0; i <= hall.consoles; i++) ('$i', i),
               ],
-              value: row.consoles,
+              value: row.variesByHour ? row.maxConsoles : row.consoles,
               accent: accent,
-              onSelected: (int v) => edit(consoles: v),
+              onSelected: (int v) => edit(consoles: v, clearHourly: true),
             ),
           ],
           const SizedBox(height: 13),
