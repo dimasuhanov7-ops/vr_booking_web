@@ -123,10 +123,12 @@ class _HallOccupancyState extends State<_HallOccupancy> {
     final AdminHallEntity hall = widget.hall;
     final AdminState state = widget.state;
     final AdminClubEntity club = state.club;
-    const int step = 60;
+    const int session = 60;
+    // Столбцы — реальные начала сеансов: час + перерыв клуба (Effect — 10 мин).
+    final int stride = session + club.gapMinutes;
 
     final List<int> slots = <int>[];
-    for (int t = club.openMinutes; t + step <= club.closeMinutes; t += step) {
+    for (int t = club.openMinutes; t + session <= club.closeMinutes; t += stride) {
       slots.add(t);
     }
 
@@ -148,7 +150,7 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       final List<int> cover = <int>[];
       for (int si = 0; si < slots.length; si++) {
         final int s = slots[si];
-        if (e.startMinutes < s + step && e.endMinutes > s) cover.add(si);
+        if (e.startMinutes < s + session && e.endMinutes > s) cover.add(si);
       }
       if (cover.isEmpty) continue;
       ({int u, int s})? first;

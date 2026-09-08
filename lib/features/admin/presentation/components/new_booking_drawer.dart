@@ -47,8 +47,11 @@ class NewBookingDrawer extends StatelessWidget {
     );
     final bool noRoom = free.headsets + free.consoles == 0;
 
+    // Начала сеансов — час + перерыв клуба (Effect — 10 мин).
     final List<int> times = <int>[];
-    for (int t = club.openMinutes; t + d.durationMinutes <= club.closeMinutes; t += 60) {
+    for (int t = club.openMinutes;
+        t + d.durationMinutes <= club.closeMinutes;
+        t += 60 + club.gapMinutes) {
       times.add(t);
     }
 
