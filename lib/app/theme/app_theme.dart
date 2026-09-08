@@ -16,6 +16,9 @@ abstract final class BookingColors {
   /// Более тёмная поверхность (промо-инпут, план зала).
   static const Color surfaceDeep = Color(0xFF101015);
 
+  /// Поверхность карточки-поля (дата, длительность, заглушки) — `#121217`.
+  static const Color fieldSurface = Color(0xFF121217);
+
   /// Поверхность плитки станции.
   static const Color pod = Color(0xFF191920);
 

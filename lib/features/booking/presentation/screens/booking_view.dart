@@ -23,6 +23,16 @@ import '../components/hall_selector.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
 
+/// Порог перехода на двухколоночную раскладку (десктоп/планшет), CSS-px.
+const double _wideBreakpoint = 860;
+
+/// Максимальная ширина «рамки» виджета для узкой и широкой раскладки.
+const double _frameNarrow = 460;
+const double _frameWide = 1000;
+
+/// Ширина левой (sticky в макете) колонки на широкой раскладке.
+const double _leftColWidth = 360;
+
 /// Содержимое виджета бронирования (один прокручиваемый экран).
 class BookingView extends StatelessWidget {
   /// Создаёт представление.
@@ -43,6 +53,11 @@ class BookingView extends StatelessWidget {
           ));
       },
       builder: (BuildContext context, BookingState state) {
+        // Ширина области виджета (в iframe — размер фрейма, заданный родителем).
+        final double vw = MediaQuery.sizeOf(context).width;
+        final bool wide = vw >= _wideBreakpoint;
+        final double frameW = wide ? _frameWide : _frameNarrow;
+
         final bool bootstrapping = (state.status == BookingStatus.loading &&
                 state.clubs.isEmpty) ||
             (state.clubLocked && state.club == null &&
@@ -50,22 +65,27 @@ class BookingView extends StatelessWidget {
         if (bootstrapping) {
           // Высокий плейсхолдер: iframe не «схлопывается» на время загрузки
           // (см. docs/EMBED.md — сообщения vr-booking:height).
-          return const _Frame(
-            child: SizedBox(
+          return _Frame(
+            maxWidth: frameW,
+            child: const SizedBox(
               height: 420,
               child: Center(child: CircularProgressIndicator()),
             ),
           );
         }
         if (state.status == BookingStatus.failure && state.clubs.isEmpty) {
-          return _Frame(child: _Retry(onRetry: () =>
-              context.read<BookingBloc>().add(const BookingStarted())));
+          return _Frame(
+            maxWidth: frameW,
+            child: _Retry(onRetry: () =>
+                context.read<BookingBloc>().add(const BookingStarted())),
+          );
         }
 
         final Color accent = BookingColors.accentFor(state.club?.slug);
 
         if (state.view == BookingStage.done && state.createdOrderId != null) {
           return _Frame(
+            maxWidth: frameW,
             child: SuccessView(
               orderId: state.createdOrderId!,
               club: state.club!,
@@ -82,12 +102,13 @@ class BookingView extends StatelessWidget {
         }
 
         return _Frame(
+          maxWidth: frameW,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.fromLTRB(18, 22, 18, 26),
-                child: _FormBody(state: state, accent: accent),
+                padding: EdgeInsets.fromLTRB(wide ? 24 : 18, 22, wide ? 24 : 18, 26),
+                child: _FormBody(state: state, accent: accent, wide: wide),
               ),
               BookingBottomBar(
                 line: _barLine(state),
@@ -129,14 +150,15 @@ class BookingView extends StatelessWidget {
 }
 
 class _Frame extends StatelessWidget {
-  const _Frame({required this.child});
+  const _Frame({required this.child, this.maxWidth = _frameNarrow});
 
   final Widget child;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxWidth: 460),
+      constraints: BoxConstraints(maxWidth: maxWidth),
       decoration: BoxDecoration(
         color: BookingColors.frame,
         borderRadius: BorderRadius.circular(22),
@@ -177,10 +199,17 @@ class _Retry extends StatelessWidget {
 }
 
 class _FormBody extends StatelessWidget {
-  const _FormBody({required this.state, required this.accent});
+  const _FormBody({
+    required this.state,
+    required this.accent,
+    required this.wide,
+  });
 
   final BookingState state;
   final Color accent;
+
+  /// Двухколоночная раскладка (десктоп/планшет).
+  final bool wide;
 
   BookingBloc _bloc(BuildContext c) => c.read<BookingBloc>();
 
@@ -188,6 +217,19 @@ class _FormBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final BookingBloc bloc = _bloc(context);
     final ClubEntity? club = state.club;
+
+    // Левая колонка: клуб + зал + дата. Правая: длительность/время + план + контакты.
+    final List<List<Widget>> left = <List<Widget>>[
+      if (!state.clubLocked) _clubBlock(bloc),
+      if (club != null && state.hallOptions.length > 1) _hallBlock(bloc),
+      if (club != null) _dateBlock(bloc),
+    ];
+    final List<List<Widget>> right = <List<Widget>>[
+      if (club != null) _whenBlock(bloc, club),
+      if (state.slot != null && state.hall != null) _planBlock(bloc, club!),
+      if (state.pickedIds.isNotEmpty) _contactsBlock(bloc),
+    ];
+    if (wide && club == null) right.add(<Widget>[_idlePlaceholder()]);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,125 +240,181 @@ class _FormBody extends StatelessWidget {
           accent: accent,
         ),
         const SizedBox(height: 22),
-
-        if (state.conflictShown) _conflict(bloc),
-
-        // ── Шаг 1: клубы (скрыт, если клуб зафиксирован через ?club=)
-        if (!state.clubLocked)
-          ClubSelector(
-            clubs: state.clubs,
-            stationsByClub: _kits(),
-            selectedClubId: club?.id,
-            onSelected: (ClubEntity c) => bloc.add(BookingClubSelected(c)),
-          ),
-
-        // ── Шаг 2: зал / дата / длительность / время
-        if (club != null) ...<Widget>[
-          if (!state.clubLocked) _divider(),
-          if (state.hallOptions.length > 1) ...<Widget>[
-            const SectionLabel('Зал'),
-            const SizedBox(height: 10),
-            HallSelector(
-              options: state.hallOptions,
-              selectedId: state.hall?.id,
-              accent: accent,
-              onSelected: (HallOptionEntity h) => bloc.add(BookingHallSelected(h)),
-            ),
-            const SizedBox(height: 20),
-          ],
-          const SectionLabel('Дата'),
-          const SizedBox(height: 10),
-          DateField(
-            date: state.date ?? DateTime.now(),
-            accent: accent,
-            daysAhead: BookingConfig.bookingHorizonDays,
-            onSelected: (DateTime d) => bloc.add(BookingDateSelected(d)),
-          ),
-          const SizedBox(height: 20),
-          const SectionLabel('Длительность сеанса'),
-          const SizedBox(height: 10),
-          DurationSelector(
-            options: BookingBloc.durations,
-            selected: state.durationMinutes,
-            accent: accent,
-            onSelected: (int m) => bloc.add(BookingDurationSelected(m)),
-          ),
-          const SizedBox(height: 20),
+        if (state.conflictShown) ...<Widget>[
+          _conflict(bloc),
+          const SizedBox(height: 4),
+        ],
+        if (wide)
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Expanded(child: SectionLabel('Время начала')),
-              Text('свободных мест из ${state.hallCapacity}',
-                  style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+              SizedBox(
+                width: _leftColWidth,
+                child: _stack(left, gap: 24),
+              ),
+              const SizedBox(width: 28),
+              Expanded(child: _stack(right, gap: 24)),
             ],
-          ),
-          const SizedBox(height: 12),
-          if (state.hall == null)
-            const _Hint('Выберите зал.')
-          else if (state.status == BookingStatus.loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (state.dayEmpty)
-            EmptyDayState(
-              title: 'На ${BookingFormat.dayShort(state.date!)} всё занято',
-              accent: accent,
-              actions: _emptyActions(bloc),
-            )
-          else if (state.slots.isEmpty)
-            const _Hint('На эту дату сеансов уже нет — выберите другой день.')
-          else
-            SlotGrid(
-              club: club,
-              slots: state.slots,
-              selected: state.slot,
-              capacity: state.hallCapacity,
-              freeCountAt: state.freeCountAt,
-              accent: accent,
-              onSelected: (TimeSlotEntity s) => bloc.add(BookingSlotSelected(s)),
-            ),
-        ],
-
-        // ── Шаг 3: план зала
-        if (state.slot != null && state.hall != null) ...<Widget>[
-          _divider(),
-          SectionLabel('План зала · ${BookingFormat.range(club!, state.slot!.startsAt, state.slot!.endsAt)}'),
-          const SizedBox(height: 6),
-          Text(
-            'Свободно ${state.freeHallStations.length} из ${state.hallCapacity} · выбрано ${state.pickedIds.length}',
-            style: const TextStyle(fontSize: 14, color: BookingColors.textSoft),
-          ),
-          const SizedBox(height: 14),
-          HallPlan(
-            stations: state.hallStations,
-            isFree: state.isFree,
-            pickedIds: state.pickedIds,
-            takenIds: state.takenIds,
-            isCombo: state.hall!.isCombo,
-            accent: accent,
-            freeCount: state.freeHallStations.length,
-            onToggle: (String id) => bloc.add(BookingStationToggled(id)),
-            onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
-            onClear: () => bloc.add(const BookingSelectionCleared()),
-          ),
-        ],
-
-        // ── Шаг 4: контакты
-        if (state.pickedIds.isNotEmpty) ...<Widget>[
-          _divider(),
-          const SectionLabel('Кто бронирует'),
-          const SizedBox(height: 12),
-          ContactForm(
-            name: state.clientName,
-            phone: state.clientPhone,
-            people: state.peopleInput,
-            pickedCount: state.pickedIds.length,
-            onNameChanged: (String v) => bloc.add(BookingContactChanged(name: v)),
-            onPhoneChanged: (String v) => bloc.add(BookingContactChanged(phone: v)),
-            onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
-          ),
-        ],
+          )
+        else
+          _stack(<List<Widget>>[...left, ...right], divided: true),
       ],
+    );
+  }
+
+  /// Собирает непустые блоки в колонку, разделяя их либо линией (узкая
+  /// раскладка), либо отступом.
+  Widget _stack(
+    List<List<Widget>> blocks, {
+    double gap = 20,
+    bool divided = false,
+  }) {
+    final List<List<Widget>> parts =
+        blocks.where((List<Widget> b) => b.isNotEmpty).toList();
+    final List<Widget> out = <Widget>[];
+    for (int i = 0; i < parts.length; i++) {
+      if (i > 0) {
+        out.add(divided ? _divider() : SizedBox(height: gap));
+      }
+      out.addAll(parts[i]);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: out);
+  }
+
+  List<Widget> _clubBlock(BookingBloc bloc) => <Widget>[
+        ClubSelector(
+          clubs: state.clubs,
+          stationsByClub: _kits(),
+          selectedClubId: state.club?.id,
+          onSelected: (ClubEntity c) => bloc.add(BookingClubSelected(c)),
+        ),
+      ];
+
+  List<Widget> _hallBlock(BookingBloc bloc) => <Widget>[
+        const SectionLabel('Зал'),
+        const SizedBox(height: 10),
+        HallSelector(
+          options: state.hallOptions,
+          selectedId: state.hall?.id,
+          accent: accent,
+          onSelected: (HallOptionEntity h) => bloc.add(BookingHallSelected(h)),
+        ),
+      ];
+
+  List<Widget> _dateBlock(BookingBloc bloc) => <Widget>[
+        const SectionLabel('Дата'),
+        const SizedBox(height: 10),
+        DateField(
+          date: state.date ?? DateTime.now(),
+          accent: accent,
+          daysAhead: BookingConfig.bookingHorizonDays,
+          onSelected: (DateTime d) => bloc.add(BookingDateSelected(d)),
+        ),
+      ];
+
+  List<Widget> _whenBlock(BookingBloc bloc, ClubEntity club) => <Widget>[
+        const SectionLabel('Длительность сеанса'),
+        const SizedBox(height: 10),
+        DurationSelector(
+          options: BookingBloc.durations,
+          selected: state.durationMinutes,
+          accent: accent,
+          onSelected: (int m) => bloc.add(BookingDurationSelected(m)),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: <Widget>[
+            const Expanded(child: SectionLabel('Время начала')),
+            Text('свободных мест из ${state.hallCapacity}',
+                style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (state.hall == null)
+          const _Hint('Выберите зал.')
+        else if (state.status == BookingStatus.loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (state.dayEmpty)
+          EmptyDayState(
+            title: 'На ${BookingFormat.dayShort(state.date!)} всё занято',
+            accent: accent,
+            actions: _emptyActions(bloc),
+          )
+        else if (state.slots.isEmpty)
+          const _Hint('На эту дату сеансов уже нет — выберите другой день.')
+        else
+          SlotGrid(
+            club: club,
+            slots: state.slots,
+            selected: state.slot,
+            capacity: state.hallCapacity,
+            freeCountAt: state.freeCountAt,
+            accent: accent,
+            onSelected: (TimeSlotEntity s) => bloc.add(BookingSlotSelected(s)),
+          ),
+      ];
+
+  List<Widget> _planBlock(BookingBloc bloc, ClubEntity club) => <Widget>[
+        SectionLabel(
+            'План зала · ${BookingFormat.range(club, state.slot!.startsAt, state.slot!.endsAt)}'),
+        const SizedBox(height: 6),
+        Text(
+          'Свободно ${state.freeHallStations.length} из ${state.hallCapacity} · выбрано ${state.pickedIds.length}',
+          style: const TextStyle(fontSize: 14, color: BookingColors.textSoft),
+        ),
+        const SizedBox(height: 14),
+        HallPlan(
+          stations: state.hallStations,
+          isFree: state.isFree,
+          pickedIds: state.pickedIds,
+          takenIds: state.takenIds,
+          isCombo: state.hall!.isCombo,
+          accent: accent,
+          freeCount: state.freeHallStations.length,
+          onToggle: (String id) => bloc.add(BookingStationToggled(id)),
+          onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
+          onClear: () => bloc.add(const BookingSelectionCleared()),
+        ),
+      ];
+
+  List<Widget> _contactsBlock(BookingBloc bloc) => <Widget>[
+        const SectionLabel('Кто бронирует'),
+        const SizedBox(height: 12),
+        ContactForm(
+          name: state.clientName,
+          phone: state.clientPhone,
+          people: state.peopleInput,
+          pickedCount: state.pickedIds.length,
+          onNameChanged: (String v) => bloc.add(BookingContactChanged(name: v)),
+          onPhoneChanged: (String v) => bloc.add(BookingContactChanged(phone: v)),
+          onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
+        ),
+      ];
+
+  Widget _idlePlaceholder() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+      decoration: BoxDecoration(
+        color: BookingColors.fieldSurface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: BookingColors.border),
+      ),
+      child: const Column(
+        children: <Widget>[
+          Text('Начните с клуба',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          SizedBox(height: 6),
+          Text(
+            'Выберите клуб слева — дата, длительность и свободное время появятся здесь.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, height: 1.5, color: BookingColors.textMuted),
+          ),
+        ],
+      ),
     );
   }
 

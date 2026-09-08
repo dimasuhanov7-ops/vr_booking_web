@@ -70,7 +70,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   int? _pendingDuration;
 
   /// Допустимые длительности сеанса, минут.
-  static const List<int> durations = <int>[60, 120, 180, 240];
+  static const List<int> durations = <int>[60, 120, 180, 240, 300];
 
   // ---------------------------------------------------------------------------
 

@@ -1,10 +1,10 @@
 -- =============================================================================
--- Длительности сеанса: 60 / 90 / 120 / 180  ->  60 / 120 / 180 / 240
+-- Длительности сеанса: 60 / 90 / 120 / 180  ->  60 / 120 / 180 / 240 / 300
 --
--- У клубов нет сеанса 1,5 ч; добавлен 4 ч. Меняем оба места, где длительность
--- зашита в БД: RPC booking_create_order (BAD_DURATION) и RLS-политику вставки
--- booking_order_items. Старые брони на 90 мин остаются валидными (проверка
--- только на INSERT).
+-- У клубов нет сеанса 1,5 ч; добавлены 4 ч и 5 ч. Меняем оба места, где
+-- длительность зашита в БД: RPC booking_create_order (BAD_DURATION) и
+-- RLS-политику вставки booking_order_items. Старые брони на 90 мин остаются
+-- валидными (проверка только на INSERT).
 -- =============================================================================
 
 -- ---- 1. RPC: допустимые длительности ----------------------------------------
@@ -38,7 +38,7 @@ begin
   if v_count = 0 then
     raise exception 'NO_STATIONS' using errcode = 'P0001';
   end if;
-  if p_minutes not in (60, 120, 180, 240) then
+  if p_minutes not in (60, 120, 180, 240, 300) then
     raise exception 'BAD_DURATION' using errcode = 'P0001';
   end if;
 
@@ -105,7 +105,7 @@ create policy booking_order_items_anon_insert on public.booking_order_items
   with check (
     starts_at > now()
     and ends_at > starts_at
-    and round(extract(epoch from (ends_at - starts_at)) / 60) in (60, 120, 180, 240)
+    and round(extract(epoch from (ends_at - starts_at)) / 60) in (60, 120, 180, 240, 300)
     and exists (
       select 1
       from public.booking_stations s
