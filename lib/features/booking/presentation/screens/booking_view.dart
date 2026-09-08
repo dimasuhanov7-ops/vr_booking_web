@@ -63,74 +63,100 @@ class BookingView extends StatelessWidget {
         final bool wide = vw >= _wideBreakpoint;
         final double frameW = wide ? _frameWide : _frameNarrow;
 
-        final bool bootstrapping = (state.status == BookingStatus.loading &&
-                state.clubs.isEmpty) ||
-            (state.clubLocked && state.club == null &&
-                state.status != BookingStatus.failure);
-        if (bootstrapping) {
-          // Высокий плейсхолдер: iframe не «схлопывается» на время загрузки
-          // (см. docs/EMBED.md — сообщения vr-booking:height).
-          return _Frame(
-            maxWidth: frameW,
-            child: const SizedBox(
-              height: 420,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
-        if (state.status == BookingStatus.failure && state.clubs.isEmpty) {
-          return _Frame(
-            maxWidth: frameW,
-            child: _Retry(onRetry: () =>
-                context.read<BookingBloc>().add(const BookingStarted())),
-          );
-        }
+        final Widget frame = _frame(context, state, wide: wide, frameW: frameW);
 
-        final Color accent = BookingColors.accentFor(state.club?.slug);
-
-        if (state.view == BookingStage.done && state.createdOrderId != null) {
-          return _Frame(
-            maxWidth: frameW,
-            child: SuccessView(
-              orderId: state.createdOrderId!,
-              club: state.club!,
-              hall: state.hall!,
-              slot: state.slot!,
-              durationMinutes: state.durationMinutes,
-              quote: state.quote,
-              peopleLabel: _peopleLabel(state),
-              contact: '${state.clientName}, ${state.clientPhone}',
-              onRestart: () =>
-                  context.read<BookingBloc>().add(const BookingResetRequested()),
-            ),
-          );
-        }
-
-        return _Frame(
-          maxWidth: frameW,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Padding(
-                padding: EdgeInsets.fromLTRB(wide ? 24 : 18, 22, wide ? 24 : 18, 26),
-                child: _FormBody(state: state, accent: accent, wide: wide),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            frame,
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: frameW),
+              child: const Padding(
+                padding: EdgeInsets.only(top: 14),
+                child: _AdminDoor(),
               ),
-              BookingBottomBar(
-                line: _barLine(state),
-                net: state.quote.net,
-                gross: state.quote.gross,
-                hasDiscount: state.quote.hasDiscount,
-                cta: _cta(state),
-                enabled: state.canSubmit,
-                busy: state.status == BookingStatus.submitting,
-                accent: accent,
-                onPressed: () =>
-                    context.read<BookingBloc>().add(const BookingSubmitted()),
-              ),
-            ],
-          ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _frame(
+    BuildContext context,
+    BookingState state, {
+    required bool wide,
+    required double frameW,
+  }) {
+    final bool bootstrapping = (state.status == BookingStatus.loading &&
+            state.clubs.isEmpty) ||
+        (state.clubLocked &&
+            state.club == null &&
+            state.status != BookingStatus.failure);
+    if (bootstrapping) {
+      // Высокий плейсхолдер: iframe не «схлопывается» на время загрузки
+      // (см. docs/EMBED.md — сообщения vr-booking:height).
+      return _Frame(
+        maxWidth: frameW,
+        child: const SizedBox(
+          height: 420,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (state.status == BookingStatus.failure && state.clubs.isEmpty) {
+      return _Frame(
+        maxWidth: frameW,
+        child: _Retry(
+            onRetry: () =>
+                context.read<BookingBloc>().add(const BookingStarted())),
+      );
+    }
+
+    final Color accent = BookingColors.accentFor(state.club?.slug);
+
+    if (state.view == BookingStage.done && state.createdOrderId != null) {
+      return _Frame(
+        maxWidth: frameW,
+        child: SuccessView(
+          orderId: state.createdOrderId!,
+          club: state.club!,
+          hall: state.hall!,
+          slot: state.slot!,
+          durationMinutes: state.durationMinutes,
+          quote: state.quote,
+          peopleLabel: _peopleLabel(state),
+          contact: '${state.clientName}, ${state.clientPhone}',
+          onRestart: () =>
+              context.read<BookingBloc>().add(const BookingResetRequested()),
+        ),
+      );
+    }
+
+    return _Frame(
+      maxWidth: frameW,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Padding(
+            padding:
+                EdgeInsets.fromLTRB(wide ? 24 : 18, 22, wide ? 24 : 18, 26),
+            child: _FormBody(state: state, accent: accent, wide: wide),
+          ),
+          BookingBottomBar(
+            line: _barLine(state),
+            net: state.quote.net,
+            gross: state.quote.gross,
+            hasDiscount: state.quote.hasDiscount,
+            cta: _cta(state),
+            enabled: state.canSubmit,
+            busy: state.status == BookingStatus.submitting,
+            accent: accent,
+            onPressed: () =>
+                context.read<BookingBloc>().add(const BookingSubmitted()),
+          ),
+        ],
+      ),
     );
   }
 
@@ -203,7 +229,7 @@ class _Retry extends StatelessWidget {
   }
 }
 
-/// Незаметный служебный вход: долгое нажатие на точку в углу → пароль → админка.
+/// Служебный вход: бледная надпись «Для сотрудников» внизу → пароль → админка.
 /// Заслон от случайных заходов; в боевой сборке админку защищает Supabase Auth.
 class _AdminDoor extends StatelessWidget {
   const _AdminDoor();
@@ -214,7 +240,7 @@ class _AdminDoor extends StatelessWidget {
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
         backgroundColor: BookingColors.frame,
-        title: const Text('Служебный вход', style: TextStyle(fontSize: 16)),
+        title: const Text('Вход для сотрудников', style: TextStyle(fontSize: 16)),
         content: TextField(
           controller: c,
           obscureText: true,
@@ -245,21 +271,18 @@ class _AdminDoor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: () => _open(context),
-      child: const Padding(
-        padding: EdgeInsets.all(8),
-        child: Opacity(
-          opacity: 0.3,
-          child: SizedBox(
-            width: 5,
-            height: 5,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: BookingColors.textFaint,
-              ),
+    return Center(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _open(context),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          child: Text(
+            'Для сотрудников',
+            style: TextStyle(
+              fontSize: 12,
+              color: BookingColors.textFaint,
+              letterSpacing: 0.2,
             ),
           ),
         ),
@@ -344,8 +367,6 @@ class _FormBody extends StatelessWidget {
           )
         else
           _stack(<List<Widget>>[...left, ...right], divided: true),
-        const SizedBox(height: 10),
-        const Align(alignment: Alignment.centerRight, child: _AdminDoor()),
       ],
     );
   }
