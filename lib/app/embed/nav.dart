@@ -8,4 +8,8 @@ abstract final class Nav {
   /// Уйти из админки к публичному виджету: сбросить `?admin=1` и перезагрузить.
   /// На не-web — no-op.
   static void toWidget() => impl.toWidget();
+
+  /// Открыть админку: добавить `?admin=1` к текущему URL и перезагрузить.
+  /// На не-web — no-op.
+  static void toAdmin() => impl.toAdmin();
 }

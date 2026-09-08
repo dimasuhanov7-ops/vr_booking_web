@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/config/booking_config.dart';
+import '../../../../app/embed/nav.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
@@ -202,6 +203,71 @@ class _Retry extends StatelessWidget {
   }
 }
 
+/// Незаметный служебный вход: долгое нажатие на точку в углу → пароль → админка.
+/// Заслон от случайных заходов; в боевой сборке админку защищает Supabase Auth.
+class _AdminDoor extends StatelessWidget {
+  const _AdminDoor();
+
+  Future<void> _open(BuildContext context) async {
+    final TextEditingController c = TextEditingController();
+    final String? entered = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        backgroundColor: BookingColors.frame,
+        title: const Text('Служебный вход', style: TextStyle(fontSize: 16)),
+        content: TextField(
+          controller: c,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Пароль'),
+          onSubmitted: (String v) => Navigator.of(ctx).pop(v),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Отмена')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(c.text),
+              child: const Text('Войти')),
+        ],
+      ),
+    );
+    c.dispose();
+    if (entered == null) return;
+    if (entered == BookingConfig.adminGate) {
+      Nav.toAdmin();
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Неверный пароль')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () => _open(context),
+      child: const Padding(
+        padding: EdgeInsets.all(8),
+        child: Opacity(
+          opacity: 0.3,
+          child: SizedBox(
+            width: 5,
+            height: 5,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: BookingColors.textFaint,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FormBody extends StatelessWidget {
   const _FormBody({
     required this.state,
@@ -278,6 +344,8 @@ class _FormBody extends StatelessWidget {
           )
         else
           _stack(<List<Widget>>[...left, ...right], divided: true),
+        const SizedBox(height: 10),
+        const Align(alignment: Alignment.centerRight, child: _AdminDoor()),
       ],
     );
   }

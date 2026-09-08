@@ -80,36 +80,25 @@ class AccountBlock extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: BookingColors.borderSoft),
           ),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 180),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+              Text(title,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Text(sub,
+                  style: const TextStyle(fontSize: 12, color: BookingColors.textMuted)),
+              const SizedBox(height: 12),
+              if (_loggedIn)
+                Row(
                   children: <Widget>[
-                    Text(title,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 3),
-                    Text(sub,
-                        style: const TextStyle(fontSize: 12, color: BookingColors.textMuted)),
-                  ],
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  _ghostButton(primaryLabel, onPrimary),
-                  if (_loggedIn) ...<Widget>[
+                    Expanded(child: _ghostButton(primaryLabel, onPrimary, expand: true)),
                     const SizedBox(width: 8),
                     _ghostButton('Выйти', onLogout, muted: true),
                   ],
-                ],
-              ),
+                )
+              else
+                _ghostButton(primaryLabel, onPrimary, expand: true),
             ],
           ),
         ),
@@ -130,12 +119,19 @@ class AccountBlock extends StatelessWidget {
     );
   }
 
-  Widget _ghostButton(String label, VoidCallback onTap, {bool muted = false}) {
-    return InkWell(
+  Widget _ghostButton(
+    String label,
+    VoidCallback onTap, {
+    bool muted = false,
+    bool expand = false,
+    double? minWidth,
+  }) {
+    final Widget button = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: BookingColors.border),
@@ -148,6 +144,14 @@ class AccountBlock extends StatelessWidget {
             )),
       ),
     );
+    if (expand) return SizedBox(width: double.infinity, child: button);
+    if (minWidth != null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(minWidth: minWidth),
+        child: button,
+      );
+    }
+    return button;
   }
 
   Widget _bookingList() {

@@ -16,3 +16,9 @@ void toWidget() {
     // недоступно — молча игнорируем
   }
 }
+
+void toAdmin() {
+  try {
+    _location.href = '${_location.origin}${_location.pathname}?admin=1';
+  } catch (_) {}
+}

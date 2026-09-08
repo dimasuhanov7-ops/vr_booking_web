@@ -32,6 +32,15 @@ abstract final class BookingConfig {
   /// Сборка: `--dart-define=USE_MOCK=true`.
   static const bool useMock = bool.fromEnvironment('USE_MOCK');
 
+  /// Слово-пропуск на скрытой кнопке «в админку» на публичном виджете.
+  /// Это лишь заслон от случайных нажатий — в боевой сборке админку всё равно
+  /// защищает Supabase Auth. Меняется сборкой:
+  /// `--dart-define=ADMIN_GATE=...`.
+  static const String adminGate = String.fromEnvironment(
+    'ADMIN_GATE',
+    defaultValue: 'vr2026',
+  );
+
   /// Куда виджет отправляет бронь и откуда читает справочник:
   /// `supabase` — напрямую в PostgREST/RPC; `api` — только на [bookingApiBase].
   /// См. `docs/INTEGRATION.md`.
