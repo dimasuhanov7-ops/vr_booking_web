@@ -420,8 +420,22 @@ double _frameWidth(double vw) => switch (vw) {
 7. ✅ `docs/DEPLOY.md` — чек-лист перед выкладкой (`USE_MOCK`, `BOOKING_INTAKE_KEY`,
    `ADMIN_GATE`, домены в `frame-ancestors`).
 
-**Осталось на стороне заказчика:** применить миграцию, передеплоить функцию,
-задать секреты `BOOKING_INTAKE_KEY` / `BOOKING_CORS_ORIGIN`.
+8. ✅ **Применено на прод 2026-09-09.** Все пять миграций накатаны, Edge
+   Function задеплоена (v3). Проверено живыми запросами: прямой `INSERT`
+   анонимом в `booking_orders` и `booking_order_items` → `42501 permission
+   denied`; чтение ФИО/телефонов анонимом → пусто; `BAD_PHONE`, `BAD_DURATION`,
+   `NO_STATIONS` возвращаются кодами, а не 500.
+9. ✅ Линтер после применения нашёл недочёт в самой миграции: `booking_is_staff()`
+   оказалась доступна `anon` (Supabase раздаёт `EXECUTE` через
+   `ALTER DEFAULT PRIVILEGES`, и `revoke from public` этого не снимает).
+   Закрыто миграцией `20260912120000_online_booking_revoke_is_staff_anon`.
+10. ✅ Тем же прогоном нашёлся баг в Edge Function: пустой `segments` уходил в
+    ветку обратной совместимости, `new Date(undefined)` бросал `RangeError`,
+    и клиент получал 500 вместо кода ошибки. Исправлено, задеплоено.
+
+**Осталось на стороне заказчика (панель Supabase):** секреты
+`BOOKING_INTAKE_KEY` / `BOOKING_CORS_ORIGIN`, аккаунты персонала в
+`booking_staff`, проверка утёкших паролей, грант `get_push_token_diagnostics`.
 
 ### Спринт 2 — адаптивность (2–3 дня)
 

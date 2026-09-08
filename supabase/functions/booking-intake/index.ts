@@ -231,15 +231,24 @@ async function handle(req: Request): Promise<Response> {
     if (req.method === "POST" && path === "/reservations") {
       const b = await req.json();
       // Обратная совместимость: плоский station_ids/starts_at/minutes → один отрезок.
-      const segments = Array.isArray(b.segments) && b.segments.length > 0
-        ? b.segments
-        : [{
-          station_ids: b.station_ids ?? [],
+      // Пустой segments в эту ветку не проваливаем: без starts_at вычисление
+      // ends_at бросало RangeError, и клиент получал 500 вместо кода ошибки.
+      let segments = Array.isArray(b.segments) ? b.segments : [];
+      if (segments.length === 0) {
+        const startMs = Date.parse(b.starts_at ?? "");
+        if (!Array.isArray(b.station_ids) || b.station_ids.length === 0) {
+          return json({ error: "NO_STATIONS" }, 422);
+        }
+        if (!Number.isFinite(startMs)) {
+          return json({ error: "BAD_DURATION" }, 422);
+        }
+        segments = [{
+          station_ids: b.station_ids,
           starts_at: b.starts_at,
           ends_at: b.ends_at ??
-            new Date(new Date(b.starts_at).getTime() + (b.minutes ?? 60) * 60000)
-              .toISOString(),
+            new Date(startMs + (b.minutes ?? 60) * 60000).toISOString(),
         }];
+      }
       const { data, error } = await db.rpc("booking_create_order", {
         p_club_id: b.club_id,
         p_client_name: b.client_name,
