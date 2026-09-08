@@ -9,6 +9,7 @@ import 'di/injection.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ru');
-  await Injection.instance.init();
-  runApp(BookingApp(params: LaunchParams.fromUri()));
+  final LaunchParams params = LaunchParams.fromUri();
+  await Injection.instance.init(adminMode: params.adminMode);
+  runApp(BookingApp(params: params));
 }

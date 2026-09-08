@@ -11,6 +11,7 @@ class AdminHeader extends StatelessWidget {
     required this.selectedClubId,
     required this.accent,
     required this.onClubSelected,
+    this.onLogout,
     super.key,
   });
 
@@ -25,6 +26,9 @@ class AdminHeader extends StatelessWidget {
 
   /// Колбэк выбора клуба.
   final ValueChanged<String> onClubSelected;
+
+  /// Колбэк «Выйти» (если авторизация включена).
+  final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +71,26 @@ class AdminHeader extends StatelessWidget {
                     club: c,
                     selected: c.id == selectedClubId,
                     onTap: () => onClubSelected(c.id),
+                  ),
+                ),
+              if (onLogout != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: InkWell(
+                    onTap: onLogout,
+                    borderRadius: BorderRadius.circular(9),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: AdminColors.borderInput),
+                      ),
+                      child: const Text('Выйти',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AdminColors.textMuted)),
+                    ),
                   ),
                 ),
             ],

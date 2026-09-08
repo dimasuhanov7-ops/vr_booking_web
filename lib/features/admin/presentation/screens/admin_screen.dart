@@ -14,7 +14,10 @@ import '../components/records_tab.dart';
 /// Экран админки (панель персонала). Доступ — по `?admin=1`.
 class AdminScreen extends StatelessWidget {
   /// Создаёт экран.
-  const AdminScreen({super.key});
+  const AdminScreen({this.onLogout, super.key});
+
+  /// Колбэк «Выйти» (если авторизация включена).
+  final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +55,7 @@ class AdminScreen extends StatelessWidget {
                           accent: accent,
                           onClubSelected: (String id) =>
                               bloc.add(AdminClubChanged(id)),
+                          onLogout: onLogout,
                         ),
                         const SizedBox(height: 22),
                         AdminTabBar(

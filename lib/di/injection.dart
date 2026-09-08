@@ -22,9 +22,13 @@ class Injection {
   IBookingRepository? _bookingRepository;
   IAdminRepository? _adminRepository;
 
-  /// Инициализирует Supabase SDK — только если виджет ходит в него напрямую.
-  Future<void> init() async {
-    if (BookingConfig.useMock || BookingConfig.useApi) return;
+  /// Инициализирует Supabase SDK, когда он нужен:
+  /// - публичный виджет ходит в PostgREST/RPC напрямую (не mock, не api), либо
+  /// - открыта админка (`?admin=1`) — ей нужен Supabase Auth и запись в БД.
+  Future<void> init({bool adminMode = false}) async {
+    if (BookingConfig.useMock) return;
+    final bool needed = adminMode || !BookingConfig.useApi;
+    if (!needed) return;
     await Supabase.initialize(
       url: BookingConfig.supabaseUrl,
       // Ключ анонимный/публикуемый — предназначен для клиентского бандла.

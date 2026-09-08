@@ -145,9 +145,22 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 `BookingApp._isAdmin` по query `?admin=1` (без пакета роутинга). Правки цен/пакетов/
 доступности/отмены живут в `AdminBloc`, на сервер ничего не уходит.
 
-**Осталось за скоупом этой итерации:** Supabase Auth (email+пароль для персонала),
-RLS-правило «authenticated staff может писать» на `booking_*`, схема под
-`booking_packages` / послотовое закрытие / флаг паузы приёма, реальное сохранение.
+### Авторизация (сделано)
+`?admin=1` за `AdminAuthGate`: в `USE_MOCK` — открывается сразу (демо), иначе —
+экран входа `AdminLoginScreen` (Supabase Auth email+пароль). Кнопка «Выйти» в
+шапке. `Injection.init(adminMode:)` поднимает Supabase SDK и в api-сборке.
+Миграция `20260909120000_online_booking_staff_auth` (⏳ **не применена**):
+таблица `booking_staff` (allowlist по `auth.users.id`), функция
+`booking_is_staff()`, RLS-политики write для персонала на `booking_prices`,
+`booking_packages`, `booking_clubs` (update), `booking_orders` (read+update),
+`booking_order_items` (read). Аккаунты создаются вручную в Supabase → строка в
+`booking_staff`.
+
+**Осталось:** реальный `AdminRepository` (сейчас `AdminRepositoryMock` даже при
+входе) — чтение `booking_*` + сохранение правок цен/пакетов/часов/отмены броней.
+⚠️ модель админки — тарифы по залам, а `booking_prices` — по клубу; при маппинге
+все залы клуба делят цены клуба. Плюс схема под послотовое закрытие / флаг паузы
+приёма (нужна отдельная таблица `booking_availability`).
 
 ## Слой интеграции (виджет ↔ бэкенд)
 

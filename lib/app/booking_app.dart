@@ -3,8 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../di/injection.dart';
-import '../features/admin/domain/state/admin_bloc.dart';
-import '../features/admin/presentation/screens/admin_screen.dart';
+import '../features/admin/presentation/screens/admin_auth_gate.dart';
 import '../features/booking/domain/state/booking_bloc.dart';
 import '../features/booking/presentation/screens/booking_screen.dart';
 import 'embed/launch_params.dart';
@@ -34,12 +33,7 @@ class BookingApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: params.adminMode
-          ? BlocProvider<AdminBloc>(
-              create: (_) => AdminBloc(
-                repository: Injection.instance.adminRepository,
-              )..add(const AdminStarted()),
-              child: const AdminScreen(),
-            )
+          ? const AdminAuthGate()
           : BlocProvider<BookingBloc>(
               create: (_) => BookingBloc(
                 repository: Injection.instance.bookingRepository,
