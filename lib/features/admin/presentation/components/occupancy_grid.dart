@@ -39,7 +39,6 @@ class OccupancyGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool needDay = state.filterDay < 0;
     final DateTime date = pricing.dateOf(state.occupancyDayIndex);
     final List<AdminHallEntity> halls = state.clubHalls
         .where((AdminHallEntity h) =>
@@ -67,20 +66,15 @@ class OccupancyGrid extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          if (needDay)
-            const _DashedHint(
-              'Выберите день в фильтре выше — покажу сетку занятости.',
-            )
-          else
-            for (int i = 0; i < halls.length; i++)
-              Padding(
-                padding: EdgeInsets.only(top: i == 0 ? 0 : 22),
-                child: _HallOccupancy(
-                  hall: halls[i],
-                  state: state,
-                  accent: accent,
-                ),
+          for (int i = 0; i < halls.length; i++)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 22),
+              child: _HallOccupancy(
+                hall: halls[i],
+                state: state,
+                accent: accent,
               ),
+            ),
           const SizedBox(height: 14),
           const Divider(height: 1, color: AdminColors.divider),
           const SizedBox(height: 12),
@@ -376,8 +370,10 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       width: width < 16 ? 16 : width,
       height: OccupancyGrid.cellH,
       child: IgnorePointer(
-        child: Opacity(
-          opacity: dim ? 0.4 : 1,
+        child: AnimatedOpacity(
+          opacity: dim ? 0.35 : 1,
+          duration: _hoverAnim,
+          curve: Curves.easeOut,
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -398,6 +394,9 @@ class _HallOccupancyState extends State<_HallOccupancy> {
     );
   }
 }
+
+/// Длительность плавных hover-переходов в сетке занятости.
+const Duration _hoverAnim = Duration(milliseconds: 180);
 
 class _OccCell extends StatelessWidget {
   const _OccCell({
@@ -437,23 +436,33 @@ class _OccCell extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () => onOpen(d.row.id),
-        child: Opacity(
-          opacity: dim ? 0.4 : 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
-              color: h.bg,
-              border: Border.all(
-                color: active ? Colors.white : h.border,
-                width: active ? 1.6 : (ps5 ? 1.4 : 1),
+        child: AnimatedOpacity(
+          opacity: dim ? 0.35 : 1,
+          duration: _hoverAnim,
+          curve: Curves.easeOut,
+          child: AnimatedScale(
+            // Лёгкое «разбухание» с небольшим перелётом.
+            scale: active ? 1.08 : 1,
+            duration: _hoverAnim,
+            curve: Curves.easeOutBack,
+            child: AnimatedContainer(
+              duration: _hoverAnim,
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
+                color: h.bg,
+                border: Border.all(
+                  color: active ? Colors.white : h.border,
+                  width: active ? 1.8 : (ps5 ? 1.4 : 1),
+                ),
+                boxShadow: active
+                    ? const <BoxShadow>[
+                        BoxShadow(color: Color(0x66000000), blurRadius: 12, spreadRadius: 1),
+                      ]
+                    : const <BoxShadow>[],
               ),
-              boxShadow: active
-                  ? const <BoxShadow>[
-                      BoxShadow(color: Color(0x66000000), blurRadius: 10)
-                    ]
-                  : null,
+              child: const SizedBox.expand(),
             ),
-            child: const SizedBox.expand(),
           ),
         ),
       ),
@@ -519,27 +528,6 @@ class _LegendRow extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DashedHint extends StatelessWidget {
-  const _DashedHint(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF26282F)),
-      ),
-      child: Text(text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 13, color: AdminColors.textMuted)),
     );
   }
 }

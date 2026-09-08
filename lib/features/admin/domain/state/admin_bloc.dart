@@ -88,7 +88,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     emit(state.copyWith(
       clubId: event.clubId,
       availDayIndex: 0,
-      filterDay: -1,
+      filterDay: 0,
       filterHallId: '',
       filterType: AdminTypeFilter.all,
       newPackage: const NewPackageDraft(),

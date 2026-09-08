@@ -12,10 +12,11 @@ Future<AdminBloc> _ready() async {
 }
 
 void main() {
-  test('старт: клуб по умолчанию, вкладка «Цены», записи загружены', () async {
+  test('старт: клуб по умолчанию, вкладка «Цены», день = сегодня', () async {
     final AdminBloc bloc = await _ready();
     expect(bloc.state.tab, AdminTab.prices);
     expect(bloc.state.clubId, 'vray');
+    expect(bloc.state.filterDay, 0); // после обновления страницы — сегодня
     expect(bloc.state.rows.length, greaterThan(10));
     expect(AdminTab.values.contains(AdminTab.records), isTrue);
     await bloc.close();

@@ -8,6 +8,7 @@ import '../admin_format.dart';
 import '../admin_theme.dart';
 import 'admin_atoms.dart';
 import 'admin_drawer_shell.dart';
+import 'admin_month_calendar.dart';
 
 /// Drawer «Новая запись»: календарь + параметры сеанса + контакты.
 class NewBookingDrawer extends StatelessWidget {
@@ -101,13 +102,14 @@ class NewBookingDrawer extends StatelessWidget {
           const Text('День',
               style: TextStyle(fontSize: 12, color: AdminColors.textMuted)),
           const SizedBox(height: 8),
-          _Calendar(
-            state: state,
+          AdminMonthCalendar(
+            selectedDayIndex: d.dayIndex,
             accent: accent,
+            slug: state.accentSlug,
             pricing: pricing,
-            draftDay: d.dayIndex,
+            visibleMonth: state.newBookingMonth,
+            onMonthChanged: (DateTime m) => bloc.add(AdminNewBookingMonthChanged(m)),
             onPick: (int di) => change(dayIndex: di),
-            onMonth: (DateTime m) => bloc.add(AdminNewBookingMonthChanged(m)),
           ),
           const SizedBox(height: 14),
           if (club.halls.length > 1)
@@ -323,203 +325,6 @@ class _CountGroup extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Calendar extends StatelessWidget {
-  const _Calendar({
-    required this.state,
-    required this.accent,
-    required this.pricing,
-    required this.draftDay,
-    required this.onPick,
-    required this.onMonth,
-  });
-
-  final AdminState state;
-  final Color accent;
-  final AdminPricingService pricing;
-  final int draftDay;
-  final ValueChanged<int> onPick;
-  final ValueChanged<DateTime> onMonth;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color tint = AdminColors.tintFor(state.accentSlug);
-    final DateTime base = AdminPricingService.baseDate();
-    final DateTime last = base.add(const Duration(days: AdminState.calendarDays - 1));
-    final DateTime firstMonth = DateTime(base.year, base.month);
-    final DateTime lastMonth = DateTime(last.year, last.month);
-    final DateTime pickedDate = pricing.dateOf(draftDay);
-    final DateTime month = state.newBookingMonth ??
-        DateTime(pickedDate.year, pickedDate.month);
-
-    final bool canPrev = month.isAfter(firstMonth);
-    final bool canNext = month.isBefore(lastMonth);
-
-    final DateTime monthFirst = DateTime(month.year, month.month);
-    final int daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final int lead = monthFirst.weekday - 1; // Пн = 0.
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: const Color(0xFF0B0D10),
-        border: Border.all(color: AdminColors.border),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              _NavArrow(
-                  glyph: '‹',
-                  enabled: canPrev,
-                  onTap: () => onMonth(DateTime(month.year, month.month - 1))),
-              Expanded(
-                child: Text(
-                  AdminFormat.monthYear(month),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-              ),
-              _NavArrow(
-                  glyph: '›',
-                  enabled: canNext,
-                  onTap: () => onMonth(DateTime(month.year, month.month + 1))),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              for (final String w in <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'])
-                Expanded(
-                  child: Center(
-                    child: Text(w,
-                        style: const TextStyle(
-                            fontSize: 11, color: AdminColors.textLabel)),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.35,
-            children: <Widget>[
-              for (int i = 0; i < lead; i++) const SizedBox.shrink(),
-              for (int day = 1; day <= daysInMonth; day++)
-                _DayCell(
-                  day: day,
-                  date: DateTime(month.year, month.month, day),
-                  base: base,
-                  draftDay: draftDay,
-                  accent: accent,
-                  tint: tint,
-                  onPick: onPick,
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '${draftDay == 0 ? 'Сегодня, ' : ''}'
-            '${AdminFormat.dowShort(pickedDate)}, ${AdminFormat.dayMonthLong(pickedDate)}'
-            ' · ${pricing.isWeekend(draftDay) ? 'выходной тариф' : 'тариф будней'}',
-            style: const TextStyle(fontSize: 12, color: AdminColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  const _DayCell({
-    required this.day,
-    required this.date,
-    required this.base,
-    required this.draftDay,
-    required this.accent,
-    required this.tint,
-    required this.onPick,
-  });
-
-  final int day;
-  final DateTime date;
-  final DateTime base;
-  final int draftDay;
-  final Color accent;
-  final Color tint;
-  final ValueChanged<int> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final int di = DateTime(date.year, date.month, date.day).difference(base).inDays;
-    final bool inRange = di >= 0 && di < AdminState.calendarDays;
-    final bool selected = di == draftDay;
-    final bool weekend =
-        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
-
-    return Padding(
-      padding: const EdgeInsets.all(2),
-      child: InkWell(
-        onTap: inRange ? () => onPick(di) : null,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: selected ? accent.withValues(alpha: 0.18) : Colors.transparent,
-            border: Border.all(color: selected ? accent : Colors.transparent),
-          ),
-          child: Text(
-            '$day',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-              color: !inRange
-                  ? AdminColors.textLabel
-                  : selected
-                      ? tint
-                      : weekend
-                          ? AdminColors.textMuted
-                          : AdminColors.textSoft,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavArrow extends StatelessWidget {
-  const _NavArrow({required this.glyph, required this.enabled, required this.onTap});
-
-  final String glyph;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(9),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: AdminColors.borderInput),
-        ),
-        child: Text(glyph,
-            style: TextStyle(
-                fontSize: 15,
-                color: enabled ? AdminColors.textSoft : const Color(0xFF3E3E48))),
       ),
     );
   }

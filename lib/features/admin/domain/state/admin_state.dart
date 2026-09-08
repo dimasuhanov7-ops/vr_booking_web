@@ -230,7 +230,7 @@ class AdminState extends Equatable {
     this.intakeOpen = true,
     this.closedHallIds = const <String>{},
     this.closedSlotKeys = const <String>{},
-    this.filterDay = -1,
+    this.filterDay = 0,
     this.filterHallId = '',
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
@@ -285,7 +285,8 @@ class AdminState extends Equatable {
   /// Закрытые слоты (`clubId-dayIndex-minutes`).
   final Set<String> closedSlotKeys;
 
-  /// Фильтр дня журнала (`-1` — все).
+  /// День, по которому смотрим записи (смещение от сегодняшнего). По умолчанию
+  /// и после обновления страницы — сегодня (`0`).
   final int filterDay;
 
   /// Фильтр зала журнала (`''` — все).
