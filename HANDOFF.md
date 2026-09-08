@@ -47,16 +47,14 @@
 `20260904081507_online_booking_feature` + `..._harden_privileges` + `..._unexpose_quote`
 + `20260904083849_online_booking_clubs_sort_order`.
 
-⏳ **НЕ применены к проду (нужен доступ):**
-- `20260907120000_online_booking_durations` — 60/90/120/180 → **60/120/180/240/300**
-  в RPC `booking_create_order` и RLS `booking_order_items_anon_insert`. До применения
-  сеанс 4 / 5 ч даст `BAD_DURATION`.
-- `20260908120000_online_booking_packages` — таблица `booking_packages` (+ RLS
-  public read, сид 7 пакетов из макета), колонка `booking_orders.package_id`,
-  **новая сигнатура `booking_create_order`** (+`p_package_id`, старая 10-арг дропается).
-  ⚠️ После применения **обязательно передеплоить Edge Function `booking-intake`**
-  (`supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx`) —
-  она уже шлёт `p_package_id` и отдаёт `GET /packages`.
+✅ **Применены 2026-09-09** (через MCP `apply_migration`, см. раздел
+«Состояние прода» выше): `20260907120000_online_booking_durations`,
+`20260908120000_online_booking_packages`, `20260909120000_online_booking_staff_auth`,
+`20260910120000_online_booking_hourly_segments`,
+`20260911120000_online_booking_lockdown`,
+`20260912120000_online_booking_revoke_is_staff_anon`.
+Edge Function `booking-intake` передеплоена (v3).
+
 - ⚠️ **Цены пакетов из макета не бьются с тарифами в БД.** Макет: VR 1400 ₽/ч,
   пакет «Компания» 10000 (дешевле почасовой 11200). БД: VR 600 ₽/ч → почасовая
   4800, пакет 10000 — вдвое дороже. Нужно решение: поднять тарифы, снизить цены
@@ -120,7 +118,7 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 2. ✅ Карточки-поля (`FieldCard`) для даты/длительности + строки тарифа.
 3. ✅ Пакеты (`booking_packages` — **миграция не применена**; `PackageCards`).
 4. ✅ Аккаунт по телефону (`AccountBlock` + localStorage).
-5. ⬜ Чек с пунктирными разделителями (успех) — осталось.
+5. ✅ Чек с пунктирными разделителями (`DashedDivider` в `success_view`).
 Слоты/план зала уже были по макету.
 
 ## Встраивание в `<iframe>` — [`docs/EMBED.md`](docs/EMBED.md)

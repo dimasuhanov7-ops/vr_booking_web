@@ -65,15 +65,24 @@ class HallPlan extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Map<String, List<StationEntity>> groups = <String, List<StationEntity>>{};
+    final Map<String, List<StationEntity>> groups =
+        <String, List<StationEntity>>{};
     for (final StationEntity s in stations) {
-      groups.putIfAbsent(isCombo ? s.roomName : '_', () => <StationEntity>[]).add(s);
+      groups
+          .putIfAbsent(isCombo ? s.roomName : '_', () => <StationEntity>[])
+          .add(s);
     }
 
-    final List<int> quickOpts = <int>[2, 4, 6, 8, 12]
-        .where((int n) => n <= freeCount)
-        .toList();
-    if (freeCount > 0 && !quickOpts.contains(freeCount)) quickOpts.add(freeCount);
+    final List<int> quickOpts = <int>[
+      2,
+      4,
+      6,
+      8,
+      12,
+    ].where((int n) => n <= freeCount).toList();
+    if (freeCount > 0 && !quickOpts.contains(freeCount)) {
+      quickOpts.add(freeCount);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,8 +93,13 @@ class HallPlan extends StatelessWidget {
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Text(quickLabel,
-                    style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+                child: Text(
+                  quickLabel,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: BookingColors.textDim,
+                  ),
+                ),
               ),
               for (final int n in quickOpts)
                 Padding(
@@ -162,11 +176,15 @@ class HallPlan extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: Text(name,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            child: Text(
+              name,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
           ),
-          Text('$free из ${list.length} свободно',
-              style: const TextStyle(fontSize: 11, color: BookingColors.textDim)),
+          Text(
+            '$free из ${list.length} свободно',
+            style: const TextStyle(fontSize: 11, color: BookingColors.textDim),
+          ),
         ],
       ),
     );
@@ -195,9 +213,11 @@ class HallPlan extends StatelessWidget {
                 spacing: _podGap,
                 runSpacing: _podGap,
                 children: <Widget>[
-                  for (final StationEntity s in rows[k]!..sort(
-                      (StationEntity a, StationEntity b) =>
-                          a.positionInRow.compareTo(b.positionInRow)))
+                  for (final StationEntity s
+                      in rows[k]!..sort(
+                        (StationEntity a, StationEntity b) =>
+                            a.positionInRow.compareTo(b.positionInRow),
+                      ))
                     _Pod(
                       station: s,
                       free: isFree(s.id),
@@ -220,13 +240,16 @@ class HallPlan extends StatelessWidget {
         ? BookingColors.emeraldTint
         : BookingColors.limeTint;
     Widget item(Widget swatch, String label) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            swatch,
-            const SizedBox(width: 7),
-            Text(label, style: const TextStyle(fontSize: 12, color: BookingColors.textMuted)),
-          ],
-        );
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        swatch,
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: BookingColors.textMuted),
+        ),
+      ],
+    );
     return Wrap(
       spacing: 14,
       runSpacing: 8,
@@ -315,78 +338,94 @@ class _Pod extends StatelessWidget {
     final Color border = picked
         ? accent
         : busy
-            ? const Color(0xFF232329)
-            : BookingColors.podBorder;
+        ? const Color(0xFF232329)
+        : BookingColors.podBorder;
     final Color bg = picked
         ? accent.withValues(alpha: 0.22)
         : busy
-            ? const Color(0xFF17171C)
-            : BookingColors.pod;
+        ? const Color(0xFF17171C)
+        : BookingColors.pod;
     final Color fg = picked
         ? BookingColors.text
         : busy
-            ? BookingColors.textOff
-            : BookingColors.textSoft;
+        ? BookingColors.textOff
+        : BookingColors.textSoft;
 
-    return InkWell(
-      onTap: busy ? null : onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: width,
-        padding: EdgeInsets.fromLTRB(4, 12 * _k, 4, 10 * _k),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border, width: picked ? 2 : 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            _visor(picked ? tint : (busy ? const Color(0xFF3A3A44) : const Color(0xFF7E7E8C))),
-            SizedBox(height: 8 * _k),
-            Text(station.label,
+    return FocusRing(
+      radius: 14,
+      color: accent,
+      child: InkWell(
+        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: width,
+          padding: EdgeInsets.fromLTRB(4, 12 * _k, 4, 10 * _k),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: picked ? 2 : 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _visor(
+                picked
+                    ? tint
+                    : (busy
+                          ? const Color(0xFF3A3A44)
+                          : const Color(0xFF7E7E8C)),
+              ),
+              SizedBox(height: 8 * _k),
+              Text(
+                station.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    fontSize: 13 * _k, fontWeight: FontWeight.w700, color: fg)),
-            const SizedBox(height: 3),
-            // Галочка — иконкой из бандла, а не символом «✓»: его нет в Archivo,
-            // и CanvasKit ради него тянул Noto Sans с fonts.gstatic.com.
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (picked && !busy) ...<Widget>[
-                  Icon(Icons.check, size: 10 * _k, color: tint),
-                  SizedBox(width: 2 * _k),
-                ],
-                Flexible(
-                  child: Text(
-                    taken
-                        ? 'заняли'
-                        : busy
-                            ? 'занято'
-                            : picked
-                                ? 'моя'
-                                : 'свободно',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10 * _k,
-                      letterSpacing: 0.2,
-                      decoration:
-                          busy && !taken ? TextDecoration.lineThrough : null,
-                      color: picked
-                          ? tint
+                  fontSize: 13 * _k,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+              const SizedBox(height: 3),
+              // Галочка — иконкой из бандла, а не символом «✓»: его нет в Archivo,
+              // и CanvasKit ради него тянул Noto Sans с fonts.gstatic.com.
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (picked && !busy) ...<Widget>[
+                    Icon(Icons.check, size: 10 * _k, color: tint),
+                    SizedBox(width: 2 * _k),
+                  ],
+                  Flexible(
+                    child: Text(
+                      taken
+                          ? 'заняли'
                           : busy
-                              ? BookingColors.textDim
-                              : const Color(0xFF7C7C88),
+                          ? 'занято'
+                          : picked
+                          ? 'моя'
+                          : 'свободно',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10 * _k,
+                        letterSpacing: 0.2,
+                        decoration: busy && !taken
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: picked
+                            ? tint
+                            : busy
+                            ? BookingColors.textDim
+                            : const Color(0xFF7C7C88),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -421,7 +460,10 @@ class _Pod extends StatelessWidget {
             ? LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: <Color>[accent.withValues(alpha: 0.45), Colors.transparent],
+                colors: <Color>[
+                  accent.withValues(alpha: 0.45),
+                  Colors.transparent,
+                ],
               )
             : null,
       ),

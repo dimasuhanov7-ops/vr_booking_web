@@ -308,7 +308,7 @@ class _AdminDoor extends StatelessWidget {
             'Для сотрудников',
             style: TextStyle(
               fontSize: 12,
-              color: BookingColors.textFaint,
+              color: BookingColors.textService,
               letterSpacing: 0.2,
             ),
           ),
@@ -533,10 +533,9 @@ class _FormBody extends StatelessWidget {
         if (state.hall == null)
           const _Hint('Выберите зал.')
         else if (state.status == BookingStatus.loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          )
+          // Скелетон вместо крутилки: форма будущей сетки уже видна, и блок
+          // не схлопывается на время загрузки занятости.
+          const SlotGridSkeleton()
         else if (state.dayEmpty)
           EmptyDayState(
             title: 'На ${BookingFormat.dayShort(state.date!)} всё занято',

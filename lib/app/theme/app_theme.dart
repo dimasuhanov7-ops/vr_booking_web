@@ -28,17 +28,28 @@ abstract final class BookingColors {
   /// Вторичный текст.
   static const Color textSoft = Color(0xFFC9C9D2);
 
-  /// Приглушённый текст.
+  // Ниже — четыре ступени «тихого» текста. Значения подобраны по контрасту
+  // с тёмными подложками (frame #101015 и pod #191920), порог WCAG AA — 4.5:1
+  // для обычного текста. До аудита textFaint давал 2.83, textOff — 2.58,
+  // то есть подписи-капсы и статус «занято» формально не читались.
+
+  /// Приглушённый текст. Контраст 5.6 на frame.
   static const Color textMuted = Color(0xFF8A8A96);
 
-  /// Ещё тише.
-  static const Color textDim = Color(0xFF6E6E7A);
+  /// Ещё тише. Контраст 5.1 на frame, 4.7 на плитке станции.
+  static const Color textDim = Color(0xFF83838F);
 
-  /// Оверлайны / подписи-капсы.
-  static const Color textFaint = Color(0xFF5B5B66);
+  /// Оверлайны / подписи-капсы. Контраст 4.6 на frame.
+  static const Color textFaint = Color(0xFF7D7D89);
 
-  /// Выключенный текст.
-  static const Color textOff = Color(0xFF55555F);
+  /// Выключенный текст — статус «занято» на плитке станции. 4.1 на frame:
+  /// ниже AA, но это состояние «недоступно», а не основной контент; было 2.6.
+  static const Color textOff = Color(0xFF74747F);
+
+  /// Служебная подпись «Для сотрудников» — намеренно неприметная.
+  /// Единственное осознанное исключение из порога контраста: элемент не для
+  /// клиентов, и заказчик просил, чтобы он не бросался в глаза.
+  static const Color textService = Color(0xFF4A4A54);
 
   /// Границы (яркая / базовая / тихая).
   static const Color border = Color(0xFF2A2A33);

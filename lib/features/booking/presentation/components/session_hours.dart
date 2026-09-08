@@ -102,19 +102,31 @@ class _SessionHoursState extends State<SessionHours> {
           ],
         ),
         const SizedBox(height: 12),
-        HallPlan(
-          stations: s.hallStations,
-          isFree: (String id) => s.isFreeAt(hour, id),
-          pickedIds: s.pickedAt(hour),
-          takenIds: s.takenIds,
-          isCombo: s.hall!.isCombo,
-          accent: widget.accent,
-          freeCount: s.freeHallStationsAt(hour).length,
-          quickLabel: 'Взять в этот час:',
-          onToggle: (String id) =>
-              bloc.add(BookingStationToggled(id, hour: hour)),
-          onQuickPick: (int n) => bloc.add(BookingQuickPicked(n, hour: hour)),
-          onClear: () => bloc.add(BookingSelectionCleared(hour: hour)),
+        // Плавная смена состава при переключении часа: без анимации план
+        // перерисовывается скачком, и связь «вкладка → план» теряется.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
+            alignment: Alignment.topCenter,
+            children: <Widget>[...previous, ?current],
+          ),
+          child: HallPlan(
+            key: ValueKey<int>(hour),
+            stations: s.hallStations,
+            isFree: (String id) => s.isFreeAt(hour, id),
+            pickedIds: s.pickedAt(hour),
+            takenIds: s.takenIds,
+            isCombo: s.hall!.isCombo,
+            accent: widget.accent,
+            freeCount: s.freeHallStationsAt(hour).length,
+            quickLabel: 'Взять в этот час:',
+            onToggle: (String id) =>
+                bloc.add(BookingStationToggled(id, hour: hour)),
+            onQuickPick: (int n) => bloc.add(BookingQuickPicked(n, hour: hour)),
+            onClear: () => bloc.add(BookingSelectionCleared(hour: hour)),
+          ),
         ),
       ],
     );

@@ -2,6 +2,123 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_theme.dart';
 
+/// Видимая обводка вокруг элемента, когда фокус попадает внутрь него.
+///
+/// Без неё пройти форму с клавиатуры вслепую: Flutter по умолчанию рисует
+/// лишь слабую заливку, которая на выбранном элементе неразличима.
+///
+/// Сам узел фокус не забирает (`canRequestFocus: false`, `skipTraversal`) —
+/// он только слушает, вошёл ли фокус в поддерево, и не ломает порядок обхода.
+class FocusRing extends StatefulWidget {
+  /// Создаёт обводку фокуса.
+  const FocusRing({
+    required this.child,
+    required this.radius,
+    this.color,
+    super.key,
+  });
+
+  /// Оборачиваемый элемент.
+  final Widget child;
+
+  /// Радиус скругления — должен совпадать с радиусом элемента.
+  final double radius;
+
+  /// Цвет обводки; по умолчанию — светлый, заметный на любом акценте.
+  final Color? color;
+
+  @override
+  State<FocusRing> createState() => _FocusRingState();
+}
+
+class _FocusRingState extends State<FocusRing> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (bool v) {
+        if (v != _focused) setState(() => _focused = v);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius + 3),
+          border: Border.all(
+            color: _focused
+                ? (widget.color ?? BookingColors.text)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        padding: const EdgeInsets.all(1),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Пульсирующая заглушка на время загрузки.
+///
+/// Показывать форму того, что грузится, спокойнее, чем крутилку посреди
+/// пустоты: при смене даты или зала блок не «схлопывается», и не возникает
+/// ощущения, что виджет сломался.
+class SkeletonBox extends StatefulWidget {
+  /// Создаёт заглушку.
+  const SkeletonBox({
+    required this.height,
+    this.width,
+    this.radius = 12,
+    super.key,
+  });
+
+  /// Высота.
+  final double height;
+
+  /// Ширина; `null` — на всю доступную.
+  final double? width;
+
+  /// Радиус скругления.
+  final double radius;
+
+  @override
+  State<SkeletonBox> createState() => _SkeletonBoxState();
+}
+
+class _SkeletonBoxState extends State<SkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.45, end: 0.85).animate(
+        CurvedAnimation(parent: _c, curve: Curves.easeInOut),
+      ),
+      child: Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: BookingColors.surface,
+          borderRadius: BorderRadius.circular(widget.radius),
+          border: Border.all(color: BookingColors.borderFaint),
+        ),
+      ),
+    );
+  }
+}
+
 /// Заглавная подпись-оверлайн над секцией.
 ///
 /// [big] — крупный лейбл поля-карточки (дата, длительность, время начала):
@@ -70,8 +187,13 @@ class FieldCard extends StatelessWidget {
               children: <Widget>[
                 Expanded(child: SectionLabel(label!, big: true)),
                 if (trailing != null)
-                  Text(trailing!,
-                      style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+                  Text(
+                    trailing!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: BookingColors.textDim,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -127,25 +249,34 @@ class PillButton extends StatelessWidget {
         ? tint
         : (dim ? BookingColors.textMuted : const Color(0xFF9A9AA6));
 
-    Widget button = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(11),
-      child: DottedBorderBox(
-        dashed: dashed && !selected,
-        color: selected ? accent : BookingColors.border,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? accent.withValues(alpha: 0.18) : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
-            border: dashed && !selected
-                ? null
-                : Border.all(color: selected ? accent : BookingColors.border),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg),
+    Widget button = FocusRing(
+      radius: 11,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(11),
+        child: DottedBorderBox(
+          dashed: dashed && !selected,
+          color: selected ? accent : BookingColors.border,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected
+                  ? accent.withValues(alpha: 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
+              border: dashed && !selected
+                  ? null
+                  : Border.all(color: selected ? accent : BookingColors.border),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
+            ),
           ),
         ),
       ),
@@ -176,10 +307,7 @@ class DottedBorderBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!dashed) return child;
-    return CustomPaint(
-      painter: _DashedPainter(color),
-      child: child,
-    );
+    return CustomPaint(painter: _DashedPainter(color), child: child);
   }
 }
 
