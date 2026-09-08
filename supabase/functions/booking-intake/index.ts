@@ -189,13 +189,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // ---- POST /reservations ----
     if (req.method === "POST" && path === "/reservations") {
       const b = await req.json();
+      // Обратная совместимость: плоский station_ids/starts_at/minutes → один отрезок.
+      const segments = Array.isArray(b.segments) && b.segments.length > 0
+        ? b.segments
+        : [{
+          station_ids: b.station_ids ?? [],
+          starts_at: b.starts_at,
+          ends_at: b.ends_at ??
+            new Date(new Date(b.starts_at).getTime() + (b.minutes ?? 60) * 60000)
+              .toISOString(),
+        }];
       const { data, error } = await db.rpc("booking_create_order", {
         p_club_id: b.club_id,
         p_client_name: b.client_name,
         p_client_phone: b.client_phone,
-        p_station_ids: b.station_ids,
-        p_starts_at: b.starts_at,
-        p_minutes: b.minutes,
+        p_segments: segments,
         p_people_count: b.people_count ?? null,
         p_discount_code: b.discount_code ?? null,
         p_comment: b.comment ?? null,
@@ -205,11 +213,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (error) return reservationError(error);
 
       const orderId = data as string;
-      const stations = Array.isArray(b.station_ids) ? b.station_ids.length : 0;
+      const stationsMax = Math.max(
+        0,
+        ...segments.map((s: { station_ids?: unknown[] }) =>
+          Array.isArray(s.station_ids) ? s.station_ids.length : 0
+        ),
+      );
+      const varies = segments.length > 1;
       await notifyTelegram(
         `🎮 <b>Новая бронь</b>\n` +
           `${b.client_name} · ${b.client_phone}\n` +
-          `${stations} ст. · ${b.minutes} мин · с ${b.starts_at}\n` +
+          `${stationsMax} ст.${varies ? " (меняется по часам)" : ""} · ` +
+          `${b.minutes ?? ""} мин · с ${segments[0].starts_at}\n` +
           `источник: ${b.source ?? "site"} · №${String(orderId).slice(0, 8)}`,
       );
       return json({ order_id: orderId }, 201);
