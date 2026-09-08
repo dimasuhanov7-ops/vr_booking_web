@@ -156,11 +156,24 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 `booking_order_items` (read). Аккаунты создаются вручную в Supabase → строка в
 `booking_staff`.
 
-**Осталось:** реальный `AdminRepository` (сейчас `AdminRepositoryMock` даже при
-входе) — чтение `booking_*` + сохранение правок цен/пакетов/часов/отмены броней.
-⚠️ модель админки — тарифы по залам, а `booking_prices` — по клубу; при маппинге
-все залы клуба делят цены клуба. Плюс схема под послотовое закрытие / флаг паузы
-приёма (нужна отдельная таблица `booking_availability`).
+### Реальный AdminRepository (сделано, требует применённых миграций)
+`AdminRepository` (Supabase) — при входе сотрудника вместо `AdminRepositoryMock`
+(`Injection`: mock только в `USE_MOCK`). Читает `booking_clubs`/`rooms`/`stations`
+/`prices`/`packages`/`orders`+`order_items`. Пишет:
+- **цены** — `AdminPriceChanged` → update `booking_prices` (по клубу; правка
+  одного зала распространяется на все залы клуба, т.к. в БД цены клубовые);
+- **пакеты** — создание / правка полей / вкл-выкл / удаление → CRUD `booking_packages`;
+- **отмена брони** — `AdminRowCancelToggled` → `booking_orders.status`
+  (`cancelled`/`confirmed`), триггер освобождает слот.
+Ошибка записи → плашка `state.saveError` в шапке вкладки.
+
+⏳ Проверить вживую нельзя, пока не применены `20260908120000_online_booking_packages`
+и `20260909120000_online_booking_staff_auth` и не создан аккаунт сотрудника.
+
+**Осталось:** доступность (пауза приёма / закрытие залов и слотов) — правки живут
+только в сессии, не сохраняются (плашка предупреждает). Нужна таблица
+`booking_availability` + интеграция в `booking_busy_intervals` публичного виджета.
+Плюс: редактирование часов работы клуба (сейчас не пишется).
 
 ## Слой интеграции (виджет ↔ бэкенд)
 

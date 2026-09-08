@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../app/config/booking_config.dart';
+import '../features/admin/data/repository/admin_repository.dart';
 import '../features/admin/data/repository/admin_repository_mock.dart';
 import '../features/admin/domain/repository/i_admin_repository.dart';
 import '../features/booking/data/account_store.dart';
@@ -53,9 +54,12 @@ class Injection {
     return BookingRepository(Supabase.instance.client);
   }
 
-  /// Репозиторий админки (пока только in-memory — раздел на моках).
-  IAdminRepository get adminRepository =>
-      _adminRepository ??= const AdminRepositoryMock();
+  /// Репозиторий админки: реальный (Supabase) при входе сотрудника,
+  /// in-memory — в демо-сборке.
+  IAdminRepository get adminRepository => _adminRepository ??=
+      BookingConfig.useMock
+          ? const AdminRepositoryMock()
+          : AdminRepository(Supabase.instance.client);
 
   /// Локальное хранилище клиента (`localStorage`).
   IAccountStore get accountStore => _accountStore ??= const AccountStore();

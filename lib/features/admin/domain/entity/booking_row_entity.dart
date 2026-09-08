@@ -61,6 +61,7 @@ class BookingRowEntity extends Equatable {
     required this.status,
     required this.source,
     this.packageName,
+    this.isCancelled = false,
   });
 
   /// Идентификатор.
@@ -102,6 +103,9 @@ class BookingRowEntity extends Equatable {
   /// Название пакета, если бронь по пакету.
   final String? packageName;
 
+  /// Бронь уже отменена (пришла со статусом `cancelled`).
+  final bool isCancelled;
+
   /// Конец, минут от полуночи.
   int get endMinutes => startMinutes + durationMinutes;
 
@@ -126,5 +130,6 @@ class BookingRowEntity extends Equatable {
         status,
         source,
         packageName,
+        isCancelled,
       ];
 }

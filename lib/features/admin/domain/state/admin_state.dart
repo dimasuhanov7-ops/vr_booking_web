@@ -169,6 +169,7 @@ class AdminState extends Equatable {
     this.filterType = AdminTypeFilter.all,
     this.filterStatus = AdminStatusFilter.all,
     this.newPackage = const NewPackageDraft(),
+    this.saveError,
   });
 
   /// Статус загрузки.
@@ -221,6 +222,9 @@ class AdminState extends Equatable {
 
   /// Черновик нового пакета.
   final NewPackageDraft newPackage;
+
+  /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
+  final String? saveError;
 
   /// Горизонт дней (как в макете).
   static const int horizonDays = 14;
@@ -314,6 +318,8 @@ class AdminState extends Equatable {
     AdminTypeFilter? filterType,
     AdminStatusFilter? filterStatus,
     NewPackageDraft? newPackage,
+    String? saveError,
+    bool clearSaveError = false,
   }) {
     return AdminState(
       status: status ?? this.status,
@@ -333,6 +339,7 @@ class AdminState extends Equatable {
       filterType: filterType ?? this.filterType,
       filterStatus: filterStatus ?? this.filterStatus,
       newPackage: newPackage ?? this.newPackage,
+      saveError: clearSaveError ? null : (saveError ?? this.saveError),
     );
   }
 
@@ -355,5 +362,6 @@ class AdminState extends Equatable {
         filterType,
         filterStatus,
         newPackage,
+        saveError,
       ];
 }

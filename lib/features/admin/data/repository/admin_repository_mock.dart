@@ -74,6 +74,27 @@ class AdminRepositoryMock implements IAdminRepository {
         _row('l10', 'effect', 'e-main', 2, 1080, 120, 2, 0, 'Паша', '+7 (926) 337-45-11', 'confirmed', 'звонок'),
       ]);
 
+  // Демо-режим: правки живут только в состоянии AdminBloc, на «сервер» не уходят.
+  @override
+  Future<void> saveClubPrice({
+    required String clubId,
+    required PriceField field,
+    required int value,
+  }) async {}
+
+  @override
+  Future<String> createPackage(PackageEntity draft) async =>
+      'p${DateTime.now().millisecondsSinceEpoch}';
+
+  @override
+  Future<void> updatePackage(PackageEntity package) async {}
+
+  @override
+  Future<void> deletePackage(String packageId) async {}
+
+  @override
+  Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {}
+
   static BookingRowEntity _row(
     String id,
     String club,

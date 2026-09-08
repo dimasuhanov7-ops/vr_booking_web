@@ -46,15 +46,32 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final List<HallPriceEntity> prices = await _repository.fetchPrices();
     final List<PackageEntity> packages = await _repository.fetchPackages();
     final List<BookingRowEntity> rows = await _repository.fetchRows();
+
+    final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
     emit(state.copyWith(
       status: AdminStatus.ready,
+      clubId: hasClub ? null : (clubs.isEmpty ? null : clubs.first.id),
       clubs: clubs,
       prices: <String, HallPriceEntity>{
         for (final HallPriceEntity p in prices) p.hallId: p,
       },
       packages: packages,
       rows: rows,
+      cancelledRowIds: <String>{
+        for (final BookingRowEntity r in rows)
+          if (r.isCancelled) r.id,
+      },
     ));
+  }
+
+  /// Оптимистичная запись: если провалилась — показываем ошибку в шапке вкладки.
+  Future<void> _persist(Future<void> Function() action, Emitter<AdminState> emit) async {
+    try {
+      await action();
+      if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+    } catch (_) {
+      emit(state.copyWith(saveError: 'Не удалось сохранить. Проверьте связь и права.'));
+    }
   }
 
   void _onClubChanged(AdminClubChanged event, Emitter<AdminState> emit) {
@@ -73,42 +90,71 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) =>
       emit(state.copyWith(tab: event.tab));
 
-  void _onPriceChanged(AdminPriceChanged event, Emitter<AdminState> emit) {
-    final HallPriceEntity current = state.priceOf(event.hallId);
-    emit(state.copyWith(prices: <String, HallPriceEntity>{
-      ...state.prices,
-      event.hallId: current.withField(event.field, event.value),
-    }));
+  Future<void> _onPriceChanged(
+    AdminPriceChanged event,
+    Emitter<AdminState> emit,
+  ) async {
+    // Цены в БД — по клубу: правка одного зала распространяется на все залы клуба.
+    final List<String> hallIds =
+        state.club.halls.map((AdminHallEntity h) => h.id).toList();
+    final Map<String, HallPriceEntity> next =
+        Map<String, HallPriceEntity>.of(state.prices);
+    for (final String id in hallIds) {
+      next[id] = state.priceOf(id).withField(event.field, event.value);
+    }
+    emit(state.copyWith(prices: next));
+    await _persist(
+      () => _repository.saveClubPrice(
+        clubId: state.clubId,
+        field: event.field,
+        value: event.value,
+      ),
+      emit,
+    );
   }
 
-  void _onPackageFieldChanged(
+  Future<void> _onPackageFieldChanged(
     AdminPackageFieldChanged event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
+    PackageEntity? changed;
     emit(state.copyWith(
-      packages: state.packages
-          .map((PackageEntity p) => p.id == event.packageId
-              ? p.withField(event.field, event.value)
-              : p)
-          .toList(growable: false),
+      packages: state.packages.map((PackageEntity p) {
+        if (p.id != event.packageId) return p;
+        return changed = p.withField(event.field, event.value);
+      }).toList(growable: false),
     ));
+    if (changed != null) {
+      await _persist(() => _repository.updatePackage(changed!), emit);
+    }
   }
 
-  void _onPackageToggled(AdminPackageToggled event, Emitter<AdminState> emit) {
+  Future<void> _onPackageToggled(
+    AdminPackageToggled event,
+    Emitter<AdminState> emit,
+  ) async {
+    PackageEntity? changed;
     emit(state.copyWith(
-      packages: state.packages
-          .map((PackageEntity p) =>
-              p.id == event.packageId ? p.copyWith(isEnabled: !p.isEnabled) : p)
-          .toList(growable: false),
+      packages: state.packages.map((PackageEntity p) {
+        if (p.id != event.packageId) return p;
+        return changed = p.copyWith(isEnabled: !p.isEnabled);
+      }).toList(growable: false),
     ));
+    if (changed != null) {
+      await _persist(() => _repository.updatePackage(changed!), emit);
+    }
   }
 
-  void _onPackageDeleted(AdminPackageDeleted event, Emitter<AdminState> emit) {
+  Future<void> _onPackageDeleted(
+    AdminPackageDeleted event,
+    Emitter<AdminState> emit,
+  ) async {
     emit(state.copyWith(
       packages: state.packages
           .where((PackageEntity p) => p.id != event.packageId)
           .toList(growable: false),
     ));
+    await _persist(() => _repository.deletePackage(event.packageId), emit);
   }
 
   void _onNewPackageChanged(
@@ -128,10 +174,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onNewPackageSubmitted(
+  Future<void> _onNewPackageSubmitted(
     AdminNewPackageSubmitted event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
     final NewPackageDraft d = state.newPackage;
     final String? hallId = state.newPackageHallId;
     if (hallId == null) return;
@@ -156,8 +202,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
-    final PackageEntity created = PackageEntity(
-      id: 'p${DateTime.now().millisecondsSinceEpoch}',
+    final PackageEntity draft = PackageEntity(
+      id: 'new',
       clubId: state.clubId,
       hallId: hallId,
       name: d.name.trim(),
@@ -165,6 +211,27 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       consoles: d.consoles,
       minutes: d.minutes,
       price: d.price,
+      isEnabled: true,
+    );
+    final String id;
+    try {
+      id = await _repository.createPackage(draft);
+    } catch (_) {
+      emit(state.copyWith(
+        newPackage: d.copyWith(
+            message: 'Не удалось сохранить пакет. Проверьте связь и права.'),
+      ));
+      return;
+    }
+    final PackageEntity created = PackageEntity(
+      id: id,
+      clubId: draft.clubId,
+      hallId: draft.hallId,
+      name: draft.name,
+      headsets: draft.headsets,
+      consoles: draft.consoles,
+      minutes: draft.minutes,
+      price: draft.price,
       isEnabled: true,
     );
     emit(state.copyWith(
@@ -221,13 +288,18 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onRowCancelToggled(
+  Future<void> _onRowCancelToggled(
     AdminRowCancelToggled event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
     final Set<String> next = Set<String>.of(state.cancelledRowIds);
-    if (!next.remove(event.rowId)) next.add(event.rowId);
+    final bool cancel = !next.remove(event.rowId);
+    if (cancel) next.add(event.rowId);
     emit(state.copyWith(cancelledRowIds: next));
+    await _persist(
+      () => _repository.setOrderCancelled(event.rowId, cancelled: cancel),
+      emit,
+    );
   }
 
   static String _plural(int n, String one, String few, String many) {

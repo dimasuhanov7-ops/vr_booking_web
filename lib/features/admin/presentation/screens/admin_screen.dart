@@ -64,6 +64,21 @@ class AdminScreen extends StatelessWidget {
                           onSelected: (AdminTab t) => bloc.add(AdminTabChanged(t)),
                         ),
                         const SizedBox(height: 22),
+                        if (state.saveError != null) ...<Widget>[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AdminColors.dangerBg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AdminColors.dangerBorder),
+                            ),
+                            child: Text(state.saveError!,
+                                style: const TextStyle(
+                                    fontSize: 13, color: AdminColors.danger)),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         switch (state.tab) {
                           AdminTab.prices => PricesTab(state: state, accent: accent),
                           AdminTab.packages => PackagesTab(state: state, accent: accent),

@@ -34,6 +34,21 @@ class AvailabilityTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AdminColors.warnBg,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AdminColors.warnBorder),
+          ),
+          child: const Text(
+            'Изменения доступности пока действуют только в этой сессии и не '
+            'сохраняются на сервер — виджет их не видит.',
+            style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.warn),
+          ),
+        ),
         AdminCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
