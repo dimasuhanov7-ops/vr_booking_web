@@ -446,23 +446,15 @@ class _OccCell extends StatelessWidget {
             curve: _hoverCurve,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
-              // Подсвеченная бронь — насыщеннее заливка + светлая рамка её цвета.
+              // Подсвеченная бронь — чуть плотнее заливка и рамка её же цвета,
+              // без свечения: фокус создаётся приглушением остальных.
               color: active
-                  ? h.bg.withValues(alpha: (h.bg.a + 0.24).clamp(0.0, 1.0))
+                  ? h.bg.withValues(alpha: (h.bg.a + 0.12).clamp(0.0, 1.0))
                   : h.bg,
               border: Border.all(
-                color: active ? h.text.withValues(alpha: 0.9) : h.border,
-                width: active ? 1.6 : (ps5 ? 1.4 : 1),
+                color: active ? h.border.withValues(alpha: 0.95) : h.border,
+                width: active ? 1.5 : (ps5 ? 1.4 : 1),
               ),
-              boxShadow: active
-                  ? <BoxShadow>[
-                      BoxShadow(
-                        color: h.border.withValues(alpha: 0.5),
-                        blurRadius: 8,
-                        spreadRadius: 0.5,
-                      ),
-                    ]
-                  : const <BoxShadow>[],
             ),
             child: const SizedBox.expand(),
           ),
