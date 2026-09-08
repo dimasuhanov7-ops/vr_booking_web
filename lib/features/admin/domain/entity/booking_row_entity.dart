@@ -33,14 +33,24 @@ enum RecordSource {
   widget,
 
   /// Внесена персоналом (звонок).
-  call;
+  call,
+
+  /// Создана сотрудником прямо в админке.
+  admin;
 
   /// Разбирает значение из мок-данных.
-  static RecordSource fromRaw(String raw) =>
-      raw == 'звонок' ? RecordSource.call : RecordSource.widget;
+  static RecordSource fromRaw(String raw) => switch (raw) {
+        'звонок' => RecordSource.call,
+        'админка' => RecordSource.admin,
+        _ => RecordSource.widget,
+      };
 
   /// Подпись.
-  String get label => this == RecordSource.call ? 'звонок' : 'виджет';
+  String get label => switch (this) {
+        RecordSource.call => 'звонок',
+        RecordSource.admin => 'админка',
+        RecordSource.widget => 'виджет',
+      };
 }
 
 /// Единая запись брони — источник и для «Броней» (сегодняшний срез), и для
@@ -62,6 +72,8 @@ class BookingRowEntity extends Equatable {
     required this.source,
     this.packageName,
     this.isCancelled = false,
+    this.prepay = 0,
+    this.note = '',
   });
 
   /// Идентификатор.
@@ -106,6 +118,12 @@ class BookingRowEntity extends Equatable {
   /// Бронь уже отменена (пришла со статусом `cancelled`).
   final bool isCancelled;
 
+  /// Внесённая предоплата, ₽.
+  final int prepay;
+
+  /// Комментарий сотрудника.
+  final String note;
+
   /// Конец, минут от полуночи.
   int get endMinutes => startMinutes + durationMinutes;
 
@@ -114,6 +132,36 @@ class BookingRowEntity extends Equatable {
 
   /// Длительность в часах.
   double get hours => durationMinutes / 60;
+
+  /// Копия с изменениями (используется при правке брони в админке).
+  BookingRowEntity copyWith({
+    String? clientName,
+    String? phone,
+    int? startMinutes,
+    int? durationMinutes,
+    int? headsets,
+    int? consoles,
+    int? prepay,
+    String? note,
+  }) =>
+      BookingRowEntity(
+        id: id,
+        clubId: clubId,
+        hallId: hallId,
+        dayIndex: dayIndex,
+        startMinutes: startMinutes ?? this.startMinutes,
+        durationMinutes: durationMinutes ?? this.durationMinutes,
+        headsets: headsets ?? this.headsets,
+        consoles: consoles ?? this.consoles,
+        clientName: clientName ?? this.clientName,
+        phone: phone ?? this.phone,
+        status: status,
+        source: source,
+        packageName: packageName,
+        isCancelled: isCancelled,
+        prepay: prepay ?? this.prepay,
+        note: note ?? this.note,
+      );
 
   @override
   List<Object?> get props => <Object?>[
@@ -131,5 +179,7 @@ class BookingRowEntity extends Equatable {
         source,
         packageName,
         isCancelled,
+        prepay,
+        note,
       ];
 }

@@ -8,6 +8,7 @@ abstract final class AdminFormat {
   static final DateFormat _dowFull = DateFormat('EEEE', 'ru');
   static final DateFormat _monShort = DateFormat('MMM', 'ru');
   static final DateFormat _dayMonL = DateFormat('d MMMM', 'ru');
+  static final DateFormat _monNom = DateFormat('LLLL', 'ru');
 
   /// «14 000 ₽».
   static String money(num value) {
@@ -67,4 +68,19 @@ abstract final class AdminFormat {
 
   /// «8 сентября».
   static String dayMonthLong(DateTime d) => _dayMonL.format(d);
+
+  /// «Сентябрь 2026» — заголовок месяца в календаре.
+  static String monthYear(DateTime d) {
+    final String m = _monNom.format(d);
+    return '${m[0].toUpperCase()}${m.substring(1)} ${d.year}';
+  }
+
+  /// Состав брони: «6 шлемов + 1 PS5».
+  static String composition(int headsets, int consoles) {
+    final List<String> parts = <String>[
+      if (headsets > 0) helmets(headsets),
+      if (consoles > 0) '$consoles PS5',
+    ];
+    return parts.isEmpty ? 'не выбрано' : parts.join(' + ');
+  }
 }

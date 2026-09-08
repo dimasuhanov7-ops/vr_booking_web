@@ -62,9 +62,12 @@ class AdminRepositoryMock implements IAdminRepository {
 
   @override
   Future<List<BookingRowEntity>> fetchRows() => _delay(<BookingRowEntity>[
-        _row('l1', 'vray', 'v-big', 0, 720, 120, 6, 0, 'Игорь', '+7 (912) 344-11-08', 'paid', 'виджет', pack: 'Команда'),
-        _row('l2', 'vray', 'v-small', 0, 900, 120, 3, 1, 'Настя', '+7 (903) 771-20-64', 'confirmed', 'виджет'),
-        _row('l3', 'vray', 'v-big', 0, 1140, 60, 12, 0, 'Дима', '+7 (999) 208-45-31', 'new', 'звонок'),
+        _row('l1', 'vray', 'v-big', 0, 720, 120, 6, 0, 'Игорь', '+7 (912) 344-11-08', 'paid', 'виджет',
+            pack: 'Команда', prepay: 14000, note: 'Оплатили полностью переводом. Просят арену без новичков рядом.'),
+        _row('l2', 'vray', 'v-small', 0, 900, 120, 3, 1, 'Настя', '+7 (903) 771-20-64', 'confirmed', 'виджет',
+            prepay: 3000, note: 'Детская группа, нужен инструктаж подлиннее.'),
+        _row('l3', 'vray', 'v-big', 0, 1140, 60, 12, 0, 'Дима', '+7 (999) 208-45-31', 'new', 'звонок',
+            note: 'Корпоратив, счёт на организацию. Перезвонить до 18:00.'),
         _row('l4', 'vray', 'v-small', 1, 780, 60, 0, 2, 'Кирилл', '+7 (964) 112-90-77', 'confirmed', 'виджет'),
         _row('l5', 'vray', 'v-big', 1, 1020, 120, 12, 0, 'Марина', '+7 (908) 555-31-20', 'paid', 'виджет', pack: 'Арена'),
         _row('l6', 'vray', 'v-small', 2, 660, 60, 4, 2, 'Олег', '+7 (917) 604-18-52', 'new', 'звонок'),
@@ -72,6 +75,18 @@ class AdminRepositoryMock implements IAdminRepository {
         _row('l8', 'effect', 'e-main', 0, 1200, 120, 4, 2, 'Артём', '+7 (962) 480-15-93', 'paid', 'виджет', pack: 'Полный зал'),
         _row('l9', 'effect', 'e-main', 1, 900, 60, 0, 2, 'Соня', '+7 (951) 220-64-09', 'new', 'виджет'),
         _row('l10', 'effect', 'e-main', 2, 1080, 120, 2, 0, 'Паша', '+7 (926) 337-45-11', 'confirmed', 'звонок'),
+        _row('l11', 'vray', 'v-small', 0, 660, 60, 2, 2, 'Рома', '+7 (982) 145-70-23', 'paid', 'виджет',
+            pack: 'Шлемы и PS5', prepay: 4300, note: 'День рождения, привезут торт — нужен стол.'),
+        _row('l12', 'vray', 'v-big', 0, 960, 60, 4, 0, 'Юля', '+7 (919) 302-88-14', 'new', 'виджет',
+            note: 'Просит подтвердить смс.'),
+        _row('l13', 'vray', 'v-big', 0, 960, 60, 3, 0, 'Стас', '+7 (958) 771-33-05', 'confirmed', 'звонок',
+            prepay: 2000, note: 'Остаток наличными на месте.'),
+        _row('l14', 'vray', 'v-big', 0, 960, 120, 2, 0, 'Алина', '+7 (912) 909-42-61', 'paid', 'виджет',
+            prepay: 5600, note: 'Оплачено онлайн целиком.'),
+        _row('l15', 'effect', 'e-main', 0, 1020, 60, 2, 1, 'Гоша', '+7 (927) 118-56-40', 'new', 'виджет',
+            note: 'Договорились на доплату на месте.'),
+        _row('l16', 'effect', 'e-main', 0, 1020, 120, 2, 1, 'Тимур', '+7 (937) 556-04-77', 'confirmed', 'звонок',
+            prepay: 1500, note: 'Просили PS5 с двумя геймпадами.'),
       ]);
 
   // Демо-режим: правки живут только в состоянии AdminBloc, на «сервер» не уходят.
@@ -109,6 +124,8 @@ class AdminRepositoryMock implements IAdminRepository {
     String status,
     String src, {
     String? pack,
+    int prepay = 0,
+    String note = '',
   }) =>
       BookingRowEntity(
         id: id,
@@ -124,6 +141,8 @@ class AdminRepositoryMock implements IAdminRepository {
         status: RecordStatus.fromRaw(status),
         source: RecordSource.fromRaw(src),
         packageName: pack,
+        prepay: prepay,
+        note: note,
       );
 
   Future<T> _delay<T>(T value) =>

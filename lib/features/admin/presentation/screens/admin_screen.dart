@@ -6,7 +6,8 @@ import '../admin_theme.dart';
 import '../components/admin_header.dart';
 import '../components/admin_tab_bar.dart';
 import '../components/availability_tab.dart';
-import '../components/bookings_tab.dart';
+import '../components/booking_detail_drawer.dart';
+import '../components/new_booking_drawer.dart';
 import '../components/packages_tab.dart';
 import '../components/prices_tab.dart';
 import '../components/records_tab.dart';
@@ -41,55 +42,72 @@ class AdminScreen extends StatelessWidget {
               final AdminBloc bloc = context.read<AdminBloc>();
               final Color accent = AdminColors.accentFor(state.accentSlug);
 
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1080),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 44),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        AdminHeader(
-                          clubs: state.clubs,
-                          selectedClubId: state.clubId,
-                          accent: accent,
-                          onClubSelected: (String id) =>
-                              bloc.add(AdminClubChanged(id)),
-                          onLogout: onLogout,
-                        ),
-                        const SizedBox(height: 22),
-                        AdminTabBar(
-                          current: state.tab,
-                          accent: accent,
-                          onSelected: (AdminTab t) => bloc.add(AdminTabChanged(t)),
-                        ),
-                        const SizedBox(height: 22),
-                        if (state.saveError != null) ...<Widget>[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: AdminColors.dangerBg,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AdminColors.dangerBorder),
+              return Stack(
+                children: <Widget>[
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1400),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 44),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            AdminHeader(
+                              clubs: state.clubs,
+                              selectedClubId: state.clubId,
+                              accent: accent,
+                              onClubSelected: (String id) =>
+                                  bloc.add(AdminClubChanged(id)),
+                              onLogout: onLogout,
                             ),
-                            child: Text(state.saveError!,
-                                style: const TextStyle(
-                                    fontSize: 13, color: AdminColors.danger)),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-                        switch (state.tab) {
-                          AdminTab.prices => PricesTab(state: state, accent: accent),
-                          AdminTab.packages => PackagesTab(state: state, accent: accent),
-                          AdminTab.availability => AvailabilityTab(state: state, accent: accent),
-                          AdminTab.bookings => BookingsTab(state: state, accent: accent),
-                          AdminTab.records => RecordsTab(state: state, accent: accent),
-                        },
-                      ],
+                            const SizedBox(height: 22),
+                            AdminTabBar(
+                              current: state.tab,
+                              accent: accent,
+                              onSelected: (AdminTab t) => bloc.add(AdminTabChanged(t)),
+                              trailing: AdminPrimaryButton(
+                                label: '＋ Новая запись',
+                                accent: accent,
+                                onTap: () => bloc.add(const AdminNewBookingOpened()),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            if (state.saveError != null) ...<Widget>[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AdminColors.dangerBg,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AdminColors.dangerBorder),
+                                ),
+                                child: Text(state.saveError!,
+                                    style: const TextStyle(
+                                        fontSize: 13, color: AdminColors.danger)),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            switch (state.tab) {
+                              AdminTab.prices =>
+                                PricesTab(state: state, accent: accent),
+                              AdminTab.packages =>
+                                PackagesTab(state: state, accent: accent),
+                              AdminTab.availability =>
+                                AvailabilityTab(state: state, accent: accent),
+                              AdminTab.records =>
+                                RecordsTab(state: state, accent: accent),
+                            },
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (state.openRow != null)
+                    BookingDetailDrawer(state: state, accent: accent),
+                  if (state.newBooking != null)
+                    NewBookingDrawer(state: state, accent: accent),
+                ],
               );
             },
           ),

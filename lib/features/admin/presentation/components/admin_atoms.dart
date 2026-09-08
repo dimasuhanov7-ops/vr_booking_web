@@ -107,6 +107,7 @@ class AdminPill extends StatelessWidget {
     required this.accent,
     required this.onTap,
     this.compact = false,
+    this.enabled = true,
     super.key,
   });
 
@@ -125,9 +126,33 @@ class AdminPill extends StatelessWidget {
   /// Уменьшенный вариант (фильтры).
   final bool compact;
 
+  /// Доступен ли выбор (недоступный — зачёркнут, штриховка).
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final Color tint = _tint(accent);
+    if (!enabled) {
+      return Container(
+        padding: compact
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 7)
+            : const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F12),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: const Color(0xFF1F2127)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF4A4C55),
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+      );
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(9),
@@ -149,6 +174,100 @@ class AdminPill extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Текстовое поле с подписью сверху (имя, телефон, комментарий).
+///
+/// Синхронизируется с внешним [value], пока поле не в фокусе — чтобы «Вернуть
+/// исходные» и переоткрытие карточки подхватывали значение.
+class AdminTextInput extends StatefulWidget {
+  /// Создаёт поле.
+  const AdminTextInput({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.hint,
+    this.keyboardType,
+    this.maxLines = 1,
+    super.key,
+  });
+
+  /// Подпись.
+  final String label;
+
+  /// Значение.
+  final String value;
+
+  /// Обработчик.
+  final ValueChanged<String> onChanged;
+
+  /// Плейсхолдер.
+  final String? hint;
+
+  /// Тип клавиатуры.
+  final TextInputType? keyboardType;
+
+  /// Число строк (для комментария — 3).
+  final int maxLines;
+
+  @override
+  State<AdminTextInput> createState() => _AdminTextInputState();
+}
+
+class _AdminTextInputState extends State<AdminTextInput> {
+  late final TextEditingController _c = TextEditingController(text: widget.value);
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(covariant AdminTextInput old) {
+    super.didUpdateWidget(old);
+    if (!_focus.hasFocus && widget.value != _c.text) _c.text = widget.value;
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final OutlineInputBorder b = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(11),
+      borderSide: const BorderSide(color: AdminColors.borderInput),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(widget.label,
+              style: const TextStyle(fontSize: 12, color: AdminColors.textMuted)),
+        ),
+        TextField(
+          controller: _c,
+          focusNode: _focus,
+          keyboardType: widget.keyboardType,
+          maxLines: widget.maxLines,
+          style: const TextStyle(fontSize: 15, color: AdminColors.text),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: widget.hint,
+            hintStyle: const TextStyle(color: AdminColors.textLabel),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            filled: true,
+            fillColor: AdminColors.input,
+            border: b,
+            enabledBorder: b,
+            focusedBorder: b,
+          ),
+          onChanged: widget.onChanged,
+        ),
+      ],
     );
   }
 }
@@ -183,17 +302,19 @@ class AdminNumberField extends StatefulWidget {
 class _AdminNumberFieldState extends State<AdminNumberField> {
   late final TextEditingController _c =
       TextEditingController(text: widget.value.toString());
+  final FocusNode _focus = FocusNode();
 
   @override
   void didUpdateWidget(covariant AdminNumberField old) {
     super.didUpdateWidget(old);
     final String v = widget.value.toString();
-    if (v != _c.text && !_c.selection.isValid) _c.text = v;
+    if (v != _c.text && !_focus.hasFocus) _c.text = v;
   }
 
   @override
   void dispose() {
     _c.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -212,6 +333,7 @@ class _AdminNumberFieldState extends State<AdminNumberField> {
           width: widget.width,
           child: TextField(
             controller: _c,
+            focusNode: _focus,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.right,
             inputFormatters: <TextInputFormatter>[

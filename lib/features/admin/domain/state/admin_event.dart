@@ -203,7 +203,7 @@ class AdminDayClosureChanged extends AdminEvent {
 /// Смена фильтра журнала.
 class AdminFilterChanged extends AdminEvent {
   /// Создаёт событие.
-  const AdminFilterChanged({this.day, this.hallId, this.type, this.status});
+  const AdminFilterChanged({this.day, this.hallId, this.type});
 
   /// Фильтр дня (`-1` — все).
   final int? day;
@@ -214,11 +214,8 @@ class AdminFilterChanged extends AdminEvent {
   /// Фильтр типа.
   final AdminTypeFilter? type;
 
-  /// Фильтр статуса.
-  final AdminStatusFilter? status;
-
   @override
-  List<Object?> get props => <Object?>[day, hallId, type, status];
+  List<Object?> get props => <Object?>[day, hallId, type];
 }
 
 /// Отменить/вернуть запись.
@@ -231,4 +228,181 @@ class AdminRowCancelToggled extends AdminEvent {
 
   @override
   List<Object?> get props => <Object?>[rowId];
+}
+
+/// Открыть карточку брони.
+class AdminRowOpened extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowOpened(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
+/// Закрыть карточку брони.
+class AdminRowClosed extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowClosed();
+}
+
+/// Правка поля открытой брони (оверлей, на сервер не уходит).
+class AdminRowEdited extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowEdited({
+    required this.rowId,
+    this.clientName,
+    this.phone,
+    this.startMinutes,
+    this.durationMinutes,
+    this.headsets,
+    this.consoles,
+    this.prepay,
+    this.note,
+  });
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  /// Имя.
+  final String? clientName;
+
+  /// Телефон.
+  final String? phone;
+
+  /// Начало, минут.
+  final int? startMinutes;
+
+  /// Длительность, минут.
+  final int? durationMinutes;
+
+  /// VR-шлемов.
+  final int? headsets;
+
+  /// PS5.
+  final int? consoles;
+
+  /// Предоплата, ₽.
+  final int? prepay;
+
+  /// Комментарий.
+  final String? note;
+
+  @override
+  List<Object?> get props => <Object?>[
+        rowId,
+        clientName,
+        phone,
+        startMinutes,
+        durationMinutes,
+        headsets,
+        consoles,
+        prepay,
+        note,
+      ];
+}
+
+/// Сбросить правки брони к исходным значениям.
+class AdminRowEditReset extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowEditReset(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
+/// Открыть drawer «Новая запись».
+class AdminNewBookingOpened extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewBookingOpened();
+}
+
+/// Закрыть drawer «Новая запись».
+class AdminNewBookingClosed extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewBookingClosed();
+}
+
+/// Правка черновика новой брони.
+class AdminNewBookingChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewBookingChanged({
+    this.hallId,
+    this.dayIndex,
+    this.startMinutes,
+    this.durationMinutes,
+    this.headsets,
+    this.consoles,
+    this.name,
+    this.phone,
+    this.prepay,
+    this.note,
+  });
+
+  /// Зал.
+  final String? hallId;
+
+  /// День.
+  final int? dayIndex;
+
+  /// Начало, минут.
+  final int? startMinutes;
+
+  /// Длительность, минут.
+  final int? durationMinutes;
+
+  /// VR-шлемов.
+  final int? headsets;
+
+  /// PS5.
+  final int? consoles;
+
+  /// Имя.
+  final String? name;
+
+  /// Телефон.
+  final String? phone;
+
+  /// Предоплата, ₽.
+  final int? prepay;
+
+  /// Комментарий.
+  final String? note;
+
+  @override
+  List<Object?> get props => <Object?>[
+        hallId,
+        dayIndex,
+        startMinutes,
+        durationMinutes,
+        headsets,
+        consoles,
+        name,
+        phone,
+        prepay,
+        note,
+      ];
+}
+
+/// Сменить видимый месяц календаря в drawer «Новая запись».
+class AdminNewBookingMonthChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewBookingMonthChanged(this.month);
+
+  /// Первое число видимого месяца.
+  final DateTime month;
+
+  @override
+  List<Object?> get props => <Object?>[month];
+}
+
+/// Создать бронь из drawer «Новая запись».
+class AdminNewBookingSubmitted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewBookingSubmitted();
 }

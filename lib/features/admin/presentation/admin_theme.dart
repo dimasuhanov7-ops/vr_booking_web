@@ -65,4 +65,20 @@ abstract final class AdminColors {
         'paid' => (const Color(0xFFA9F04A), const Color(0xFF141A0C), const Color(0xFF2C3A1C)),
         _ => (warn, warnBg, warnBorder),
       };
+
+  /// Палитра сетки занятости — 6 оттенков по кругу (фон, рамка, текст).
+  static const List<(Color, Color, Color)> _hues = <(Color, Color, Color)>[
+    (Color(0x6BA9F04A), Color(0xBFA9F04A), Color(0xFFEAFFC8)),
+    (Color(0x6B7FA6FF), Color(0xBF7FA6FF), Color(0xFFDCE8FF)),
+    (Color(0x6BFFA85C), Color(0xBFFFA85C), Color(0xFFFFE7D2)),
+    (Color(0x6BD685FF), Color(0xBFD685FF), Color(0xFFF4E1FF)),
+    (Color(0x6B5EE1CC), Color(0xBF5EE1CC), Color(0xFFD6FFF7)),
+    (Color(0x6BFF8AA8), Color(0xC7FF8AA8), Color(0xFFFFE0E7)),
+  ];
+
+  /// Оттенок брони в сетке занятости по её порядковому номеру за день.
+  static ({Color bg, Color border, Color text}) hue(int index) {
+    final (Color, Color, Color) h = _hues[index % _hues.length];
+    return (bg: h.$1, border: h.$2, text: h.$3);
+  }
 }

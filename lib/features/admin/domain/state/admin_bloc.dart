@@ -36,6 +36,15 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminDayClosureChanged>(_onDayClosureChanged);
     on<AdminFilterChanged>(_onFilterChanged);
     on<AdminRowCancelToggled>(_onRowCancelToggled);
+    on<AdminRowOpened>(_onRowOpened);
+    on<AdminRowClosed>(_onRowClosed);
+    on<AdminRowEdited>(_onRowEdited);
+    on<AdminRowEditReset>(_onRowEditReset);
+    on<AdminNewBookingOpened>(_onNewBookingOpened);
+    on<AdminNewBookingClosed>(_onNewBookingClosed);
+    on<AdminNewBookingChanged>(_onNewBookingChanged);
+    on<AdminNewBookingMonthChanged>(_onNewBookingMonthChanged);
+    on<AdminNewBookingSubmitted>(_onNewBookingSubmitted);
   }
 
   final IAdminRepository _repository;
@@ -82,8 +91,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       filterDay: -1,
       filterHallId: '',
       filterType: AdminTypeFilter.all,
-      filterStatus: AdminStatusFilter.all,
       newPackage: const NewPackageDraft(),
+      clearOpenRow: true,
+      clearNewBooking: true,
+      clearNewBookingMonth: true,
     ));
   }
 
@@ -284,7 +295,6 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       filterDay: event.day,
       filterHallId: event.hallId,
       filterType: event.type,
-      filterStatus: event.status,
     ));
   }
 
@@ -300,6 +310,175 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       () => _repository.setOrderCancelled(event.rowId, cancelled: cancel),
       emit,
     );
+  }
+
+  // -- карточка брони -----------------------------------------------------
+
+  void _onRowOpened(AdminRowOpened event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(openRowId: event.rowId));
+
+  void _onRowClosed(AdminRowClosed event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(clearOpenRow: true));
+
+  /// Правка брони живёт только в состоянии (оверлей [AdminState.rowEdits]);
+  /// на сервер не уходит — обновление броней в `AdminRepository` пока не
+  /// реализовано (см. `design/ADMIN_DESIGN_SPEC.md` §8).
+  void _onRowEdited(AdminRowEdited event, Emitter<AdminState> emit) {
+    final BookingRowEntity? base = state.rowById(event.rowId);
+    if (base == null) return;
+    BookingRowEntity edited = base.copyWith(
+      clientName: event.clientName,
+      phone: event.phone,
+      startMinutes: event.startMinutes,
+      durationMinutes: event.durationMinutes,
+      headsets: event.headsets,
+      consoles: event.consoles,
+      prepay: event.prepay,
+      note: event.note,
+    );
+    // Держим сеанс в рабочих часах клуба.
+    final int minStart = state.club.openMinutes;
+    final int maxStart = state.club.closeMinutes - edited.durationMinutes;
+    if (maxStart >= minStart && edited.startMinutes > maxStart) {
+      edited = edited.copyWith(startMinutes: maxStart);
+    }
+    final Map<String, BookingRowEntity> next =
+        Map<String, BookingRowEntity>.of(state.rowEdits)..[event.rowId] = edited;
+    emit(state.copyWith(rowEdits: next));
+  }
+
+  void _onRowEditReset(AdminRowEditReset event, Emitter<AdminState> emit) {
+    if (!state.rowEdits.containsKey(event.rowId)) return;
+    final Map<String, BookingRowEntity> next =
+        Map<String, BookingRowEntity>.of(state.rowEdits)..remove(event.rowId);
+    emit(state.copyWith(rowEdits: next));
+  }
+
+  // -- новая запись ------------------------------------------------------
+
+  void _onNewBookingOpened(AdminNewBookingOpened event, Emitter<AdminState> emit) {
+    final List<AdminHallEntity> halls = state.clubHalls;
+    if (halls.isEmpty) return;
+    final int start = state.club.openMinutes;
+    final FreeUnits free = state.freeUnits(
+      hallId: halls.first.id,
+      dayIndex: 0,
+      startMinutes: start,
+      durationMinutes: 60,
+    );
+    emit(state.copyWith(
+      newBooking: NewBookingDraft(
+        hallId: halls.first.id,
+        startMinutes: start,
+        headsets: 2.clamp(0, free.headsets),
+        consoles: 0,
+      ),
+      clearNewBookingMonth: true,
+    ));
+  }
+
+  void _onNewBookingClosed(AdminNewBookingClosed event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(clearNewBooking: true, clearNewBookingMonth: true));
+
+  void _onNewBookingChanged(
+    AdminNewBookingChanged event,
+    Emitter<AdminState> emit,
+  ) {
+    final NewBookingDraft? current = state.newBooking;
+    if (current == null) return;
+    NewBookingDraft next = current.copyWith(
+      hallId: event.hallId,
+      dayIndex: event.dayIndex,
+      startMinutes: event.startMinutes,
+      durationMinutes: event.durationMinutes,
+      headsets: event.headsets,
+      consoles: event.consoles,
+      name: event.name,
+      phone: event.phone,
+      prepay: event.prepay,
+      note: event.note,
+      message: '',
+    );
+    // Не выпускаем сеанс за пределы рабочего дня.
+    final int maxStart = state.club.closeMinutes - next.durationMinutes;
+    if (next.startMinutes > maxStart) {
+      next = next.copyWith(startMinutes: maxStart.clamp(state.club.openMinutes, maxStart));
+    }
+    // Клампим состав по свободной ёмкости зала на выбранное окно.
+    final FreeUnits free = state.freeUnits(
+      hallId: next.hallId,
+      dayIndex: next.dayIndex,
+      startMinutes: next.startMinutes,
+      durationMinutes: next.durationMinutes,
+    );
+    next = next.copyWith(
+      headsets: next.headsets.clamp(0, free.headsets),
+      consoles: next.consoles.clamp(0, free.consoles),
+    );
+    emit(state.copyWith(newBooking: next));
+  }
+
+  void _onNewBookingMonthChanged(
+    AdminNewBookingMonthChanged event,
+    Emitter<AdminState> emit,
+  ) =>
+      emit(state.copyWith(newBookingMonth: DateTime(event.month.year, event.month.month)));
+
+  /// Создание брони из админки — локально (в `AdminRepository` метод создания
+  /// пока не реализован, см. `design/ADMIN_DESIGN_SPEC.md` §8).
+  void _onNewBookingSubmitted(
+    AdminNewBookingSubmitted event,
+    Emitter<AdminState> emit,
+  ) {
+    final NewBookingDraft? d = state.newBooking;
+    if (d == null) return;
+
+    String? error;
+    if (d.name.trim().length < 2) {
+      error = 'Укажите имя гостя.';
+    } else if (d.headsets + d.consoles < 1) {
+      error = 'Добавьте хотя бы один шлем или одну PS5.';
+    } else {
+      final FreeUnits free = state.freeUnits(
+        hallId: d.hallId,
+        dayIndex: d.dayIndex,
+        startMinutes: d.startMinutes,
+        durationMinutes: d.durationMinutes,
+      );
+      if (d.headsets > free.headsets || d.consoles > free.consoles) {
+        error = 'На это время свободно ${free.headsets} шлемов и ${free.consoles} PS5.';
+      }
+    }
+    if (error != null) {
+      emit(state.copyWith(newBooking: d.copyWith(message: error)));
+      return;
+    }
+
+    final String id = 'c${DateTime.now().millisecondsSinceEpoch}';
+    final BookingRowEntity row = BookingRowEntity(
+      id: id,
+      clubId: state.clubId,
+      hallId: d.hallId,
+      dayIndex: d.dayIndex,
+      startMinutes: d.startMinutes,
+      durationMinutes: d.durationMinutes,
+      headsets: d.headsets,
+      consoles: d.consoles,
+      clientName: d.name.trim(),
+      phone: d.phone.trim().isEmpty ? 'телефон не указан' : d.phone.trim(),
+      status: RecordStatus.newRequest,
+      source: RecordSource.admin,
+      prepay: d.prepay,
+      note: d.note.trim(),
+    );
+    emit(state.copyWith(
+      rows: <BookingRowEntity>[...state.rows, row],
+      tab: AdminTab.records,
+      filterDay: d.dayIndex,
+      openRowId: id,
+      clearNewBooking: true,
+      clearNewBookingMonth: true,
+    ));
   }
 
   static String _plural(int n, String one, String few, String many) {
