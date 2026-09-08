@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 
 /// Заглавная подпись-оверлайн над секцией.
+///
+/// [big] — крупный лейбл поля-карточки (дата, длительность, время начала):
+/// 14px, белый, полужирный. Обычный — 11px, приглушённый оверлайн.
 class SectionLabel extends StatelessWidget {
   /// Создаёт подпись.
-  const SectionLabel(this.text, {this.padding, super.key});
+  const SectionLabel(this.text, {this.padding, this.big = false, super.key});
 
   /// Текст (будет в верхнем регистре).
   final String text;
@@ -13,18 +16,68 @@ class SectionLabel extends StatelessWidget {
   /// Внешний отступ.
   final EdgeInsetsGeometry? padding;
 
+  /// Крупный вариант.
+  final bool big;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: padding ?? EdgeInsets.zero,
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          letterSpacing: 1.4,
-          fontWeight: FontWeight.w600,
-          color: BookingColors.textFaint,
+        style: TextStyle(
+          fontSize: big ? 14 : 11,
+          letterSpacing: big ? 0.9 : 1.4,
+          fontWeight: big ? FontWeight.w700 : FontWeight.w600,
+          color: big ? BookingColors.text : BookingColors.textFaint,
         ),
+      ),
+    );
+  }
+}
+
+/// Карточка-поле: бордер `#2E2E38`, фон `#121217`, радиус 16 (дата, длительность).
+///
+/// Необязательный заголовок — крупный лейбл слева и подпись-подсказка справа.
+class FieldCard extends StatelessWidget {
+  /// Создаёт карточку-поле.
+  const FieldCard({required this.child, this.label, this.trailing, super.key});
+
+  /// Содержимое.
+  final Widget child;
+
+  /// Крупный лейбл (если нужен заголовок).
+  final String? label;
+
+  /// Подпись-подсказка справа от лейбла.
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: BookingColors.fieldSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2E2E38)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          if (label != null) ...<Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(child: SectionLabel(label!, big: true)),
+                if (trailing != null)
+                  Text(trailing!,
+                      style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+          child,
+        ],
       ),
     );
   }

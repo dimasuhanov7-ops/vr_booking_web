@@ -5,6 +5,7 @@ import '../../../../app/config/booking_config.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
+import '../../domain/entity/price_rate_entity.dart';
 import '../../domain/entity/station_entity.dart';
 import '../../domain/entity/time_slot_entity.dart';
 import '../../domain/state/booking_bloc.dart';
@@ -301,35 +302,99 @@ class _FormBody extends StatelessWidget {
         ),
       ];
 
+  DayKind get _dayKind => DayKind.of(state.date ?? DateTime.now());
+
+  bool get _weekend => _dayKind == DayKind.weekend;
+
+  num _ratePerHour(StationType type) {
+    for (final PriceRateEntity r in state.prices) {
+      if (r.stationType == type && r.dayKind == _dayKind) return r.pricePerHour;
+    }
+    return 0;
+  }
+
   List<Widget> _dateBlock(BookingBloc bloc) => <Widget>[
-        const SectionLabel('Дата'),
-        const SizedBox(height: 10),
-        DateField(
-          date: state.date ?? DateTime.now(),
-          accent: accent,
-          daysAhead: BookingConfig.bookingHorizonDays,
-          onSelected: (DateTime d) => bloc.add(BookingDateSelected(d)),
+        FieldCard(
+          label: 'Дата',
+          trailing: _weekend ? 'тариф выходного дня' : 'тариф будних дней',
+          child: DateField(
+            date: state.date ?? DateTime.now(),
+            accent: accent,
+            daysAhead: BookingConfig.bookingHorizonDays,
+            tariffNote: _weekend ? 'тариф выходного дня' : 'тариф будней',
+            onSelected: (DateTime d) => bloc.add(BookingDateSelected(d)),
+          ),
         ),
       ];
 
-  List<Widget> _whenBlock(BookingBloc bloc, ClubEntity club) => <Widget>[
-        const SectionLabel('Длительность сеанса'),
-        const SizedBox(height: 10),
-        DurationSelector(
-          options: BookingBloc.durations,
-          selected: state.durationMinutes,
-          accent: accent,
-          onSelected: (int m) => bloc.add(BookingDurationSelected(m)),
+  List<Widget> _whenBlock(BookingBloc bloc, ClubEntity club) {
+    final String durLabel = BookingFormat.duration(state.durationMinutes);
+    final double hrs = state.durationMinutes / 60;
+    final bool showPs = state.hall == null || state.hall!.consoles > 0;
+    final List<({String label, String price})> rateLines = <({String label, String price})>[
+      (
+        label: '1 VR-шлем · $durLabel',
+        price: BookingFormat.money((_ratePerHour(StationType.vrHeadset) * hrs).round()),
+      ),
+      if (showPs)
+        (
+          label: '1 PS5 · $durLabel',
+          price: BookingFormat.money((_ratePerHour(StationType.ps5) * hrs).round()),
         ),
-        const SizedBox(height: 20),
-        Row(
+    ];
+
+    return <Widget>[
+      FieldCard(
+        label: 'Длительность сеанса',
+        trailing: 'целыми часами',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Expanded(child: SectionLabel('Время начала')),
-            Text('свободных мест из ${state.hallCapacity}',
-                style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+            DurationSelector(
+              options: BookingBloc.durations,
+              selected: state.durationMinutes,
+              accent: accent,
+              onSelected: (int m) => bloc.add(BookingDurationSelected(m)),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: BookingColors.borderSoft),
+            const SizedBox(height: 12),
+            for (final ({String label, String price}) r in rateLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(r.label,
+                          style: const TextStyle(fontSize: 13, color: BookingColors.textSoft)),
+                    ),
+                    Text(r.price,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: <FontFeature>[FontFeature.tabularFigures()])),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 2),
+            Text(
+              'Цена за одно место. Итог за компанию считается по числу выбранных '
+              'шлемов и PS5 и виден внизу до подтверждения. '
+              '${_weekend ? 'Тариф выходного дня.' : 'Тариф будних дней.'}',
+              style: const TextStyle(fontSize: 12, height: 1.4, color: BookingColors.textDim),
+            ),
           ],
         ),
-        const SizedBox(height: 12),
+      ),
+      const SizedBox(height: 20),
+      Row(
+        children: <Widget>[
+          const Expanded(child: SectionLabel('Время начала', big: true)),
+          Text('свободных мест из ${state.hallCapacity}',
+              style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
+        ],
+      ),
+      const SizedBox(height: 12),
         if (state.hall == null)
           const _Hint('Выберите зал.')
         else if (state.status == BookingStatus.loading)
@@ -355,7 +420,8 @@ class _FormBody extends StatelessWidget {
             accent: accent,
             onSelected: (TimeSlotEntity s) => bloc.add(BookingSlotSelected(s)),
           ),
-      ];
+    ];
+  }
 
   List<Widget> _planBlock(BookingBloc bloc, ClubEntity club) => <Widget>[
         SectionLabel(
