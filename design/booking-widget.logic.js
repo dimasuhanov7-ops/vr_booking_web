@@ -1,8 +1,10 @@
-// Извлечено дословно из Claude Design canvas «Виджет бронирования VR.dc.html»
-// (проект 8d5d5ffe-dca2-44b9-9385-3fac38fbaae5), снято 2026-09-03.
-// Логика прототипа дизайна: данные клубов, расчёт цен/скидок и вычисление
-// inline-стилей для всех состояний. Эталон для presentation-слоя vr_booking_web.
-// Разметка-компаньон: booking-widget.template.html
+// Вербатим-выгрузка логики из Claude Design «Виджет бронирования VR.dc.html»
+// (проект 8d5d5ffe-dca2-44b9-9385-3fac38fbaae5), версия 2026-09-07.
+//
+// Числа RATE/PACKS/даты — прототипные; в реальном виджете тарифы и пакеты
+// приходят из БД, занятость — из booking_busy_intervals. Аккаунт «по телефону»
+// в прототипе — чистый localStorage (запомнить имя+телефон, показать брони,
+// сделанные на этом устройстве); никакого запроса на сервер по номеру нет.
 
 const CLUBS = [
   { id: "effect", name: "Effect VR", tag: "один зал", desc: "Один зал: 4 шлема и 2 приставки PS5. Хорошо для компании до шести человек.",
@@ -17,13 +19,21 @@ const CLUBS = [
     ] }
 ];
 const OPEN = 11 * 60;
-const RATE = { vr: 700, ps5: 500 };
+const RATE = { wd: { vr: 1400, ps5: 1000 }, we: { vr: 1700, ps5: 1200 } };
 const DOW = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
 const MON = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 const MONN = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const MONL = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
-const PROMOS = { VRPARTY: 15, DR2026: 10 };
-const DUR = { 60: "1 ч", 90: "1,5 ч", 120: "2 ч", 180: "3 ч" };
+const PACKS = [
+  { id: "p1", club: "effect", hall: "e-main", name: "Вдвоём", vr: 2, ps5: 0, dur: 120, price: 5000, note: "2 шлема на 2 часа" },
+  { id: "p2", club: "effect", hall: "e-main", name: "Компания", vr: 4, ps5: 0, dur: 120, price: 10000, note: "все 4 шлема, 2 часа" },
+  { id: "p3", club: "effect", hall: "e-main", name: "Полный зал", vr: 4, ps5: 2, dur: 120, price: 14000, note: "4 шлема и 2 PS5, 2 часа" },
+  { id: "p4", club: "vray", hall: "v-big", name: "Команда", vr: 6, ps5: 0, dur: 120, price: 14000, note: "6 шлемов на арене, 2 часа" },
+  { id: "p5", club: "vray", hall: "v-big", name: "Арена", vr: 12, ps5: 0, dur: 120, price: 26000, note: "все 12 шлемов, 2 часа" },
+  { id: "p6", club: "vray", hall: "v-small", name: "Малый зал целиком", vr: 4, ps5: 2, dur: 120, price: 14000, note: "4 шлема и 2 PS5, 2 часа" },
+  { id: "p7", club: "vray", hall: "v-small", name: "Шлемы и PS5", vr: 2, ps5: 2, dur: 60, price: 4300, note: "2 шлема и 2 PS5, 1 час" }
+].map((p) => ({ ...p, n: p.vr + p.ps5 }));
+const DUR = { 60: "1 ч", 90: "1,5 ч", 120: "2 ч", 180: "3 ч", 240: "4 ч", 300: "5 ч" };
 const maskPhone = (raw) => {
   let d = raw.replace(/\D/g, "");
   if (d.startsWith("8")) d = "7" + d.slice(1);
@@ -40,16 +50,48 @@ const maskPhone = (raw) => {
 };
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; };
-const hhmm = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+const hhmm = (m) => String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100; if (m10 === 1 && m100 !== 11) return one; if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few; return many; };
 const money = (n) => n.toLocaleString("ru-RU").replace(/,/g, " ") + " ₽";
 
 class Component extends DCLogic {
   state = {
     clubId: null, hallId: null, dateIdx: 0, duration: 60, slot: null, picked: [],
-    name: "", phone: "", people: "", promoInput: "", promo: null, promoErr: "",
+    name: "", phone: "", people: "", pack: null,
+    me: null, meName: "", myBookings: [], loginOpen: false, loginPhone: "", showList: false,
     scenario: "normal", vw: "mobile", view: "form", stolen: null, conflictShown: false, freed: false
   };
+
+  componentDidMount() {
+    try {
+      const me = JSON.parse(localStorage.getItem("vr-widget-me") || "null");
+      const bs = JSON.parse(localStorage.getItem("vr-widget-bookings") || "[]");
+      const list = Array.isArray(bs) ? bs : [];
+      if (me && me.phone) this.setState({ me: me.phone, meName: me.name || "", name: me.name || "", phone: me.phone, myBookings: list });
+      else this.setState({ myBookings: list });
+    } catch (e) {}
+  }
+
+  remember(phone, name, extra) {
+    try { localStorage.setItem("vr-widget-me", JSON.stringify({ phone, name })); } catch (e) {}
+    this.setState({ me: phone, meName: name, ...(extra || {}) });
+  }
+
+  saveBooking() {
+    const st = this.state, club = this.club(), hall = this.hall(), T = this.totals();
+    const d = this.dates()[st.dateIdx];
+    const n = st.picked.length;
+    const rec = {
+      no: "VR-" + (1200 + st.dateIdx * 7 + n), phone: st.phone, name: st.name,
+      title: (club ? club.name : "") + " · " + (hall ? hall.name : ""),
+      meta: DOW[d.getDay()] + ", " + d.getDate() + " " + MONL[d.getMonth()] + " · " + hhmm(st.slot) + "–" + hhmm(st.slot + st.duration)
+        + " · " + n + " " + plural(n, "место", "места", "мест"),
+      total: money(T.net)
+    };
+    const all = st.myBookings.concat(rec);
+    try { localStorage.setItem("vr-widget-bookings", JSON.stringify(all)); } catch (e) {}
+    this.remember(st.phone, st.name, { myBookings: all, view: "done" });
+  }
 
   club() { return CLUBS.find((c) => c.id === this.state.clubId) || null; }
   hall() { const c = this.club(); if (!c) return null; return c.halls.find((h) => h.id === this.state.hallId) || null; }
@@ -70,12 +112,13 @@ class Component extends DCLogic {
     for (let i = 0; i < hall.ps5; i++) out.push({ id: hall.id + "-ps" + (i + 1), type: "ps5", name: "PS5-" + (i + 1) });
     return out;
   }
-  slotList() {
+  slotListFor(dur) {
     const c = this.club(); if (!c) return [];
-    const step = this.state.duration + (c.gap ?? 10), out = [];
-    for (let t = OPEN; t + this.state.duration <= c.close; t += step) out.push(t);
+    const step = dur + (c.gap ?? 10), out = [];
+    for (let t = OPEN; t + dur <= c.close; t += step) out.push(t);
     return out;
   }
+  slotList() { return this.slotListFor(this.state.duration); }
   isBusy(slot, stId) {
     if (this.state.scenario === "busy" && !this.state.freed) return true;
     if (this.state.stolen === stId && slot === this.state.slot) return true;
@@ -89,23 +132,43 @@ class Component extends DCLogic {
   }
   priceOf(id) {
     const t = id.indexOf("-ps") > -1 ? "ps5" : "vr";
-    return (RATE[t] * this.state.duration) / 30;
+    const d = this.dates()[this.state.dateIdx];
+    const tariff = d && (d.getDay() === 0 || d.getDay() === 6) ? "we" : "wd";
+    return (RATE[tariff][t] * this.state.duration) / 60;
+  }
+  packList() {
+    const hall = this.hall();
+    if (!hall) return [];
+    return PACKS.filter((p) => p.hall === hall.id && p.vr <= hall.helmets && p.ps5 <= hall.ps5);
   }
   totals() {
     const gross = this.state.picked.reduce((a, id) => a + this.priceOf(id), 0);
-    const n = this.state.picked.length;
-    const autoOn = this.props.autoDiscount ?? false;
-    const minSt = this.props.autoDiscountFrom ?? 6;
-    const autoPct = this.props.autoDiscountPercent ?? 10;
-    const auto = autoOn && n >= minSt ? autoPct : 0;
-    const promo = this.state.promo ? PROMOS[this.state.promo] : 0;
-    const pct = Math.max(auto, promo);
-    const label = pct === 0 ? "" : (promo >= auto && promo > 0 ? "Промокод " + this.state.promo + " · −" + pct + "%" : "Компания от " + minSt + " станций · −" + pct + "%");
-    return { gross, pct, label, disc: Math.round((gross * pct) / 100), net: gross - Math.round((gross * pct) / 100) };
+    const pack = PACKS.find((p) => p.id === this.state.pack);
+    const fits = pack && this.state.picked.length === pack.n && this.state.duration === pack.dur;
+    if (fits) {
+      const disc = Math.max(0, gross - pack.price);
+      return { gross, pack, label: "Пакет «" + pack.name + "» · " + pack.note, disc, net: pack.price };
+    }
+    return { gross, pack: null, label: "", disc: 0, net: gross };
+  }
+
+  whenRef = React.createRef();
+  planRef = React.createRef();
+  contactsRef = React.createRef();
+
+  scrollTo(ref) {
+    if (this.state.vw !== "mobile") return;
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY - 74;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    });
   }
 
   pick(club) {
     this.setState({ clubId: club.id, hallId: club.halls[0].id, slot: null, picked: [], stolen: null, conflictShown: false });
+    this.scrollTo(this.whenRef);
   }
   toggleStation(id) {
     this.setState((s) => ({ picked: s.picked.includes(id) ? s.picked.filter((x) => x !== id) : s.picked.concat(id), conflictShown: false }));
@@ -134,9 +197,9 @@ class Component extends DCLogic {
       4: "Последний шаг"
     };
     const hints = {
-      1: "Два клуба, разная вместимость. Оплата на месте — сейчас только держим за вами станции.",
-      2: "Сначала выберите время: под каждым слотом видно, сколько станций в этом зале свободно.",
-      3: "Отметьте станции для своей компании — одна станция на человека.",
+      1: "Два клуба, разная вместимость. Оплата на месте — сейчас только держим за вами места.",
+      2: "Сначала выберите время: под каждым слотом видно, сколько шлемов и PS5 в этом зале свободно.",
+      3: "Отметьте шлемы и PS5 для своей компании — одно место на человека.",
       4: "Оставьте контакты, мы перезвоним только если что-то изменится."
     };
 
@@ -150,7 +213,65 @@ class Component extends DCLogic {
       ].map((s) => ({ label: s.label, style: tiny(st.scenario === s.id), onClick: () => this.setState({ scenario: s.id, freed: false, stolen: null, conflictShown: false }) })),
       viewports: [{ id: "mobile", label: "Мобильный" }, { id: "desktop", label: "Десктоп" }]
         .map((v) => ({ label: v.label, style: tiny(st.vw === v.id), onClick: () => this.setState({ vw: v.id }) })),
-      frameStyle: "position:relative; width:100%; max-width:" + (st.vw === "mobile" ? "412px" : "760px") + "; border:1px solid #26262E; border-radius:22px; background:#101015; box-shadow:0 30px 80px rgba(0,0,0,0.55); overflow:hidden; transition:max-width .25s ease",
+      whenRef: this.whenRef, planRef: this.planRef, contactsRef: this.contactsRef,
+      colsStyle: st.vw === "mobile" ? "display:block" : "display:grid; grid-template-columns:minmax(320px, 420px) minmax(0, 1fr); gap:clamp(20px, 2.4vw, 36px); align-items:start",
+      leftColStyle: st.vw === "mobile" ? "display:block" : "position:sticky; top:88px; display:block",
+      rightColStyle: "display:block",
+      tariffShort: d ? (d.getDay() === 0 || d.getDay() === 6 ? "тариф выходного дня" : "тариф будних дней") : "",
+      fieldCardStyle: "border:1px solid #2E2E38; border-radius:16px; background:#121217; padding:16px",
+      bigLabelStyle: "font-size:14px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; color:#F2F2F5",
+      changePillStyle: "flex:none; padding:8px 12px; border-radius:9px; border:1px solid #3A3A45; background:#101014; font-size:13px; font-weight:600; color:#C9C9D2",
+      whenSectionStyle: (st.vw === "mobile" ? "border-top:1px solid #222228; padding-top:22px" : "padding-top:0") + "; margin-bottom:26px",
+      planSectionStyle: "border-top:1px solid #222228; padding-top:22px; margin-bottom:26px",
+      rightIdle: st.vw !== "mobile" && !club,
+      idle: {
+        title: "Начните с клуба",
+        text: "Выберите клуб слева — дата, длительность и свободное время появятся здесь."
+      },
+      frameStyle: "position:relative; width:100%; max-width:" + (st.vw === "mobile" ? "412px" : "min(1720px, 100%)") + "; border:1px solid #26262E; border-radius:22px; background:#101015; box-shadow:0 30px 80px rgba(0,0,0,0.55); overflow:hidden; transition:max-width .25s ease",
+
+      rateLines: (() => {
+        const rt = RATE[d && (d.getDay() === 0 || d.getDay() === 6) ? "we" : "wd"];
+        const h = st.duration / 60;
+        const lab = DUR[st.duration] || h + " ч";
+        return [
+          { label: "1 VR-шлем · " + lab, price: money(rt.vr * h) },
+          !hall || hall.ps5 ? { label: "1 PS5 · " + lab, price: money(rt.ps5 * h) } : null
+        ].filter(Boolean);
+      })(),
+      rateNote: "Цена за одно место. Итог за компанию считается по числу выбранных шлемов и PS5 и виден внизу до подтверждения. "
+        + (d && (d.getDay() === 0 || d.getDay() === 6) ? "Тариф выходного дня." : "Тариф будних дней."),
+
+      acct: (() => {
+        const mine = st.myBookings.filter((b) => b.phone === st.me);
+        const btn = "flex:none; padding:9px 13px; border-radius:10px; cursor:pointer; font-size:13px; font-weight:600; border:1px solid #2A2A33; background:transparent; color:#C9C9D2";
+        return {
+          style: "display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center; margin-bottom:20px; padding:12px 14px; border:1px solid #26262E; border-radius:14px; background:#15151A",
+          title: st.me ? (st.meName ? st.meName + " · " + st.me : st.me) : "Вход по номеру телефона",
+          sub: st.me
+            ? (mine.length ? mine.length + " " + plural(mine.length, "бронь", "брони", "броней") + " на этом номере · контакты заполнены" : "Броней пока нет · контакты заполнены")
+            : "Мы запомним вас и покажем ваши брони при следующем визите.",
+          primaryLabel: st.me ? (st.showList ? "Скрыть брони" : "Мои брони") : "Войти по номеру",
+          primaryStyle: btn,
+          onPrimary: st.me ? () => this.setState({ showList: !st.showList }) : () => this.setState({ loginOpen: !st.loginOpen }),
+          exitStyle: btn + "; color:#8A8A96" + (st.me ? "" : "; display:none"),
+          onExit: () => { try { localStorage.removeItem("vr-widget-me"); } catch (e) {} this.setState({ me: null, meName: "", showList: false, loginOpen: false }); },
+          loginOpen: !st.me && st.loginOpen,
+          phone: st.loginPhone,
+          onPhone: (e) => this.setState({ loginPhone: maskPhone(e.target.value) }),
+          enterStyle: "flex:none; padding:13px 18px; border-radius:12px; border:none; cursor:" + (st.loginPhone.replace(/\D/g, "").length === 11 ? "pointer" : "not-allowed") + "; font-size:15px; font-weight:700; background:" + (st.loginPhone.replace(/\D/g, "").length === 11 ? "#A9F04A" : "#2A2A33") + "; color:" + (st.loginPhone.replace(/\D/g, "").length === 11 ? "#08090A" : "#6E6E7A"),
+          onEnter: () => {
+            const p = st.loginPhone;
+            if (p.replace(/\D/g, "").length !== 11) return;
+            const known = st.myBookings.filter((b) => b.phone === p);
+            const nm = known.length ? known[known.length - 1].name || "" : st.name;
+            this.remember(p, nm, { phone: p, name: nm, loginOpen: false, showList: true, loginPhone: "" });
+          },
+          showList: !!st.me && st.showList,
+          bookings: mine,
+          emptyStyle: "font-size:13px; color:#8A8A96; padding:2px 2px 4px" + (mine.length ? "; display:none" : "")
+        };
+      })(),
 
       isForm: st.view === "form", isDone: st.view === "done",
       stepNo, stepTitle: titles[stepNo], stepHint: hints[stepNo],
@@ -169,7 +290,7 @@ class Component extends DCLogic {
           tagStyle: "font-size:10px; letter-spacing:0.1em; text-transform:uppercase; padding:3px 7px; border-radius:6px; background:" + (on ? A : "#26262E") + "; color:" + (on ? "#08090A" : "#9A9AA6"),
           kit: [
             { label: vr + " " + plural(vr, "VR-шлем", "VR-шлема", "VR-шлемов"), glyphStyle: "width:20px; height:12px; border-radius:6px 6px 3px 3px; border:1.5px solid " + A + "; background:linear-gradient(180deg, " + Atint + "0.35), transparent)" },
-            ps ? { label: ps + " PS5", glyphStyle: "width:18px; height:11px; border-radius:3px; border:1.5px solid #6E6E7A; border-left-width:5px; border-right-width:5px" } : null
+            ps ? { label: ps + " PS5", glyphStyle: "width:15px; height:21px; flex:none; border-radius:3px 3px 2px 2px; background:linear-gradient(90deg, #C9C9D2 0 3px, #0C0E11 3px 12px, #C9C9D2 12px 100%); border:1px solid #4A4A55; transform:skewX(-5deg)" } : null
           ].filter(Boolean),
           onClick: () => this.pick(c)
         };
@@ -188,6 +309,7 @@ class Component extends DCLogic {
 
       dateOpen: !!st.dateOpen,
       dateLabel: d ? DOW[d.getDay()] + ", " + d.getDate() + " " + MONL[d.getMonth()] : "",
+      tariffNote: d && (d.getDay() === 0 || d.getDay() === 6) ? "тариф выходного дня" : "тариф будней",
       openDate: () => this.setState({ dateOpen: true, month: this.monthKey(d) }),
       closeDate: () => this.setState({ dateOpen: false }),
       cal: (() => {
@@ -218,9 +340,9 @@ class Component extends DCLogic {
         };
       })(),
 
-      durationChips: [60, 120, 180].map((m) => ({
-        label: DUR[m], style: chip(st.duration === m, " flex:1; text-align:center; padding:10px 8px"),
-        onClick: () => this.setState({ duration: m, slot: null, picked: [] })
+      durationChips: [60, 120, 180, 240, 300].map((m) => ({
+        label: DUR[m], style: chip(st.duration === m, " flex:1 0 76px; text-align:center; padding:10px 8px"),
+        onClick: () => this.setState({ duration: m, slot: null, picked: [], pack: null })
       })),
 
       dayEmpty, hasSlots: !!hall && !dayEmpty,
@@ -231,7 +353,7 @@ class Component extends DCLogic {
           freeLabel: out ? "занято" : free + " из " + total,
           freeStyle: "font-size:11px; margin-top:6px; color:" + (out ? "#6E6E7A" : on ? Atx : "#8A8A96") + (out ? "; text-decoration:line-through" : ""),
           style: "display:flex; flex-direction:column; align-items:flex-start; padding:11px 12px 10px; border-radius:13px; cursor:" + (out ? "not-allowed" : "pointer") + "; border:1px solid " + (on ? A : out ? "#232329" : "#2A2A33") + "; color:" + (on ? "#F2F2F5" : out ? "#55555F" : "#C9C9D2") + "; background:" + (on ? At + "0.2)" : out ? "repeating-linear-gradient(135deg, #16161B 0 5px, #121217 5px 10px)" : "#15151A"),
-          onClick: out ? () => {} : () => this.setState({ slot: s, picked: [], conflictShown: false })
+          onClick: out ? () => {} : () => { this.setState({ slot: s, picked: [], conflictShown: false }); this.scrollTo(this.planRef); }
         };
       }),
 
@@ -304,17 +426,34 @@ class Component extends DCLogic {
         { key: "people", label: "Сколько будет всего, с учётом игроков", placeholder: String(st.picked.length || ""), value: st.people }
       ].map((f) => ({ ...f, onChange: (e) => this.setState({ [f.key]: f.mask ? maskPhone(e.target.value) : e.target.value }) })),
 
-      promo: {
-        value: st.promoInput,
-        onChange: (e) => this.setState({ promoInput: e.target.value.toUpperCase(), promoErr: "" }),
-        onApply: () => {
-          const code = st.promoInput.trim().toUpperCase();
-          if (PROMOS[code]) this.setState({ promo: code, promoErr: "" });
-          else this.setState({ promo: null, promoErr: "Такого кода нет — но скидка от 6 станций сработает сама." });
-        },
-        msg: st.promo ? "Код " + st.promo + " принят: −" + PROMOS[st.promo] + "%" : st.promoErr || ((this.props.autoDiscount ?? false) ? "Скидка от " + (this.props.autoDiscountFrom ?? 6) + " станций начисляется автоматически." : "Если есть промокод — введите его здесь."),
-        msgStyle: "font-size:12px; margin-top:9px; line-height:1.45; color:" + (st.promo ? "#CDF98F" : st.promoErr ? "#FFB020" : "#6E6E7A")
-      },
+      hasPacks: this.packList().length > 0,
+      packCards: this.packList().map((p) => {
+        const on = st.pack === p.id;
+        const rt = RATE[d && (d.getDay() === 0 || d.getDay() === 6) ? "we" : "wd"];
+        const hourly = ((rt.vr * p.vr + rt.ps5 * p.ps5) * p.dur) / 60;
+        const grid = this.slotListFor(p.dur);
+        const inGrid = st.slot != null && grid.indexOf(st.slot) > -1;
+        const fitsTime = club && st.slot != null && st.slot + p.dur <= club.close && inGrid;
+        const freeNow = freeIds.length;
+        const fitsFree = freeNow >= p.n;
+        const ok = fitsTime && fitsFree;
+        const nearer = grid.filter((t) => t <= (st.slot || 0)).pop();
+        const why = !fitsFree ? "на " + hhmm(st.slot || 0) + " свободно " + freeNow + " — выберите другое время"
+          : !inGrid ? (nearer != null ? "сеанс на " + p.dur / 60 + " ч начинается в " + hhmm(nearer) + " — выберите этот слот" : "выберите время раньше")
+          : "не влезает до закрытия — выберите время раньше";
+        return {
+          name: p.name, note: p.note, price: money(p.price),
+          compare: ok ? (hourly > p.price ? "по часам — " + money(hourly) : "") : why,
+          compareStyle: ok
+            ? "font-size:12px; color:#6E6E7A; text-decoration:line-through" + (hourly > p.price ? "" : "; display:none")
+            : "font-size:12px; color:#FFB020; max-width:24ch; text-wrap:pretty",
+          style: "display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px; border-radius:14px; cursor:" + (ok ? "pointer" : "not-allowed") + "; text-align:left; border:1px solid " + (on && ok ? A : "#2A2A33") + "; background:" + (on && ok ? At + "0.14)" : ok ? "#15151A" : "repeating-linear-gradient(135deg, #15151A 0 6px, #121217 6px 12px)") + "; color:" + (ok ? "#F2F2F5" : "#7C7C88"),
+          onClick: !ok ? () => {} : () => {
+            if (on) return this.setState({ pack: null });
+            this.setState({ pack: p.id, duration: p.dur, picked: freeIds.slice(0, p.n), conflictShown: false });
+          }
+        };
+      }),
 
       sum: (() => {
         const end = st.slot ? st.slot + st.duration : 0;
@@ -330,7 +469,7 @@ class Component extends DCLogic {
           timeRange: st.slot ? hhmm(st.slot) + "–" + hhmm(end) : "",
           durationLabel: DUR[st.duration] || st.duration + " мин",
           lines, people: ppl + " " + plural(parseInt(ppl, 10) || 0, "человека", "человек", "человек"),
-          hasDiscount: T.pct > 0, discountLabel: T.label, discountSum: money(T.disc),
+          hasDiscount: !!T.pack, discountLabel: T.label, discountSum: money(T.disc),
           total: money(T.net), contact: (st.name || "—") + ", " + (st.phone || "телефон не указан")
         };
       })(),
@@ -338,18 +477,18 @@ class Component extends DCLogic {
       bar: (() => {
         const n = st.picked.length;
         const ready = n > 0 && st.name.trim().length > 1 && st.phone.trim().length > 5;
-        const line = !club ? "Выберите клуб" : !st.slot ? club.name + " · " + (hall ? hall.name : "") : n === 0 ? "Отметьте станции на плане" : n + " " + plural(n, "станция", "станции", "станций") + " · " + hhmm(st.slot) + "–" + hhmm(st.slot + st.duration);
+        const line = !club ? "Выберите клуб" : !st.slot ? club.name + " · " + (hall ? hall.name : "") : n === 0 ? "Отметьте места на плане" : n + " " + plural(n, "место", "места", "мест") + " · " + hhmm(st.slot) + "–" + hhmm(st.slot + st.duration);
         const active = n > 0;
         return {
           line, total: n ? money(T.net) : "—",
-          old: T.pct > 0 ? money(T.gross) : "",
-          oldStyle: "font-size:13px; color:#6E6E7A; text-decoration:line-through" + (T.pct > 0 ? "" : "; display:none"),
+          old: T.pack && T.disc > 0 ? money(T.gross) : "",
+          oldStyle: "font-size:13px; color:#6E6E7A; text-decoration:line-through" + (T.pack && T.disc > 0 ? "" : "; display:none"),
           cta: n === 0 ? "Далее" : ready ? "Забронировать" : "Заполните контакты",
           btnStyle: "flex:none; padding:14px 20px; border-radius:13px; border:none; font-size:15px; font-weight:700; cursor:" + (ready ? "pointer" : "not-allowed") + "; background:" + (ready ? A : active ? "#2A2A33" : "#202027") + "; color:" + (ready ? "#08090A" : "#6E6E7A"),
           onClick: !ready ? () => {} : () => {
             if (st.scenario === "conflict" && !st.conflictShown) {
               this.setState((s) => ({ stolen: s.picked[0], picked: s.picked.slice(1), conflictShown: true }));
-            } else this.setState({ view: "done" });
+            } else this.saveBooking();
           }
         };
       })(),
@@ -359,12 +498,12 @@ class Component extends DCLogic {
         const alt = hall && st.slot ? this.stationsOf(hall).find((s) => !this.isBusy(st.slot, s.id) && !st.picked.includes(s.id)) : null;
         return {
           show: st.conflictShown && !!st.stolen,
-          title: "Одну станцию забрали, пока вы оформляли",
+          title: "Одно место забрали, пока вы оформляли",
           text: stolenName + " на " + hhmm(st.slot || 0) + " только что забронировали. "
             + (st.picked.length === 0
-                ? (alt ? "Это была ваша единственная станция — свободна " + alt.name + " в этом же зале." : "Свободных станций в этом зале на это время больше нет.")
-                : "Остальные " + st.picked.length + " " + plural(st.picked.length, "станцию", "станции", "станций") + " держим за вами"
-                  + (alt ? " — свободна " + alt.name + " в этом же зале." : ", свободных в этом зале больше нет.")),
+                ? (alt ? "Это было ваше единственное место — свободно " + alt.name + " в этом же зале." : "Свободных мест в этом зале на это время больше нет.")
+                : "Остальные " + st.picked.length + " " + plural(st.picked.length, "место", "места", "мест") + " держим за вами"
+                  + (alt ? " — свободно " + alt.name + " в этом же зале." : ", свободных в этом зале больше нет.")),
           keepLabel: alt ? "Взять " + alt.name : st.picked.length === 0 ? "Выбрать другое время" : "Продолжить без неё",
           onKeep: () => {
             if (alt) this.setState((s) => ({ picked: s.picked.concat(alt.id), conflictShown: false }));
@@ -377,7 +516,7 @@ class Component extends DCLogic {
 
       empty: {
         title: "На " + (d ? d.getDate() + " " + MONL[d.getMonth()] : "эту дату") + " всё занято",
-        text: "В этом зале не осталось ни одной свободной станции. Ближайшие варианты:",
+        text: "В этом зале не осталось ни одного свободного места. Ближайшие варианты:",
         actions: [
           { label: "Посмотреть " + (dates[st.dateIdx + 1] ? dates[st.dateIdx + 1].getDate() + " " + MONL[dates[st.dateIdx + 1].getMonth()] : "следующий день"), primary: true, onClick: () => this.setState({ dateIdx: Math.min(st.dateIdx + 1, 9), freed: true, slot: null, picked: [] }) },
           club && club.halls.length > 1
@@ -391,13 +530,13 @@ class Component extends DCLogic {
       },
 
       bookingNo: "VR-" + (1200 + st.dateIdx * 7 + st.picked.length),
-      reset: () => this.setState({ view: "form", clubId: null, hallId: null, slot: null, picked: [], name: "", phone: "", people: "", promo: null, promoInput: "", stolen: null, conflictShown: false }),
+      reset: () => this.setState({ view: "form", clubId: null, hallId: null, slot: null, picked: [], name: st.me ? st.meName : "", phone: st.me || "", people: "", pack: null, stolen: null, conflictShown: false }),
 
       notes: [
-        { title: "Время → станции", text: "Сначала слот: под каждым временем строка точек — сколько станций свободно из всех в зале. Дальше открывается план зала, где видно, кто где стоит." },
-        { title: "Свободно / занято / моё", text: "Занятые станции заштрихованы и подписаны зачёркнутым «занято». Выбранные получают двойную рамку и подпись «✓ моя». Разница читается без цвета." },
+        { title: "Время → места", text: "Сначала слот: под каждым временем строка точек — сколько шлемов и PS5 свободно из всех в зале. Дальше открывается план зала, где видно, кто где стоит." },
+        { title: "Свободно / занято / моё", text: "Занятые места заштрихованы и подписаны зачёркнутым «занято». Выбранные получают двойную рамку и подпись «✓ моя». Разница читается без цвета." },
         { title: "Всё занято", text: "Переключатель «Всё занято» вверху: вместо пустой сетки — три конкретных выхода (следующий день, другой зал, сеанс на 1 час)." },
-        { title: "Конфликт брони", text: "Переключатель «Конфликт брони», затем нажмите «Забронировать»: одну станцию забирают, остальной выбор сохраняется, сразу предлагается свободная замена в том же зале." }
+        { title: "Конфликт брони", text: "Переключатель «Конфликт брони», затем нажмите «Забронировать»: одно место забирают, остальной выбор сохраняется, сразу предлагается свободная замена в том же зале." }
       ]
     };
   }
