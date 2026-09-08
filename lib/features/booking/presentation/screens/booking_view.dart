@@ -20,6 +20,7 @@ import '../components/contact_form.dart';
 import '../components/date_field.dart';
 import '../components/duration_selector.dart';
 import '../components/empty_day_state.dart';
+import '../components/account_block.dart';
 import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
 import '../components/package_cards.dart';
@@ -242,7 +243,23 @@ class _FormBody extends StatelessWidget {
           steps: state.stepCount,
           accent: accent,
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
+        AccountBlock(
+          account: state.account,
+          myBookings: state.myBookings,
+          loginOpen: state.accountLoginOpen,
+          loginPhone: state.accountLoginPhone,
+          listOpen: state.accountListOpen,
+          accent: accent,
+          onPrimary: () => bloc.add(state.account != null
+              ? const BookingAccountListToggled()
+              : const BookingAccountLoginToggled()),
+          onLogout: () => bloc.add(const BookingAccountLoggedOut()),
+          onLoginPhoneChanged: (String v) =>
+              bloc.add(BookingAccountLoginPhoneChanged(v)),
+          onLoginSubmit: () => bloc.add(const BookingAccountLoginSubmitted()),
+        ),
+        const SizedBox(height: 20),
         if (state.conflictShown) ...<Widget>[
           _conflict(bloc),
           const SizedBox(height: 4),

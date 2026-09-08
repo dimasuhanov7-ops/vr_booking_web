@@ -112,6 +112,17 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 выбора, показывает `ConflictBanner` с заменой из того же зала. Остальной выбор
 сохраняется.
 
+## Редизайн виджета (Claude Design 2026-09-07) — статус
+
+Слои `data/domain/presentation` перекроены под новый макет
+([`design/DESIGN_SPEC.md §0`](design/DESIGN_SPEC.md)):
+1. ✅ Десктоп 2 колонки (≥860px), `_frameWide` 1000px, заглушка правой колонки.
+2. ✅ Карточки-поля (`FieldCard`) для даты/длительности + строки тарифа.
+3. ✅ Пакеты (`booking_packages` — **миграция не применена**; `PackageCards`).
+4. ✅ Аккаунт по телефону (`AccountBlock` + localStorage).
+5. ⬜ Чек с пунктирными разделителями (успех) — осталось.
+Слоты/план зала уже были по макету.
+
 ## Встраивание в `<iframe>` — [`docs/EMBED.md`](docs/EMBED.md)
 
 Публичный контракт для сайтов клубов (`effectvr.ru`, `vrayarena.ru`) и VK.

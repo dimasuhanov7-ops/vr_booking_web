@@ -3,9 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app/config/booking_config.dart';
 import '../features/admin/data/repository/admin_repository_mock.dart';
 import '../features/admin/domain/repository/i_admin_repository.dart';
+import '../features/booking/data/account_store.dart';
 import '../features/booking/data/repository/booking_repository.dart';
 import '../features/booking/data/repository/booking_repository_api.dart';
 import '../features/booking/data/repository/booking_repository_mock.dart';
+import '../features/booking/domain/repository/i_account_store.dart';
 import '../features/booking/domain/repository/i_booking_repository.dart';
 
 /// Простейший контейнер зависимостей уровня приложения.
@@ -50,4 +52,9 @@ class Injection {
   /// Репозиторий админки (пока только in-memory — раздел на моках).
   IAdminRepository get adminRepository =>
       _adminRepository ??= const AdminRepositoryMock();
+
+  /// Локальное хранилище клиента (`localStorage`).
+  IAccountStore get accountStore => _accountStore ??= const AccountStore();
+
+  IAccountStore? _accountStore;
 }

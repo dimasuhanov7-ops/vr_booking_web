@@ -54,6 +54,11 @@ class BookingState extends Equatable {
     this.clientPhone = '',
     this.peopleInput = '',
     this.quote = QuoteEntity.empty,
+    this.account,
+    this.savedBookings = const <SavedBookingEntity>[],
+    this.accountLoginOpen = false,
+    this.accountLoginPhone = '',
+    this.accountListOpen = false,
     this.createdOrderId,
     this.errorMessage,
   });
@@ -126,6 +131,30 @@ class BookingState extends Equatable {
 
   /// Итоговый расчёт.
   final QuoteEntity quote;
+
+  /// Запомненный клиент (`localStorage`), если есть.
+  final AccountEntity? account;
+
+  /// Локально сохранённые брони (этого устройства).
+  final List<SavedBookingEntity> savedBookings;
+
+  /// Открыта панель входа по телефону.
+  final bool accountLoginOpen;
+
+  /// Ввод телефона в панели входа.
+  final String accountLoginPhone;
+
+  /// Открыт список «мои брони».
+  final bool accountListOpen;
+
+  /// Брони запомненного клиента.
+  List<SavedBookingEntity> get myBookings {
+    final AccountEntity? a = account;
+    if (a == null) return const <SavedBookingEntity>[];
+    return savedBookings
+        .where((SavedBookingEntity b) => b.phone == a.phone)
+        .toList(growable: false);
+  }
 
   /// Идентификатор созданной брони.
   final String? createdOrderId;
@@ -299,9 +328,15 @@ class BookingState extends Equatable {
     String? clientPhone,
     String? peopleInput,
     QuoteEntity? quote,
+    AccountEntity? account,
+    List<SavedBookingEntity>? savedBookings,
+    bool? accountLoginOpen,
+    String? accountLoginPhone,
+    bool? accountListOpen,
     String? createdOrderId,
     String? errorMessage,
     bool clearSlot = false,
+    bool clearAccount = false,
     bool clearHall = false,
     bool clearPackage = false,
     bool clearError = true,
@@ -331,6 +366,11 @@ class BookingState extends Equatable {
       clientPhone: clientPhone ?? this.clientPhone,
       peopleInput: peopleInput ?? this.peopleInput,
       quote: quote ?? this.quote,
+      account: clearAccount ? null : (account ?? this.account),
+      savedBookings: savedBookings ?? this.savedBookings,
+      accountLoginOpen: accountLoginOpen ?? this.accountLoginOpen,
+      accountLoginPhone: accountLoginPhone ?? this.accountLoginPhone,
+      accountListOpen: accountListOpen ?? this.accountListOpen,
       createdOrderId: createdOrderId ?? this.createdOrderId,
       errorMessage: clearError ? errorMessage : (errorMessage ?? this.errorMessage),
     );
@@ -361,6 +401,11 @@ class BookingState extends Equatable {
         clientPhone,
         peopleInput,
         quote,
+        account,
+        savedBookings,
+        accountLoginOpen,
+        accountLoginPhone,
+        accountListOpen,
         createdOrderId,
         errorMessage,
       ];

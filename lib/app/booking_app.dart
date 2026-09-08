@@ -43,6 +43,7 @@ class BookingApp extends StatelessWidget {
           : BlocProvider<BookingBloc>(
               create: (_) => BookingBloc(
                 repository: Injection.instance.bookingRepository,
+                accountStore: Injection.instance.accountStore,
                 source: params.source,
                 lockedClubSlug: params.clubSlug,
                 initialDate: params.initialDate,

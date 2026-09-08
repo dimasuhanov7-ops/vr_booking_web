@@ -5,6 +5,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../entity/account_entity.dart';
 import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
 import '../entity/club_entity.dart';
@@ -15,6 +16,7 @@ import '../entity/quote_entity.dart';
 import '../entity/reservation_request_entity.dart';
 import '../entity/station_entity.dart';
 import '../entity/time_slot_entity.dart';
+import '../repository/i_account_store.dart';
 import '../repository/i_booking_repository.dart';
 import '../service/club_clock.dart';
 import '../service/pricing_service.dart';
@@ -28,6 +30,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   /// Создаёт BLoC.
   BookingBloc({
     required IBookingRepository repository,
+    IAccountStore? accountStore,
     SlotGeneratorService slotGenerator = const SlotGeneratorService(),
     PricingService pricingService = const PricingService(),
     String source = 'site',
@@ -35,6 +38,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     DateTime? initialDate,
     int? initialDurationMinutes,
   })  : _repository = repository,
+        _account = accountStore,
         _slots = slotGenerator,
         _pricing = pricingService,
         _source = source,
@@ -58,9 +62,15 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingConflictResolved>(_onConflictResolved);
     on<BookingConflictDismissed>(_onConflictDismissed);
     on<BookingResetRequested>(_onResetRequested);
+    on<BookingAccountLoginToggled>(_onAccountLoginToggled);
+    on<BookingAccountLoginPhoneChanged>(_onAccountLoginPhoneChanged);
+    on<BookingAccountLoginSubmitted>(_onAccountLoginSubmitted);
+    on<BookingAccountLoggedOut>(_onAccountLoggedOut);
+    on<BookingAccountListToggled>(_onAccountListToggled);
   }
 
   final IBookingRepository _repository;
+  final IAccountStore? _account;
   final SlotGeneratorService _slots;
   final PricingService _pricing;
   final String _source;
@@ -78,6 +88,19 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   // ---------------------------------------------------------------------------
 
   Future<void> _onStarted(BookingStarted event, Emitter<BookingState> emit) async {
+    // Запомненный клиент и его брони с этого устройства.
+    final AccountEntity? account = _account?.readAccount();
+    final List<SavedBookingEntity> saved =
+        _account?.readBookings() ?? const <SavedBookingEntity>[];
+    if (account != null || saved.isNotEmpty) {
+      emit(state.copyWith(
+        account: account,
+        savedBookings: saved,
+        clientName: account?.name ?? state.clientName,
+        clientPhone: account?.phone ?? state.clientPhone,
+      ));
+    }
+
     emit(state.copyWith(status: BookingStatus.loading));
     try {
       final List<ClubEntity> clubs = await _repository.fetchClubs();
@@ -322,16 +345,139 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           packageId: state.packageApplies ? state.selectedPackageId : null,
         ),
       );
+      _rememberBooking(orderId, club, slot);
       emit(state.copyWith(
         status: BookingStatus.ready,
         view: BookingStage.done,
         createdOrderId: orderId,
+        account: _account != null
+            ? AccountEntity(
+                phone: state.clientPhone.trim(), name: state.clientName.trim())
+            : null,
+        savedBookings: _account?.readBookings(),
       ));
     } on SlotAlreadyTakenFailure {
       await _handleConflict(emit);
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.ready, errorMessage: e.message));
     }
+  }
+
+  /// Пишет клиента и бронь в локальное хранилище (`localStorage`).
+  /// Не должно ронять бронь — любая ошибка форматирования/хранилища глотается.
+  void _rememberBooking(String orderId, ClubEntity club, TimeSlotEntity slot) {
+    final IAccountStore? store = _account;
+    if (store == null) return;
+    try {
+      final String phone = state.clientPhone.trim();
+      final String name = state.clientName.trim();
+      store.writeAccount(AccountEntity(phone: phone, name: name));
+
+      final int n = state.pickedIds.length;
+      final DateTime from = ClubClock(club).toWall(slot.startsAt);
+      final DateTime to = ClubClock(club).toWall(slot.endsAt);
+      String two(int v) => v.toString().padLeft(2, '0');
+      final String day = '${_dow(from.weekday)}, ${from.day} ${_mon(from.month)}';
+      final String rub = _rubles(state.quote.net.round());
+
+      store.addBooking(SavedBookingEntity(
+        orderId: orderId,
+        phone: phone,
+        name: name,
+        title: '${club.name} · ${state.hall?.name ?? ''}',
+        meta: '$day · ${two(from.hour)}:${two(from.minute)}–'
+            '${two(to.hour)}:${two(to.minute)} · $n ${_mest(n)}',
+        total: '$rub ₽',
+      ));
+    } catch (_) {
+      // локальная память броней — не критично
+    }
+  }
+
+  static const List<String> _dowShort = <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  static const List<String> _monShort = <String>[
+    'янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'
+  ];
+  static String _dow(int weekday) => _dowShort[(weekday - 1) % 7];
+  static String _mon(int month) => _monShort[(month - 1) % 12];
+
+  static String _rubles(int v) {
+    final String s = v.abs().toString();
+    final StringBuffer out = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) out.write(' ');
+      out.write(s[i]);
+    }
+    return out.toString();
+  }
+
+  static String _mest(int n) {
+    final int m10 = n % 10;
+    final int m100 = n % 100;
+    if (m10 == 1 && m100 != 11) return 'место';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'места';
+    return 'мест';
+  }
+
+  void _onAccountLoginToggled(
+    BookingAccountLoginToggled event,
+    Emitter<BookingState> emit,
+  ) {
+    emit(state.copyWith(accountLoginOpen: !state.accountLoginOpen));
+  }
+
+  void _onAccountLoginPhoneChanged(
+    BookingAccountLoginPhoneChanged event,
+    Emitter<BookingState> emit,
+  ) {
+    emit(state.copyWith(accountLoginPhone: event.phone));
+  }
+
+  void _onAccountLoginSubmitted(
+    BookingAccountLoginSubmitted event,
+    Emitter<BookingState> emit,
+  ) {
+    final String phone = state.accountLoginPhone.trim();
+    if (phone.replaceAll(RegExp(r'[^0-9]'), '').length != 11) return;
+    final IAccountStore? store = _account;
+    final List<SavedBookingEntity> saved =
+        store?.readBookings() ?? state.savedBookings;
+    final List<SavedBookingEntity> mine =
+        saved.where((SavedBookingEntity b) => b.phone == phone).toList();
+    // Имя — из последней брони на этом номере, иначе текущее из формы.
+    final String resolvedName =
+        mine.isNotEmpty ? mine.last.name : state.clientName;
+    final AccountEntity account =
+        AccountEntity(phone: phone, name: resolvedName);
+    store?.writeAccount(account);
+    emit(state.copyWith(
+      account: account,
+      savedBookings: saved,
+      clientName: resolvedName.isNotEmpty ? resolvedName : state.clientName,
+      clientPhone: phone,
+      accountLoginOpen: false,
+      accountLoginPhone: '',
+      accountListOpen: true,
+    ));
+  }
+
+  void _onAccountLoggedOut(
+    BookingAccountLoggedOut event,
+    Emitter<BookingState> emit,
+  ) {
+    _account?.clearAccount();
+    emit(state.copyWith(
+      clearAccount: true,
+      accountListOpen: false,
+      accountLoginOpen: false,
+    ));
+  }
+
+  void _onAccountListToggled(
+    BookingAccountListToggled event,
+    Emitter<BookingState> emit,
+  ) {
+    emit(state.copyWith(accountListOpen: !state.accountListOpen));
   }
 
   Future<void> _handleConflict(Emitter<BookingState> emit) async {
@@ -402,10 +548,15 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) {
     final List<ClubEntity> clubs = state.clubs;
     final bool locked = state.clubLocked;
+    final AccountEntity? account = state.account;
     emit(BookingState(
       status: BookingStatus.ready,
       clubs: clubs,
       clubLocked: locked,
+      account: account,
+      savedBookings: state.savedBookings,
+      clientName: account?.name ?? '',
+      clientPhone: account?.phone ?? '',
     ));
     if (locked && _lockedClubSlug != null) {
       final ClubEntity? match = clubs

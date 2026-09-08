@@ -163,3 +163,39 @@ class BookingResetRequested extends BookingEvent {
   /// Создаёт событие.
   const BookingResetRequested();
 }
+
+/// Открыть/закрыть панель входа по телефону.
+class BookingAccountLoginToggled extends BookingEvent {
+  /// Создаёт событие.
+  const BookingAccountLoginToggled();
+}
+
+/// Ввод телефона в панели входа.
+class BookingAccountLoginPhoneChanged extends BookingEvent {
+  /// Создаёт событие.
+  const BookingAccountLoginPhoneChanged(this.phone);
+
+  /// Введённый телефон.
+  final String phone;
+
+  @override
+  List<Object?> get props => <Object?>[phone];
+}
+
+/// Подтвердить вход по телефону.
+class BookingAccountLoginSubmitted extends BookingEvent {
+  /// Создаёт событие.
+  const BookingAccountLoginSubmitted();
+}
+
+/// Выйти (забыть клиента).
+class BookingAccountLoggedOut extends BookingEvent {
+  /// Создаёт событие.
+  const BookingAccountLoggedOut();
+}
+
+/// Открыть/закрыть список «мои брони».
+class BookingAccountListToggled extends BookingEvent {
+  /// Создаёт событие.
+  const BookingAccountListToggled();
+}
