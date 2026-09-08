@@ -28,11 +28,14 @@ class PricingService {
   }
 
   /// Полный расчёт по выбранным станциям.
+  ///
+  /// [minutesOf] возвращает суммарное время станции за сеанс — так одна бронь
+  /// может держать станцию не весь сеанс (12 шлемов в первый час, 6 во второй).
   QuoteEntity quote({
     required ClubEntity club,
     required List<StationEntity> stations,
     required DateTime startsAtUtc,
-    required int minutes,
+    required int Function(StationEntity station) minutesOf,
     required List<PriceRateEntity> rates,
     bool showRoomInLabel = false,
     num discountPercent = 0,
@@ -40,8 +43,12 @@ class PricingService {
   }) {
     final List<QuoteLineEntity> lines = stations.map((StationEntity s) {
       final String kind = s.type == StationType.ps5 ? 'PS5' : 'VR-шлем';
-      final String label =
-          showRoomInLabel ? '${s.roomName} · $kind ${s.label}' : '$kind ${s.label}';
+      final int mins = minutesOf(s);
+      final String hoursTag = mins > 0 && mins != 60 ? ' · ${mins ~/ 60} ч' : '';
+      final String label = (showRoomInLabel
+              ? '${s.roomName} · $kind ${s.label}'
+              : '$kind ${s.label}') +
+          hoursTag;
       return QuoteLineEntity(
         stationId: s.id,
         label: label,
@@ -49,7 +56,7 @@ class PricingService {
           club: club,
           station: s,
           startsAtUtc: startsAtUtc,
-          minutes: minutes,
+          minutes: mins,
           rates: rates,
         ),
       );

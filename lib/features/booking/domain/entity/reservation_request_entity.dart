@@ -1,11 +1,34 @@
 import 'package:equatable/equatable.dart';
 
-/// Данные для создания групповой брони на несколько станций одним слотом.
+/// Один непрерывный отрезок брони: набор станций на конкретное окно времени.
+/// Разбивка на отрезки позволяет держать разное число станций в разные часы.
+class ReservationSegmentEntity extends Equatable {
+  /// Создаёт отрезок.
+  const ReservationSegmentEntity({
+    required this.stationIds,
+    required this.startsAt,
+    required this.endsAt,
+  });
+
+  /// Станции этого отрезка.
+  final List<String> stationIds;
+
+  /// Начало отрезка (UTC).
+  final DateTime startsAt;
+
+  /// Конец отрезка (UTC).
+  final DateTime endsAt;
+
+  @override
+  List<Object?> get props => <Object?>[stationIds, startsAt, endsAt];
+}
+
+/// Данные для создания групповой брони (один или несколько отрезков).
 class ReservationRequestEntity extends Equatable {
   /// Создаёт запрос на бронь.
   const ReservationRequestEntity({
     required this.clubId,
-    required this.stationIds,
+    required this.segments,
     required this.startsAt,
     required this.minutes,
     required this.clientName,
@@ -20,13 +43,13 @@ class ReservationRequestEntity extends Equatable {
   /// Клуб брони.
   final String clubId;
 
-  /// Станции (одна или несколько станций, в т.ч. из разных залов).
-  final List<String> stationIds;
+  /// Отрезки брони. При «одинаковом составе на весь сеанс» — один отрезок.
+  final List<ReservationSegmentEntity> segments;
 
-  /// Начало сеанса (UTC).
+  /// Начало всего сеанса (UTC).
   final DateTime startsAt;
 
-  /// Длительность сеанса, минут (60/120/180/240).
+  /// Полная длительность сеанса, минут (для карточки/журнала).
   final int minutes;
 
   /// Имя клиента.
@@ -44,16 +67,22 @@ class ReservationRequestEntity extends Equatable {
   /// Комментарий.
   final String? comment;
 
-  /// Источник брони (`site` / `vk`).
+  /// Источник брони (`site` / `vk` / `admin`).
   final String source;
 
   /// Выбранный пакет, если применён.
   final String? packageId;
 
+  /// Все станции брони (объединение отрезков) — для репозиториев, которым
+  /// достаточно плоского списка.
+  List<String> get allStationIds => <String>{
+        for (final ReservationSegmentEntity s in segments) ...s.stationIds,
+      }.toList(growable: false);
+
   @override
   List<Object?> get props => <Object?>[
         clubId,
-        stationIds,
+        segments,
         startsAt,
         minutes,
         clientName,

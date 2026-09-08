@@ -145,7 +145,14 @@ class BookingRepositoryApi implements IBookingRepository {
       _guard(() async {
         final Map<String, dynamic> body = await _post('/reservations', <String, dynamic>{
           'club_id': request.clubId,
-          'station_ids': request.stationIds,
+          'segments': <Map<String, dynamic>>[
+            for (final ReservationSegmentEntity s in request.segments)
+              <String, dynamic>{
+                'station_ids': s.stationIds,
+                'starts_at': s.startsAt.toUtc().toIso8601String(),
+                'ends_at': s.endsAt.toUtc().toIso8601String(),
+              },
+          ],
           'starts_at': request.startsAt.toUtc().toIso8601String(),
           'minutes': request.minutes,
           'client_name': request.clientName,

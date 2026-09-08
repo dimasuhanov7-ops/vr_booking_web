@@ -74,16 +74,19 @@ class BookingSlotSelected extends BookingEvent {
   List<Object?> get props => <Object?>[slot];
 }
 
-/// Станция добавлена/убрана из выбора.
+/// Станция добавлена/убрана из выбора в конкретном часе сеанса.
 class BookingStationToggled extends BookingEvent {
   /// Создаёт событие.
-  const BookingStationToggled(this.stationId);
+  const BookingStationToggled(this.stationId, {this.hour = 0});
 
   /// Идентификатор станции.
   final String stationId;
 
+  /// Час сеанса (0-й, 1-й, …).
+  final int hour;
+
   @override
-  List<Object?> get props => <Object?>[stationId];
+  List<Object?> get props => <Object?>[stationId, hour];
 }
 
 /// Выбран/снят пакет. `null` — снять.
@@ -101,19 +104,43 @@ class BookingPackageSelected extends BookingEvent {
 /// Быстрый выбор: взять сразу [count] свободных станций (`-1` — все).
 class BookingQuickPicked extends BookingEvent {
   /// Создаёт событие.
-  const BookingQuickPicked(this.count);
+  const BookingQuickPicked(this.count, {this.hour = 0});
 
   /// Сколько станций взять (`-1` — все свободные).
   final int count;
 
+  /// Час сеанса.
+  final int hour;
+
   @override
-  List<Object?> get props => <Object?>[count];
+  List<Object?> get props => <Object?>[count, hour];
 }
 
-/// Сбросить выбор станций.
+/// Сбросить выбор станций. [hour] `null` — во всём сеансе, иначе — в этом часе.
 class BookingSelectionCleared extends BookingEvent {
   /// Создаёт событие.
-  const BookingSelectionCleared();
+  const BookingSelectionCleared({this.hour});
+
+  /// Час сеанса (`null` — весь сеанс).
+  final int? hour;
+
+  @override
+  List<Object?> get props => <Object?>[hour];
+}
+
+/// Скопировать состав часа [from] в час [to] («как в 1-м часе»).
+class BookingHourCopied extends BookingEvent {
+  /// Создаёт событие.
+  const BookingHourCopied({required this.from, required this.to});
+
+  /// Источник.
+  final int from;
+
+  /// Куда.
+  final int to;
+
+  @override
+  List<Object?> get props => <Object?>[from, to];
 }
 
 /// Изменены контактные данные.

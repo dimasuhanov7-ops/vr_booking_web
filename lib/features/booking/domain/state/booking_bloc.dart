@@ -56,6 +56,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingPackageSelected>(_onPackageSelected);
     on<BookingQuickPicked>(_onQuickPicked);
     on<BookingSelectionCleared>(_onSelectionCleared);
+    on<BookingHourCopied>(_onHourCopied);
     on<BookingContactChanged>(_onContactChanged);
     on<BookingAvailabilityRefreshed>(_onAvailabilityRefreshed);
     on<BookingSubmitted>(_onSubmitted);
@@ -140,7 +141,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       hallOptions: const <HallOptionEntity>[],
       stations: const <StationEntity>[],
       packages: const <PackageEntity>[],
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -184,7 +185,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) async {
     emit(state.copyWith(
       hall: event.hall,
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -200,7 +201,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) async {
     emit(state.copyWith(
       date: event.date,
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -215,7 +216,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) async {
     emit(state.copyWith(
       durationMinutes: event.minutes,
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -232,7 +233,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final PackageEntity? pkg = event.package;
     if (pkg == null || pkg.id == state.selectedPackageId) {
       emit(state.copyWith(
-        pickedIds: const <String>{},
+        clearPicks: true,
         takenIds: const <String>{},
         conflictShown: false,
         quote: QuoteEntity.empty,
@@ -246,7 +247,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     emit(state.copyWith(
       durationMinutes: pkg.minutes,
       selectedPackageId: pkg.id,
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -266,13 +267,13 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         .take(pkg.consoles)
         .map((StationEntity s) => s.id)
         .toList();
-    emit(_withPicked(<String>{...vr, ...ps}));
+    emit(_withHours(<int, Set<String>>{0: <String>{...vr, ...ps}}));
   }
 
   void _onSlotSelected(BookingSlotSelected event, Emitter<BookingState> emit) {
     emit(state.copyWith(
       slot: event.slot,
-      pickedIds: const <String>{},
+      clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
@@ -283,24 +284,54 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     BookingStationToggled event,
     Emitter<BookingState> emit,
   ) {
-    if (!state.isFree(event.stationId)) return;
-    final Set<String> next = Set<String>.of(state.pickedIds);
-    if (!next.remove(event.stationId)) next.add(event.stationId);
-    emit(_withPicked(next));
+    final int h = event.hour.clamp(0, state.hourCount - 1);
+    final bool picked = state.pickedAt(h).contains(event.stationId);
+    // Добавлять можно только свободную; убирать — всегда.
+    if (!picked && !state.isFreeAt(h, event.stationId)) return;
+    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    final Set<String> cur = Set<String>.of(state.pickedAt(h));
+    if (!cur.remove(event.stationId)) cur.add(event.stationId);
+    next[h] = cur;
+    emit(_withHours(next));
   }
 
   void _onQuickPicked(BookingQuickPicked event, Emitter<BookingState> emit) {
+    final int h = event.hour.clamp(0, state.hourCount - 1);
     final List<String> free =
-        state.freeHallStations.map((StationEntity s) => s.id).toList();
+        state.freeHallStationsAt(h).map((StationEntity s) => s.id).toList();
     final int n = event.count < 0 ? free.length : event.count.clamp(0, free.length);
-    emit(_withPicked(free.take(n).toSet()));
+    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    next[h] = free.take(n).toSet();
+    emit(_withHours(next));
   }
 
   void _onSelectionCleared(
     BookingSelectionCleared event,
     Emitter<BookingState> emit,
   ) {
-    emit(_withPicked(const <String>{}));
+    if (event.hour == null) {
+      emit(state.copyWith(
+        clearPicks: true,
+        takenIds: const <String>{},
+        conflictShown: false,
+        quote: QuoteEntity.empty,
+      ));
+      return;
+    }
+    final int h = event.hour!.clamp(0, state.hourCount - 1);
+    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    next[h] = <String>{};
+    emit(_withHours(next));
+  }
+
+  void _onHourCopied(BookingHourCopied event, Emitter<BookingState> emit) {
+    final int to = event.to.clamp(0, state.hourCount - 1);
+    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    next[to] = state
+        .pickedAt(event.from)
+        .where((String id) => state.isFreeAt(to, id))
+        .toSet();
+    emit(_withHours(next));
   }
 
   void _onContactChanged(
@@ -334,9 +365,9 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       final String orderId = await _repository.createReservation(
         ReservationRequestEntity(
           clubId: club.id,
-          stationIds: state.pickedIds.toList(growable: false),
+          segments: _segments(),
           startsAt: slot.startsAt,
-          minutes: state.durationMinutes,
+          minutes: state.hourCount * 60,
           clientName: state.clientName.trim(),
           clientPhone: state.clientPhone.trim(),
           peopleCount: int.tryParse(state.peopleInput.trim()),
@@ -486,20 +517,30 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         clubId: state.club!.id,
         day: state.date!,
       );
-      final TimeSlotEntity slot = state.slot!;
-      final Set<String> taken = state.pickedIds.where((String id) {
-        return busy.any((BusyIntervalEntity b) =>
-            b.stationId == id && b.overlaps(slot.startsAt, slot.endsAt));
-      }).toSet();
-      final Set<String> kept = Set<String>.of(state.pickedIds)..removeAll(taken);
+      // Пересобираем выбор по каждому часу, убирая ставшие занятыми станции.
+      final BookingState probe = state.copyWith(busy: busy);
+      final Set<String> taken = <String>{};
+      final Map<int, Set<String>> kept = <int, Set<String>>{};
+      for (int h = 0; h < state.hourCount; h++) {
+        final Set<String> was = state.pickedAt(h);
+        final Set<String> ok = <String>{};
+        for (final String id in was) {
+          if (probe.isFreeAt(h, id)) {
+            ok.add(id);
+          } else {
+            taken.add(id);
+          }
+        }
+        kept[h] = ok;
+      }
 
       emit(state.copyWith(
         status: BookingStatus.ready,
         busy: busy,
-        pickedIds: kept,
+        pickedByHour: kept,
         takenIds: taken,
         conflictShown: taken.isNotEmpty,
-        quote: _quoteFor(kept),
+        quote: _quote(kept),
       ));
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.ready, errorMessage: e.message));
@@ -512,15 +553,20 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) {
     final StationEntity? alt = state.conflictAlternative;
     if (alt != null) {
-      final Set<String> next = Set<String>.of(state.pickedIds)..add(alt.id);
-      emit(_withPicked(next).copyWith(conflictShown: false, takenIds: const <String>{}));
+      final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+      for (int h = 0; h < state.hourCount; h++) {
+        if (state.isFreeAt(h, alt.id)) {
+          next[h] = <String>{...state.pickedAt(h), alt.id};
+        }
+      }
+      emit(_withHours(next).copyWith(conflictShown: false, takenIds: const <String>{}));
       return;
     }
     if (state.pickedIds.isEmpty) {
       emit(state.copyWith(
         conflictShown: false,
         takenIds: const <String>{},
-        pickedIds: const <String>{},
+        clearPicks: true,
         quote: QuoteEntity.empty,
         clearSlot: true,
       ));
@@ -536,7 +582,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     emit(state.copyWith(
       conflictShown: false,
       takenIds: const <String>{},
-      pickedIds: const <String>{},
+      clearPicks: true,
       quote: QuoteEntity.empty,
       clearSlot: true,
     ));
@@ -590,64 +636,118 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       );
 
       TimeSlotEntity? keptSlot;
-      Set<String> keptPicked = const <String>{};
+      Map<int, Set<String>> keptHours = const <int, Set<String>>{};
       if (keepSelection && state.slot != null) {
         keptSlot = slots
             .where((TimeSlotEntity s) => s.startsAt == state.slot!.startsAt)
             .cast<TimeSlotEntity?>()
             .firstWhere((TimeSlotEntity? s) => true, orElse: () => null);
         if (keptSlot != null) {
-          keptPicked = state.pickedIds.where((String id) {
-            return !busy.any((BusyIntervalEntity b) =>
-                b.stationId == id && b.overlaps(keptSlot!.startsAt, keptSlot.endsAt));
-          }).toSet();
+          final BookingState probe =
+              state.copyWith(busy: busy, slot: keptSlot);
+          keptHours = <int, Set<String>>{
+            for (final MapEntry<int, Set<String>> e in state.pickedByHour.entries)
+              e.key: e.value
+                  .where((String id) =>
+                      e.key < probe.hourCount && probe.isFreeAt(e.key, id))
+                  .toSet(),
+          };
         }
       }
 
+      final bool clearPicks = keptHours.isEmpty;
       emit(state.copyWith(
         status: BookingStatus.ready,
         busy: busy,
         slots: slots,
         slot: keptSlot,
         clearSlot: !keepSelection || keptSlot == null,
-        pickedIds: keptPicked,
-        quote: keptPicked.isEmpty ? QuoteEntity.empty : _quoteFor(keptPicked),
+        clearPicks: clearPicks,
+        pickedByHour: clearPicks ? null : keptHours,
+        quote: clearPicks ? QuoteEntity.empty : _quote(keptHours),
       ));
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.failure, errorMessage: e.message));
     }
   }
 
-  BookingState _withPicked(Set<String> picked) {
+  /// Глубокая копия карты выбора по часам.
+  static Map<int, Set<String>> _cloneHours(Map<int, Set<String>> src) =>
+      <int, Set<String>>{
+        for (final MapEntry<int, Set<String>> e in src.entries)
+          e.key: Set<String>.of(e.value),
+      };
+
+  /// Отрезки брони: подряд идущие часы с одинаковым составом склеиваем в один.
+  List<ReservationSegmentEntity> _segments() {
+    final TimeSlotEntity slot = state.slot!;
+
+    // Состав каждого часа (только свободные станции).
+    final List<List<String>> perHour = <List<String>>[
+      for (int h = 0; h < state.hourCount; h++)
+        (state.pickedAt(h).where((String id) => state.isFreeAt(h, id)).toList()
+          ..sort()),
+    ];
+
+    bool sameIds(List<String> a, List<String> b) =>
+        a.length == b.length && a.every(b.contains);
+
+    final List<ReservationSegmentEntity> out = <ReservationSegmentEntity>[];
+    int runStart = 0;
+    for (int h = 1; h <= perHour.length; h++) {
+      final bool boundary = h == perHour.length || !sameIds(perHour[h - 1], perHour[h]);
+      if (!boundary) continue;
+      final List<String> ids = perHour[runStart];
+      if (ids.isNotEmpty) {
+        out.add(ReservationSegmentEntity(
+          stationIds: ids,
+          startsAt: slot.startsAt.add(Duration(minutes: runStart * 60)),
+          endsAt: slot.startsAt.add(Duration(minutes: h * 60)),
+        ));
+      }
+      runStart = h;
+    }
+    return out;
+  }
+
+  BookingState _withHours(Map<int, Set<String>> hours) {
+    final bool empty = hours.values.every((Set<String> s) => s.isEmpty);
     return state.copyWith(
-      pickedIds: picked,
+      pickedByHour: hours,
       conflictShown: false,
       takenIds: const <String>{},
-      quote: picked.isEmpty ? QuoteEntity.empty : _quoteFor(picked),
+      quote: empty ? QuoteEntity.empty : _quote(hours),
     );
   }
 
-  QuoteEntity _quoteFor(Set<String> pickedIds) {
+  QuoteEntity _quote(Map<int, Set<String>> hours) {
     final ClubEntity? club = state.club;
     final TimeSlotEntity? slot = state.slot;
-    if (club == null || slot == null || pickedIds.isEmpty) return QuoteEntity.empty;
-    final List<StationEntity> picked = state.stations
-        .where((StationEntity s) => pickedIds.contains(s.id))
+    if (club == null || slot == null) return QuoteEntity.empty;
+
+    final BookingState s = state.copyWith(pickedByHour: hours);
+    final Set<String> all = s.pickedIds;
+    if (all.isEmpty) return QuoteEntity.empty;
+
+    final List<StationEntity> picked = s.stations
+        .where((StationEntity st) => all.contains(st.id))
         .toList(growable: false);
     final QuoteEntity q = _pricing.quote(
       club: club,
       stations: picked,
       startsAtUtc: slot.startsAt,
-      minutes: state.durationMinutes,
+      minutesOf: (StationEntity st) => 60 * s.stationHours(st.id),
       rates: state.prices,
       showRoomInLabel: state.hall?.isCombo ?? false,
     );
 
-    // Пакет: если состав и длительность совпадают — фиксируем итог ценой пакета.
+    // Пакет: одинаковый состав на весь сеанс и совпадение — фиксируем цену пакета.
     final PackageEntity? pkg = state.selectedPackage;
-    if (pkg != null && state.durationMinutes == pkg.minutes) {
-      final int vr = picked.where((StationEntity s) => s.type != StationType.ps5).length;
-      final int ps = picked.where((StationEntity s) => s.type == StationType.ps5).length;
+    if (pkg != null && state.durationMinutes == pkg.minutes && !s.hasHourOverrides) {
+      final int vr =
+          picked.where((StationEntity st) => st.type != StationType.ps5).length;
+      final int ps =
+          picked.where((StationEntity st) => st.type == StationType.ps5).length;
       if (vr == pkg.headsets && ps == pkg.consoles) {
         return QuoteEntity(
           lines: q.lines,

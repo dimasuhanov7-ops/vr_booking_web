@@ -10,7 +10,13 @@ import 'package:vr_booking_web/features/booking/domain/entity/reservation_reques
 
 ReservationRequestEntity _req() => ReservationRequestEntity(
       clubId: 'c1',
-      stationIds: const <String>['s1', 's2'],
+      segments: <ReservationSegmentEntity>[
+        ReservationSegmentEntity(
+          stationIds: const <String>['s1', 's2'],
+          startsAt: DateTime.utc(2026, 9, 10, 15),
+          endsAt: DateTime.utc(2026, 9, 10, 19),
+        ),
+      ],
       startsAt: DateTime.utc(2026, 9, 10, 15),
       minutes: 240,
       clientName: 'Иван',
@@ -28,7 +34,9 @@ void main() {
       expect(r.headers['authorization'], 'Bearer k');
       final Map<String, dynamic> body = jsonDecode(r.body) as Map<String, dynamic>;
       expect(body['minutes'], 240);
-      expect(body['station_ids'], <String>['s1', 's2']);
+      final List<dynamic> segs = body['segments'] as List<dynamic>;
+      expect(segs, hasLength(1));
+      expect((segs.first as Map<String, dynamic>)['station_ids'], <String>['s1', 's2']);
       return http.Response(jsonEncode(<String, String>{'order_id': 'ord-1'}), 201);
     }));
     expect(await repo.createReservation(_req()), 'ord-1');

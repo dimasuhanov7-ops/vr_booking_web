@@ -138,7 +138,14 @@ class BookingRepository implements IBookingRepository {
             'p_club_id': request.clubId,
             'p_client_name': request.clientName,
             'p_client_phone': request.clientPhone,
-            'p_station_ids': request.stationIds,
+            'p_segments': <Map<String, dynamic>>[
+              for (final ReservationSegmentEntity s in request.segments)
+                <String, dynamic>{
+                  'station_ids': s.stationIds,
+                  'starts_at': s.startsAt.toUtc().toIso8601String(),
+                  'ends_at': s.endsAt.toUtc().toIso8601String(),
+                },
+            ],
             'p_starts_at': request.startsAt.toUtc().toIso8601String(),
             'p_minutes': request.minutes,
             'p_people_count': request.peopleCount,

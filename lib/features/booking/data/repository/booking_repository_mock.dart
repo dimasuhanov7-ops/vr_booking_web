@@ -124,18 +124,20 @@ class BookingRepositoryMock implements IBookingRepository {
       }
     }
     for (final ReservationRequestEntity r in _created) {
-      for (final String sid in r.stationIds) {
-        final StationEntity? s = stations
-            .where((StationEntity st) => st.id == sid)
-            .cast<StationEntity?>()
-            .firstWhere((StationEntity? st) => true, orElse: () => null);
-        if (s != null) {
-          busy.add(BusyIntervalEntity(
-            stationId: sid,
-            roomId: s.roomId,
-            startsAt: r.startsAt,
-            endsAt: r.startsAt.add(Duration(minutes: r.minutes)),
-          ));
+      for (final ReservationSegmentEntity seg in r.segments) {
+        for (final String sid in seg.stationIds) {
+          final StationEntity? s = stations
+              .where((StationEntity st) => st.id == sid)
+              .cast<StationEntity?>()
+              .firstWhere((StationEntity? st) => true, orElse: () => null);
+          if (s != null) {
+            busy.add(BusyIntervalEntity(
+              stationId: sid,
+              roomId: s.roomId,
+              startsAt: seg.startsAt,
+              endsAt: seg.endsAt,
+            ));
+          }
         }
       }
     }
@@ -152,9 +154,13 @@ class BookingRepositoryMock implements IBookingRepository {
   @override
   Future<String> createReservation(ReservationRequestEntity request) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    final bool clash = _created.any((ReservationRequestEntity r) =>
-        r.startsAt == request.startsAt &&
-        r.stationIds.any(request.stationIds.contains));
+    bool overlaps(ReservationSegmentEntity a, ReservationSegmentEntity b) =>
+        a.startsAt.isBefore(b.endsAt) && b.startsAt.isBefore(a.endsAt);
+    final bool clash = _created.any((ReservationRequestEntity r) => r.segments.any(
+        (ReservationSegmentEntity rs) => request.segments.any(
+            (ReservationSegmentEntity qs) =>
+                overlaps(rs, qs) &&
+                rs.stationIds.any(qs.stationIds.contains))));
     if (clash) throw const SlotAlreadyTakenFailure();
     _created.add(request);
     return 'mock-${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}';

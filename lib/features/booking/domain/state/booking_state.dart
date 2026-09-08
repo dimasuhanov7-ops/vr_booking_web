@@ -47,7 +47,7 @@ class BookingState extends Equatable {
     this.slots = const <TimeSlotEntity>[],
     this.busy = const <BusyIntervalEntity>[],
     this.slot,
-    this.pickedIds = const <String>{},
+    this.pickedByHour = const <int, Set<String>>{},
     this.takenIds = const <String>{},
     this.conflictShown = false,
     this.clientName = '',
@@ -111,8 +111,13 @@ class BookingState extends Equatable {
   /// Выбранный слот.
   final TimeSlotEntity? slot;
 
-  /// Выбранные станции.
-  final Set<String> pickedIds;
+  /// Выбранные станции по каждому часу сеанса (0-й час, 1-й, …).
+  ///
+  /// Хранится «разрежённо»: если для часа записи нет — он наследует выбор
+  /// ближайшего часа ниже (см. [pickedAt]). Так простой случай «одни и те же
+  /// станции на весь сеанс» — это одна запись под ключом `0`, а «12 в первый
+  /// час, 6 во второй» — записи под `0` и `1`.
+  final Map<int, Set<String>> pickedByHour;
 
   /// Станции, которые заняли при конфликте брони.
   final Set<String> takenIds;
@@ -174,6 +179,77 @@ class BookingState extends Equatable {
     return 4 - shift;
   }
 
+  /// Число часовых отрезков сеанса (60/120/180/… → 1/2/3/…).
+  int get hourCount => (durationMinutes / 60).round().clamp(1, 12);
+
+  /// Многочасовой сеанс с возможностью разного состава по часам.
+  bool get multiHour => hourCount > 1;
+
+  /// Станции, выбранные в час [h]. Если для часа нет явной записи —
+  /// наследуется выбор ближайшего часа ниже (в т.ч. 0-го).
+  Set<String> pickedAt(int h) {
+    for (int k = h; k >= 0; k--) {
+      final Set<String>? v = pickedByHour[k];
+      if (v != null) return v;
+    }
+    return const <String>{};
+  }
+
+  /// Задан ли для часа [h] собственный выбор (не наследованный).
+  bool isHourTouched(int h) => pickedByHour.containsKey(h);
+
+  /// Все станции за сеанс — объединение по часам.
+  Set<String> get pickedIds {
+    final Set<String> out = <String>{};
+    for (int h = 0; h < hourCount; h++) {
+      out.addAll(pickedAt(h));
+    }
+    return out;
+  }
+
+  /// Сколько часов забронирована станция [id].
+  int stationHours(String id) {
+    int n = 0;
+    for (int h = 0; h < hourCount; h++) {
+      if (pickedAt(h).contains(id)) n++;
+    }
+    return n;
+  }
+
+  /// Число выбранных станций в час [h].
+  int pickedCountAt(int h) => pickedAt(h).length;
+
+  /// Час-сеанс менялся руками (не «как везде»).
+  bool get hasHourOverrides {
+    final Set<String> h0 = pickedAt(0);
+    for (int h = 1; h < hourCount; h++) {
+      final Set<String> hh = pickedAt(h);
+      if (hh.length != h0.length || !hh.containsAll(h0)) return true;
+    }
+    return false;
+  }
+
+  /// Окно часа [h] внутри выбранного слота (UTC).
+  (DateTime, DateTime)? hourWindow(int h) {
+    final TimeSlotEntity? s = slot;
+    if (s == null) return null;
+    final DateTime start = s.startsAt.add(Duration(minutes: h * 60));
+    return (start, start.add(const Duration(minutes: 60)));
+  }
+
+  /// Свободна ли станция в конкретном часе сеанса.
+  bool isFreeAt(int h, String stationId) {
+    final (DateTime, DateTime)? w = hourWindow(h);
+    if (w == null) return false;
+    return !busy.any((BusyIntervalEntity b) =>
+        b.stationId == stationId && b.overlaps(w.$1, w.$2));
+  }
+
+  /// Свободные станции варианта зала в час [h].
+  List<StationEntity> freeHallStationsAt(int h) => hallStations
+      .where((StationEntity s) => s.isActive && isFreeAt(h, s.id))
+      .toList();
+
   /// Станции выбранного варианта зала, по порядку.
   List<StationEntity> get hallStations {
     final HallOptionEntity? h = hall;
@@ -187,12 +263,13 @@ class BookingState extends Equatable {
   List<String> get hallStationIds =>
       hallStations.map((StationEntity s) => s.id).toList(growable: false);
 
-  /// Свободна ли станция в выбранном слоте.
+  /// Свободна ли станция на весь выбранный слот (во все часы).
   bool isFree(String stationId) {
-    final TimeSlotEntity? s = slot;
-    if (s == null) return false;
-    return !busy.any((BusyIntervalEntity b) =>
-        b.stationId == stationId && b.overlaps(s.startsAt, s.endsAt));
+    if (slot == null) return false;
+    for (int h = 0; h < hourCount; h++) {
+      if (!isFreeAt(h, stationId)) return false;
+    }
+    return true;
   }
 
   /// Свободные станции варианта зала в выбранном слоте.
@@ -271,9 +348,11 @@ class BookingState extends Equatable {
   }
 
   /// Текущий выбор станций и длительность совпадают с выбранным пакетом.
+  /// Пакет — одинаковый состав на весь сеанс, поэтому при разных станциях
+  /// по часам он не применяется.
   bool get packageApplies {
     final PackageEntity? p = selectedPackage;
-    if (p == null || durationMinutes != p.minutes) return false;
+    if (p == null || durationMinutes != p.minutes || hasHourOverrides) return false;
     int vr = 0;
     int ps = 0;
     for (final StationEntity s in stations) {
@@ -300,8 +379,15 @@ class BookingState extends Equatable {
       clientName.trim().length > 1 &&
       clientPhone.replaceAll(RegExp(r'[^0-9]'), '').length >= 10;
 
-  /// Можно ли отправлять бронь.
-  bool get canSubmit => slot != null && pickedIds.isNotEmpty && isContactValid;
+  /// Можно ли отправлять бронь: слот выбран, контакты валидны и в каждом
+  /// часе сеанса выбрана хотя бы одна станция.
+  bool get canSubmit {
+    if (slot == null || !isContactValid) return false;
+    for (int h = 0; h < hourCount; h++) {
+      if (pickedAt(h).isEmpty) return false;
+    }
+    return true;
+  }
 
   /// Копия с изменениями.
   BookingState copyWith({
@@ -321,7 +407,8 @@ class BookingState extends Equatable {
     List<TimeSlotEntity>? slots,
     List<BusyIntervalEntity>? busy,
     TimeSlotEntity? slot,
-    Set<String>? pickedIds,
+    Map<int, Set<String>>? pickedByHour,
+    bool clearPicks = false,
     Set<String>? takenIds,
     bool? conflictShown,
     String? clientName,
@@ -359,7 +446,9 @@ class BookingState extends Equatable {
       slots: slots ?? this.slots,
       busy: busy ?? this.busy,
       slot: clearSlot ? null : (slot ?? this.slot),
-      pickedIds: pickedIds ?? this.pickedIds,
+      pickedByHour: clearPicks
+          ? const <int, Set<String>>{}
+          : (pickedByHour ?? this.pickedByHour),
       takenIds: takenIds ?? this.takenIds,
       conflictShown: conflictShown ?? this.conflictShown,
       clientName: clientName ?? this.clientName,
@@ -394,7 +483,7 @@ class BookingState extends Equatable {
         slots,
         busy,
         slot,
-        pickedIds,
+        pickedByHour,
         takenIds,
         conflictShown,
         clientName,
