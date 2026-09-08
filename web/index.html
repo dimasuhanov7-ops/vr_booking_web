@@ -8,6 +8,33 @@
   <meta name="description" content="Онлайн-бронирование VR-клубов Effect VR и V-Ray">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
+  <!--
+    CSP страницы. Здесь, а не только в заголовках сервера: конфиг хостинга
+    (.htaccess / nginx) может не доехать, а meta работает всегда.
+    frame-ancestors в meta игнорируется — он задаётся в web/_headers и .htaccess.
+
+    'wasm-unsafe-eval' нужен CanvasKit; www.gstatic.com — его аварийный источник,
+    если локальная папка canvaskit/ не доехала на хостинг.
+    connect-src — Supabase (PostgREST/RPC напрямую) и Edge Function.
+
+    fonts.gstatic.com: CanvasKit подтягивает оттуда Noto Sans для глифов,
+    которых нет в Archivo. Домен из РФ доступен не всегда, поэтому это
+    аварийный путь — недостающие символы лучше не использовать вовсе
+    (см. docs/AUDIT.md).
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob:;
+    font-src 'self' data: https://fonts.gstatic.com;
+    connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com https://cpjmirlujtfuzvdnysyx.supabase.co https://cpjmirlujtfuzvdnysyx.functions.supabase.co wss://cpjmirlujtfuzvdnysyx.supabase.co;
+    worker-src 'self' blob:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#08090A">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">

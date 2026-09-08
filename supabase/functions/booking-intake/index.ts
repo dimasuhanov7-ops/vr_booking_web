@@ -9,7 +9,12 @@
 //   supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx
 // Для Telegram-уведомлений задать секреты:
 //   supabase secrets set --project-ref cpjmirlujtfuzvdnysyx \
-//     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... [BOOKING_INTAKE_KEY=...] [BOOKING_CORS_ORIGIN=https://booking.example]
+//     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... [BOOKING_INTAKE_KEY=...] [BOOKING_CORS_ORIGIN=...]
+//
+// BOOKING_CORS_ORIGIN: "*" (по умолчанию) либо список origin через запятую —
+//   BOOKING_CORS_ORIGIN=https://booking.effectvr.ru,https://vrayarena.ru
+//   Для списка функция отражает Origin запроса (несколько значений в
+//   Access-Control-Allow-Origin браузер не принимает).
 //
 // verify_jwt=true на уровне шлюза Supabase: вызывающий шлёт
 // `Authorization: Bearer <anon key>` (или authenticated JWT). Функция дополнительно
@@ -28,16 +33,46 @@ const db = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
 });
 
-const cors = {
-  "Access-Control-Allow-Origin": CORS_ORIGIN,
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+/// BOOKING_CORS_ORIGIN — либо "*", либо список origin через запятую.
+/// Для списка отражаем Origin запроса: браузер не принимает несколько значений
+/// в Access-Control-Allow-Origin.
+const CORS_ALLOWED: string[] = CORS_ORIGIN.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function corsHeaders(req: Request): Record<string, string> {
+  const base: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
+  if (CORS_ALLOWED.length === 0 || CORS_ALLOWED.includes("*")) {
+    base["Access-Control-Allow-Origin"] = "*";
+    return base;
+  }
+  const origin = req.headers.get("origin") ?? "";
+  if (CORS_ALLOWED.includes(origin)) {
+    base["Access-Control-Allow-Origin"] = origin;
+    base["Vary"] = "Origin";
+  }
+  return base;
+}
+
+/// Добавляет CORS к готовому ответу — так заголовки зависят от запроса,
+/// а не от общей на весь процесс переменной.
+function withCors(req: Request, res: Response): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(corsHeaders(req))) headers.set(k, v);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -67,7 +102,9 @@ function reservationError(err: { code?: string; message?: string }): Response {
     return json({ error: "DISCOUNT_MIN_STATIONS", required_stations: n }, 422);
   }
   if (msg.includes("DISCOUNT_NOT_FOUND")) return json({ error: "DISCOUNT_NOT_FOUND" }, 422);
-  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH"]) {
+  if (msg.includes("RATE_LIMITED")) return json({ error: "RATE_LIMITED" }, 429);
+  if (msg.includes("TOO_MANY_ACTIVE")) return json({ error: "TOO_MANY_ACTIVE" }, 429);
+  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH"]) {
     if (msg.includes(e)) return json({ error: e }, 422);
   }
   return json({ error: "UNEXPECTED", detail: msg }, 500);
@@ -86,8 +123,12 @@ async function notifyTelegram(text: string): Promise<void> {
   }
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+Deno.serve(async (req: Request): Promise<Response> =>
+  withCors(req, await handle(req))
+);
+
+async function handle(req: Request): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response("ok");
   if (!authorized(req)) return json({ error: "UNAUTHORIZED" }, 401);
 
   const url = new URL(req.url);
@@ -234,4 +275,4 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch (e) {
     return json({ error: "UNEXPECTED", detail: String(e) }, 500);
   }
-});
+}

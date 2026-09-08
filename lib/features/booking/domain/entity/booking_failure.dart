@@ -41,6 +41,29 @@ class BookingWindowFailure extends BookingFailure {
       : super('Выбранное время недоступно для брони. Проверьте дату и рабочие часы клуба.');
 }
 
+/// С этого номера бронируют слишком часто (антиспам на стороне БД).
+class BookingRateLimitedFailure extends BookingFailure {
+  /// Создаёт ошибку превышения частоты.
+  const BookingRateLimitedFailure()
+      : super('С этого номера только что бронировали. '
+            'Подождите немного или позвоните в клуб.');
+}
+
+/// На номере уже слишком много будущих броней.
+class BookingTooManyActiveFailure extends BookingFailure {
+  /// Создаёт ошибку превышения числа активных броней.
+  const BookingTooManyActiveFailure()
+      : super('На этом номере уже несколько будущих броней. '
+            'Отмените лишние или позвоните в клуб.');
+}
+
+/// Телефон не похож на настоящий.
+class BookingBadPhoneFailure extends BookingFailure {
+  /// Создаёт ошибку некорректного телефона.
+  const BookingBadPhoneFailure()
+      : super('Проверьте номер телефона — он введён не полностью.');
+}
+
 /// Прочая непредвиденная ошибка сети/сервера.
 class BookingUnexpectedFailure extends BookingFailure {
   /// Создаёт непредвиденную ошибку.

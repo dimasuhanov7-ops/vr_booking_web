@@ -209,6 +209,9 @@ class BookingRepositoryApi implements IBookingRepository {
       'DISCOUNT_NOT_FOUND' => const DiscountNotFoundFailure(),
       'DISCOUNT_MIN_STATIONS' =>
         DiscountMinStationsFailure(requiredStations ?? 1),
+      'RATE_LIMITED' => const BookingRateLimitedFailure(),
+      'TOO_MANY_ACTIVE' => const BookingTooManyActiveFailure(),
+      'BAD_PHONE' => const BookingBadPhoneFailure(),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||
       'BAD_DURATION' ||

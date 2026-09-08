@@ -11,6 +11,17 @@
   RewriteRule ^ index.html [L]
 </IfModule>
 
+# --- Заголовки безопасности ---
+# X-Frame-Options не ставим намеренно: виджет встраивается iframe'ом в ВК и на
+# сайт клуба. Ограничиваем встраивание через frame-ancestors — список сайтов
+# правится здесь. Остальная CSP — в <meta> внутри index.html.
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+  Header set Content-Security-Policy "frame-ancestors 'self' https://effectvr.ru https://*.effectvr.ru https://vrayarena.ru https://*.vrayarena.ru https://*.vk.com https://*.vk.ru https://*.vk-apps.com"
+</IfModule>
+
 # --- Кэш ---
 <IfModule mod_headers.c>
   # По умолчанию всё контентно-адресуемое (хэш в имени или в /assets) — надолго
@@ -18,6 +29,11 @@
   # ...кроме входных файлов — они должны обновляться сразу после релиза
   <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|main\.dart\.js|version\.json)$">
     Header set Cache-Control "no-cache"
+  </FilesMatch>
+  # Ассеты Flutter (шрифты, манифесты) хэша в имени не имеют — год кэша означал
+  # бы, что смена шрифта не доедет до пользователей. Держим сутки.
+  <FilesMatch "\.(json|ttf|otf|woff2?)$">
+    Header set Cache-Control "public, max-age=86400"
   </FilesMatch>
 </IfModule>
 

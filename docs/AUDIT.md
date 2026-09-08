@@ -10,8 +10,8 @@
 
 | # | Проблема | Где | Риск |
 |---|---|---|---|
-| C1 | `anon` может писать в `booking_orders` / `booking_order_items` напрямую, минуя RPC | `20260904081507`, `grant insert … to anon` | Обход валидации цены, привязки станции к клубу, дописывание позиций в чужую бронь |
-| C2 | Нет никакого ограничения частоты броней | RPC + Edge Function | Одним скриптом занимается всё расписание обоих клубов на месяц вперёд |
+| C1 | ✅ **закрыто миграцией** — `anon` мог писать в `booking_orders` / `booking_order_items` напрямую, минуя RPC | `20260904081507`, `grant insert … to anon` | Обход валидации цены, привязки станции к клубу, дописывание позиций в чужую бронь |
+| C2 | ✅ **закрыто миграцией** — не было ограничения частоты броней | RPC + Edge Function | Одним скриптом занималось всё расписание обоих клубов на месяц вперёд |
 | C3 | ✅ **исправлено** — `BookingRepository.createReservation` слал `p_starts_at`/`p_minutes`, которых нет ни в одной сигнатуре RPC | `booking_repository.dart` | Прямой supabase-режим был сломан; прод спасал только `BOOKING_BACKEND=api` |
 | C4 | Реальный `AdminRepository.fetchRows` не понимает многоотрезочные брони | `admin_repository.dart:149` | Бронь «12→6→6» покажется в админке как 24 шлема на 1 час |
 
@@ -146,7 +146,31 @@ Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
 ```
 
-### 1.6 Мелочи и «на вырост»
+### 1.6 Внешняя зависимость от Google Fonts (найдено при внедрении CSP)
+
+Как только CSP заработала, выяснилось, что **CanvasKit в рантайме тянет Noto Sans
+с `fonts.gstatic.com`** — fallback для глифов, которых нет в Archivo. Раньше это
+было не видно: запрос уходит молча.
+
+Последствия:
+
+- виджет зависит от домена Google **в рантайме**, а `fonts.gstatic.com` из РФ
+  доступен не всегда — это ровно та причина, по которой в `DEPLOY.md` отказались
+  от Cloudflare;
+- каждый посетитель виджета делает запрос к Google (лишний трафик и след).
+
+Проверено: при заблокированном `fonts.gstatic.com` интерфейс отрисовывается
+**корректно** — видимые символы (`·`, `–`, `₽`, кириллица) покрыты Archivo.
+То есть зависимость не блокирующая, но лишняя. Один явный потребитель Noto был
+найден и убран: символ `✓` в подписи плитки станции заменён на `Icons.check`
+из бандла. Остаточные запросы (3 шт. на загрузку) — превентивный fallback
+CanvasKit.
+
+`fonts.gstatic.com` разрешён в CSP, чтобы ничего не сломать. **Задача:** снять
+зависимость полностью — проверить набор глифов Archivo и либо не использовать
+непокрытые символы, либо добавить локальный сабсет.
+
+### 1.7 Мелочи и «на вырост»
 
 - **Нет лимита на число отрезков** в новой `booking_create_order`. Каждый отрезок
   проверяется (60–300 мин, рабочие часы, не в прошлом), но их может быть 50 —
@@ -376,17 +400,28 @@ double _frameWidth(double vw) => switch (vw) {
 
 ## 6. План действий
 
-### Спринт 1 — безопасность и целостность (1–2 дня)
+### Спринт 1 — безопасность и целостность ✅ сделано в коде
 
-1. Миграция `2026xxxx_online_booking_lockdown.sql`:
+1. ✅ Миграция `20260911120000_online_booking_lockdown.sql`:
    - `revoke insert … from anon` + удаление двух anon-политик (C1);
-   - лимит броней на телефон в `booking_create_order` (C2);
-   - `v_seg_count > 5` → `BAD_DURATION`, проверка непересечения отрезков;
-   - удалить мёртвую `v_min_start`.
-2. ✅ Убрать `p_starts_at` / `p_minutes` из `booking_repository.dart` (C3).
-3. Задать `BOOKING_INTAKE_KEY`, собрать виджет с ним; сузить `BOOKING_CORS_ORIGIN`.
-4. CSP + `frame-ancestors` + `Referrer-Policy` в `_headers` / `.htaccess`.
-5. В `docs/DEPLOY.md` — чек-лист «`USE_MOCK` не задан в проде».
+   - лимиты: 3 брони/час и 5 активных на номер, сотрудник — без лимитов (C2);
+   - `source = 'staff'` только для авторизованного сотрудника;
+   - `v_seg_count > 5`, отрезки по возрастанию и без пересечений, общее окно ≤ 300 мин;
+   - убрана мёртвая `v_min_start`; функциональный индекс под лимиты.
+2. ✅ Убраны `p_starts_at` / `p_minutes` из `booking_repository.dart` (C3).
+3. ✅ Edge Function: коды `RATE_LIMITED` / `TOO_MANY_ACTIVE` → HTTP 429,
+   `BAD_PHONE` → 422; `BOOKING_CORS_ORIGIN` понимает список origin и отражает
+   Origin запроса (ВК и сайт клуба уживаются).
+4. ✅ Клиент: типизированные ошибки `BookingRateLimitedFailure`,
+   `BookingTooManyActiveFailure`, `BookingBadPhoneFailure` с текстами для клиента.
+5. ✅ CSP (в `<meta>`, работает независимо от хостинга) + `frame-ancestors`,
+   `Referrer-Policy`, `Permissions-Policy` в `_headers` / `.htaccess` / nginx.
+6. ✅ Кэш ассетов Flutter снижен с года до суток (в имени нет хэша).
+7. ✅ `docs/DEPLOY.md` — чек-лист перед выкладкой (`USE_MOCK`, `BOOKING_INTAKE_KEY`,
+   `ADMIN_GATE`, домены в `frame-ancestors`).
+
+**Осталось на стороне заказчика:** применить миграцию, передеплоить функцию,
+задать секреты `BOOKING_INTAKE_KEY` / `BOOKING_CORS_ORIGIN`.
 
 ### Спринт 2 — адаптивность (2–3 дня)
 

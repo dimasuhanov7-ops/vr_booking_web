@@ -12,12 +12,20 @@
 /version.json
   Cache-Control: no-cache
 
-# Контентно-адресуемые ресурсы — можно кэшировать надолго
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
+# CanvasKit версионирован по пути — можно кэшировать надолго
 /canvaskit/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Виджет встраивается iframe'ом в ВК и на сайт клуба
+# Ассеты Flutter (шрифты, манифесты) хэша в имени не имеют: год кэша означал бы,
+# что смена шрифта не доедет до пользователей. Держим сутки.
+/assets/*
+  Cache-Control: public, max-age=86400
+
+# Виджет встраивается iframe'ом в ВК и на сайт клуба, поэтому X-Frame-Options
+# ставить нельзя — вместо него frame-ancestors со списком разрешённых сайтов.
+# Остальная CSP — в <meta> внутри index.html (работает независимо от хостинга).
 /*
   X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  Content-Security-Policy: frame-ancestors 'self' https://effectvr.ru https://*.effectvr.ru https://vrayarena.ru https://*.vrayarena.ru https://*.vk.com https://*.vk.ru https://*.vk-apps.com

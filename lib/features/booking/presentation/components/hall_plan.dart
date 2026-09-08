@@ -346,20 +346,40 @@ class _Pod extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 13 * _k, fontWeight: FontWeight.w700, color: fg)),
             const SizedBox(height: 3),
-            Text(
-              taken ? 'заняли' : busy ? 'занято' : picked ? '✓ моя' : 'свободно',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10 * _k,
-                letterSpacing: 0.2,
-                decoration: busy && !taken ? TextDecoration.lineThrough : null,
-                color: picked
-                    ? tint
-                    : busy
-                        ? BookingColors.textDim
-                        : const Color(0xFF7C7C88),
-              ),
+            // Галочка — иконкой из бандла, а не символом «✓»: его нет в Archivo,
+            // и CanvasKit ради него тянул Noto Sans с fonts.gstatic.com.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (picked && !busy) ...<Widget>[
+                  Icon(Icons.check, size: 10 * _k, color: tint),
+                  SizedBox(width: 2 * _k),
+                ],
+                Flexible(
+                  child: Text(
+                    taken
+                        ? 'заняли'
+                        : busy
+                            ? 'занято'
+                            : picked
+                                ? 'моя'
+                                : 'свободно',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10 * _k,
+                      letterSpacing: 0.2,
+                      decoration:
+                          busy && !taken ? TextDecoration.lineThrough : null,
+                      color: picked
+                          ? tint
+                          : busy
+                              ? BookingColors.textDim
+                              : const Color(0xFF7C7C88),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

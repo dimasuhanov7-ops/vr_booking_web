@@ -31,6 +31,22 @@ FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh
 `BOOKING_API_BASE` → прод-функция, `BOOKING_API_KEY` → публичный anon-JWT
 (он публичный по замыслу, шлюз Supabase требует его для `verify_jwt`).
 
+### ⚠️ Чек-лист перед выкладкой
+
+- [ ] **`USE_MOCK` не задан.** В mock-сборке `AdminAuthGate` пропускает без
+      авторизации — админка окажется открыта миру. `tool/build_web.sh` флаг не
+      ставит, но при ручной сборке легко забыть. Проверить:
+      `grep -c 'USE_MOCK' build/web/main.dart.js` не показатель — надёжнее
+      открыть `build/web/index.html?admin=1` и убедиться, что просят email и пароль.
+- [ ] `BOOKING_BACKEND=api` (иначе виджет пойдёт в PostgREST напрямую).
+- [ ] Задан `BOOKING_INTAKE_KEY` и сборка идёт с тем же `BOOKING_API_KEY` —
+      иначе точку приёма брони можно дёргать любым anon-ключом (см. ниже).
+- [ ] `ADMIN_GATE` изменён с дефолтного `vr2026`.
+- [ ] `.htaccess` (Apache) или блок заголовков (nginx) доехали до корня —
+      без них не работают `frame-ancestors` и кэш-политика.
+- [ ] В `web/_headers` / `web/.htaccess` в `frame-ancestors` перечислены
+      реальные домены клубов.
+
 ## 2. Заливка на хостинг
 
 Скопировать **содержимое** `build/web/` (не саму папку) в корень поддомена
@@ -75,10 +91,26 @@ location ~* \.(js|wasm|json|otf|ttf|png|jpg|jpeg|gif|svg|bin|symbols)$ {
     add_header Cache-Control "public, max-age=31536000, immutable";
 }
 
+# ассеты Flutter без хэша в имени — сутки, не год
+location ~* ^/assets/ {
+    add_header Cache-Control "public, max-age=86400";
+}
+
+# заголовки безопасности (аналог web/_headers и web/.htaccess).
+# X-Frame-Options не ставим — виджет живёт в iframe; ограничиваем frame-ancestors.
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()" always;
+add_header Content-Security-Policy "frame-ancestors 'self' https://effectvr.ru https://*.effectvr.ru https://vrayarena.ru https://*.vrayarena.ru https://*.vk.com https://*.vk.ru https://*.vk-apps.com" always;
+
 types { application/wasm wasm; }
 gzip on;
 gzip_types text/css application/javascript application/json image/svg+xml;
 ```
+
+> В nginx `add_header` внутри `location` **отменяет** заголовки из родительского
+> блока. Если добавляете `add_header` в `location`, продублируйте там же и
+> заголовки безопасности.
 
 ## 4. HTTPS
 
@@ -88,14 +120,22 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 ## 5. После первого деплоя
 
-1. **CORS** на функции сейчас `*` — можно сузить на боевой домен:
+1. **CORS** на функции по умолчанию `*`. Функция понимает список origin через
+   запятую и отражает Origin запроса, так что ВК и сайт клуба уживаются:
    ```bash
    supabase secrets set --project-ref cpjmirlujtfuzvdnysyx \
-     BOOKING_CORS_ORIGIN=https://booking.<клуб>.ru
+     BOOKING_CORS_ORIGIN=https://booking.<клуб>.ru,https://vk.com
    ```
-   ⚠️ Если виджет открывается ещё и из ВК (Mini App) или с других origin —
-   оставить `*` либо доработать функцию под список доменов. Пока безопаснее `*`.
-2. **Встраивание** на сайт клуба и во ВК — контракт и пример слушателя
+2. **Ключ точки приёма.** Без `BOOKING_INTAKE_KEY` функция принимает любой
+   непустой Bearer, а шлюзу достаточно публичного anon-ключа — то есть эндпоинт
+   открыт всему интернету:
+   ```bash
+   supabase secrets set --project-ref cpjmirlujtfuzvdnysyx BOOKING_INTAKE_KEY=<длинная случайная строка>
+   ```
+   и собрать виджет с `--dart-define=BOOKING_API_KEY=<та же строка>`.
+   Ключ всё равно окажется в бандле (клиент публичный) — но это отсекает
+   автоматический перебор по чужим Supabase-проектам.
+3. **Встраивание** на сайт клуба и во ВК — контракт и пример слушателя
    в [`EMBED.md`](EMBED.md). Коротко:
    ```html
    <iframe src="https://book.effectvr.ru/?club=effect&source=site"
@@ -103,10 +143,12 @@ gzip_types text/css application/javascript application/json image/svg+xml;
            loading="lazy"></iframe>
    ```
    Высоту iframe родитель подгоняет по сообщению `vr-booking:height`.
-   `?club=` фиксирует клуб, `?source=vk` — для ВК. `_headers`/`.htaccess`
-   не ставят `X-Frame-Options`, iframe с любого origin разрешён.
-3. **Админка** — тот же бандл, `https://booking.<клуб>.ru/?admin=1`
-   (пока на моках, без авторизации — см. HANDOFF).
+   `?club=` фиксирует клуб, `?source=vk` — для ВК. `X-Frame-Options` не ставится
+   намеренно, но список разрешённых родителей задан в `frame-ancestors`
+   (`web/_headers`, `web/.htaccess`) — **добавьте туда домен клуба**, иначе
+   iframe не отрисуется.
+4. **Админка** — тот же бандл, `https://booking.<клуб>.ru/?admin=1`,
+   вход через Supabase Auth (аккаунт + строка в `booking_staff`).
 
 ## Обновление (каждый релиз)
 
