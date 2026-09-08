@@ -720,28 +720,31 @@ class _FormBody extends StatelessWidget {
     ];
   }
 
+  /// Состав клубов для карточек шага 1 — целиком из данных, без хардкода:
+  /// иначе при изменении состава в БД витрина показывала бы старые числа.
+  /// Для клуба без загруженных станций ключа нет — карточка рисуется без цифр.
   Map<String, ({int headsets, int consoles, int capacity})> _kits() {
-    // Для карточек клуба на шаге 1 используем данные уже выбранного клуба,
-    // остальным подставляем фиксированный состав из макета.
     final Map<String, ({int headsets, int consoles, int capacity})> out = {};
     for (final ClubEntity c in state.clubs) {
-      if (c.id == state.club?.id && state.stations.isNotEmpty) {
-        final int h = state.stations
-            .where((StationEntity s) => s.type == StationType.vrHeadset)
-            .length;
-        final int p = state.stations.length - h;
-        // «мест сразу» = максимум по одному залу
-        final Map<String, int> perRoom = <String, int>{};
-        for (final StationEntity s in state.stations) {
-          perRoom.update(s.roomId, (int v) => v + 1, ifAbsent: () => 1);
-        }
-        final int cap = perRoom.values.fold(0, (int a, int b) => a > b ? a : b);
-        out[c.id] = (headsets: h, consoles: p, capacity: cap);
-      } else {
-        out[c.id] = c.slug == 'v_ray'
-            ? (headsets: 16, consoles: 2, capacity: 12)
-            : (headsets: 4, consoles: 2, capacity: 6);
+      final List<StationEntity> list =
+          c.id == state.club?.id && state.stations.isNotEmpty
+              ? state.stations
+              : (state.stationsByClub[c.id] ?? const <StationEntity>[]);
+      if (list.isEmpty) continue;
+
+      final int h = list
+          .where((StationEntity s) => s.type == StationType.vrHeadset)
+          .length;
+      // «мест сразу» = максимум по одному залу: столько человек сядет вместе.
+      final Map<String, int> perRoom = <String, int>{};
+      for (final StationEntity s in list) {
+        perRoom.update(s.roomId, (int v) => v + 1, ifAbsent: () => 1);
       }
+      out[c.id] = (
+        headsets: h,
+        consoles: list.length - h,
+        capacity: perRoom.values.fold(0, (int a, int b) => a > b ? a : b),
+      );
     }
     return out;
   }

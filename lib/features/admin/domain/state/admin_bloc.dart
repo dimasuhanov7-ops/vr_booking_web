@@ -4,7 +4,9 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../app/config/booking_config.dart';
 import '../entity/admin_club_entity.dart';
+import '../entity/admin_failure.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
@@ -78,6 +80,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     try {
       await action();
       if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+    } on AdminFailure catch (e) {
+      // Репозиторий уже перевёл ошибку на язык сотрудника — в том числе
+      // отличил протухшую сессию от обрыва связи.
+      emit(state.copyWith(saveError: e.message));
     } catch (_) {
       emit(state.copyWith(saveError: 'Не удалось сохранить. Проверьте связь и права.'));
     }

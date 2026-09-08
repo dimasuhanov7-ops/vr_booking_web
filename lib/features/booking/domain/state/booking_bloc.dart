@@ -5,6 +5,8 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../app/config/booking_config.dart';
+
 import '../entity/account_entity.dart';
 import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
@@ -84,7 +86,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   int? _pendingDuration;
 
   /// Допустимые длительности сеанса, минут.
-  static const List<int> durations = <int>[60, 120, 180, 240, 300];
+  static const List<int> durations = BookingConfig.sessionDurations;
 
   // ---------------------------------------------------------------------------
 
@@ -118,7 +120,13 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         clubLocked: locked != null,
       ));
 
-      if (locked != null) add(BookingClubSelected(locked));
+      if (locked != null) {
+        add(BookingClubSelected(locked));
+      } else {
+        // Состав клубов для карточек первого шага. При зафиксированном клубе
+        // карточек нет — лишние запросы не делаем.
+        emit(state.copyWith(stationsByClub: await _loadKits(clubs)));
+      }
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.failure, errorMessage: e.message));
     }
@@ -669,6 +677,30 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.failure, errorMessage: e.message));
     }
+  }
+
+  /// Состав каждого клуба для карточек первого шага.
+  ///
+  /// Витрина, а не часть сценария: если станции клуба не загрузились, карточка
+  /// просто рисуется без цифр — ронять старт из-за этого нельзя.
+  Future<Map<String, List<StationEntity>>> _loadKits(
+    List<ClubEntity> clubs,
+  ) async {
+    final List<List<StationEntity>?> loaded = await Future.wait(
+      clubs.map((ClubEntity c) async {
+        try {
+          return await _repository.fetchStations(c.id);
+        } on BookingFailure {
+          return null;
+        }
+      }),
+    );
+    final Map<String, List<StationEntity>> out = <String, List<StationEntity>>{};
+    for (int i = 0; i < clubs.length; i++) {
+      final List<StationEntity>? list = loaded[i];
+      if (list != null && list.isNotEmpty) out[clubs[i].id] = list;
+    }
+    return out;
   }
 
   /// Глубокая копия карты выбора по часам.

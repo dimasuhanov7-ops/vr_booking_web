@@ -1,10 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entity/admin_club_entity.dart';
+import '../../domain/entity/admin_failure.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/entity/package_entity.dart';
 import '../../domain/repository/i_admin_repository.dart';
+import '../dto/booking_row_dto.dart';
 
 /// Реализация [IAdminRepository] поверх Supabase (PostgREST).
 ///
@@ -153,64 +155,23 @@ class AdminRepository implements IAdminRepository {
     final List<dynamic> orders = await _client
         .from('booking_orders')
         .select(
-          'id,club_id,client_name,client_phone,status,created_at,'
+          'id,club_id,client_name,client_phone,status,source,created_at,'
           'booking_packages(name),'
           'booking_order_items(starts_at,ends_at,booking_stations(type,room_id))',
         )
         .order('created_at', ascending: false)
-        .limit(300);
+        // TODO(booking): фильтровать по дате сеанса, а не брать хвост журнала —
+        // при большом потоке броней дальние даты могут не попасть в срез.
+        .limit(1000);
 
     final List<BookingRowEntity> out = <BookingRowEntity>[];
     for (final dynamic o in orders) {
-      final Map<String, dynamic> m = o as Map<String, dynamic>;
-      final List<dynamic> items =
-          (m['booking_order_items'] as List<dynamic>? ?? const <dynamic>[]);
-      if (items.isEmpty) continue;
-
-      final DateTime start = DateTime.parse(
-              (items.first as Map<String, dynamic>)['starts_at'] as String)
-          .toUtc()
-          .add(_tz);
-      final DateTime end = DateTime.parse(
-              (items.first as Map<String, dynamic>)['ends_at'] as String)
-          .toUtc()
-          .add(_tz);
-      final DateTime day = DateTime(start.year, start.month, start.day);
-
-      int vr = 0;
-      int ps = 0;
-      String hallId = '';
-      for (final dynamic it in items) {
-        final Map<String, dynamic>? st =
-            (it as Map<String, dynamic>)['booking_stations'] as Map<String, dynamic>?;
-        if (st == null) continue;
-        hallId = hallId.isEmpty ? (st['room_id'] as String? ?? '') : hallId;
-        if (st['type'] == 'ps5') {
-          ps++;
-        } else {
-          vr++;
-        }
-      }
-
-      final Map<String, dynamic>? pkg =
-          m['booking_packages'] as Map<String, dynamic>?;
-
-      out.add(BookingRowEntity(
-        id: m['id'] as String,
-        clubId: m['club_id'] as String,
-        hallId: hallId,
-        dayIndex: day.difference(today).inDays,
-        startMinutes: start.hour * 60 + start.minute,
-        durationMinutes: end.difference(start).inMinutes,
-        headsets: vr,
-        consoles: ps,
-        clientName: m['client_name'] as String? ?? '',
-        phone: m['client_phone'] as String? ?? '',
-        status: _recordStatus(m['status'] as String? ?? 'confirmed'),
-        source: RecordSource.widget,
-        packageName: pkg?['name'] as String?,
-        isCancelled: m['status'] == 'cancelled',
-      ));
+      final BookingRowEntity? row = BookingRowDto.fromOrderJson(
+        o as Map<String, dynamic>,
+        today: today,
+        tz: _tz,
+      );
+      if (row != null) out.add(row);
     }
     return out;
   }
@@ -224,7 +185,7 @@ class AdminRepository implements IAdminRepository {
     required int value,
   }) async {
     final ({String type, String day}) k = _priceKey(field);
-    await _client
+    await _guard(() => _client
         .from('booking_prices')
         .update(<String, dynamic>{
           'price_per_hour': value,
@@ -232,12 +193,12 @@ class AdminRepository implements IAdminRepository {
         })
         .eq('club_id', clubId)
         .eq('station_type', k.type)
-        .eq('day_kind', k.day);
+        .eq('day_kind', k.day));
   }
 
   @override
   Future<String> createPackage(PackageEntity draft) async {
-    final Map<String, dynamic> row = await _client
+    final Map<String, dynamic> row = await _guard(() => _client
         .from('booking_packages')
         .insert(<String, dynamic>{
           'club_id': draft.clubId,
@@ -250,13 +211,13 @@ class AdminRepository implements IAdminRepository {
           'is_active': draft.isEnabled,
         })
         .select('id')
-        .single();
+        .single());
     return row['id'] as String;
   }
 
   @override
   Future<void> updatePackage(PackageEntity package) async {
-    await _client.from('booking_packages').update(<String, dynamic>{
+    await _guard(() => _client.from('booking_packages').update(<String, dynamic>{
       'room_id': package.hallId.isEmpty ? null : package.hallId,
       'name': package.name,
       'headsets': package.headsets,
@@ -265,19 +226,45 @@ class AdminRepository implements IAdminRepository {
       'price': package.price,
       'is_active': package.isEnabled,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', package.id);
+    }).eq('id', package.id));
   }
 
   @override
   Future<void> deletePackage(String packageId) async {
-    await _client.from('booking_packages').delete().eq('id', packageId);
+    await _guard(
+        () => _client.from('booking_packages').delete().eq('id', packageId));
   }
 
   @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {
-    await _client.from('booking_orders').update(<String, dynamic>{
-      'status': cancelled ? 'cancelled' : 'confirmed',
-    }).eq('id', orderId);
+    await _guard(() => _client.from('booking_orders').update(<String, dynamic>{
+          'status': cancelled ? 'cancelled' : 'confirmed',
+        }).eq('id', orderId));
+  }
+
+  /// Переводит ошибку PostgREST в [AdminFailure] с понятным сотруднику текстом.
+  ///
+  /// Главное — отличить «сессия истекла / прав нет» от обрыва связи: в первом
+  /// случае помогает только повторный вход, и сотрудник должен это понимать.
+  Future<T> _guard<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on PostgrestException catch (e) {
+      final String m = e.message.toLowerCase();
+      // 42501 — insufficient_privilege (в т.ч. отказ RLS);
+      // PGRST301 / JWT expired — протухший или отозванный токен.
+      if (e.code == '42501' ||
+          e.code == 'PGRST301' ||
+          m.contains('jwt') ||
+          m.contains('row-level security')) {
+        throw const AdminFailure.auth();
+      }
+      throw AdminFailure('Сервер отклонил изменение: ${e.message}');
+    } on AdminFailure {
+      rethrow;
+    } catch (_) {
+      throw const AdminFailure('Нет связи с сервером. Попробуйте ещё раз.');
+    }
   }
 
   // -- утилиты -----------------------------------------------------------
@@ -308,10 +295,4 @@ class AdminRepository implements IAdminRepository {
         PriceField.ps5Weekend => (type: 'ps5', day: 'weekend'),
       };
 
-  static RecordStatus _recordStatus(String raw) => switch (raw) {
-        'completed' => RecordStatus.paid,
-        'confirmed' => RecordStatus.confirmed,
-        'cancelled' => RecordStatus.confirmed, // помечается через cancelledRowIds
-        _ => RecordStatus.newRequest,
-      };
 }

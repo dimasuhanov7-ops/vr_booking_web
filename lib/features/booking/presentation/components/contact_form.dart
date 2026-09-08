@@ -100,6 +100,20 @@ class _FieldState extends State<_Field> {
   late final TextEditingController _c = TextEditingController(text: widget.initial);
 
   @override
+  void didUpdateWidget(covariant _Field old) {
+    super.didUpdateWidget(old);
+    // Значение пришло извне — например, вход по телефону подставил контакты.
+    // Собственный ввод не трогаем: там [initial] уже равен тексту поля,
+    // потому что onChanged успел обновить состояние.
+    if (widget.initial != old.initial && widget.initial != _c.text) {
+      _c.value = TextEditingValue(
+        text: widget.initial,
+        selection: TextSelection.collapsed(offset: widget.initial.length),
+      );
+    }
+  }
+
+  @override
   void dispose() {
     _c.dispose();
     super.dispose();

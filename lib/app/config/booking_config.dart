@@ -22,11 +22,17 @@ abstract final class BookingConfig {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwam1pcmx1anRmdXp2ZG55c3l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NTI4ODksImV4cCI6MjEwMDIyODg4OX0.ZyXcHe-N4hULMC17ZKc7PmmYjym4YGXwsJuW8Txcen8',
   );
 
-  /// Длительности сеансов, которые предлагаются клиенту, в минутах.
-  static const List<int> sessionDurations = <int>[30, 60];
+  /// Длительности сеанса, минут — единый список для виджета и админки.
+  /// Зашит и в БД: `booking_create_order` (BAD_DURATION) и RLS-политика
+  /// вставки `booking_order_items`. Менять только вместе с миграцией.
+  static const List<int> sessionDurations = <int>[60, 120, 180, 240, 300];
 
-  /// На сколько дней вперёд открыта запись.
+  /// На сколько дней вперёд открыта запись клиенту.
   static const int bookingHorizonDays = 30;
+
+  /// Горизонт для персонала: клуб принимает брони по телефону дальше, чем
+  /// открыта публичная запись, поэтому календарь админки длиннее — намеренно.
+  static const int staffHorizonDays = 120;
 
   /// Использовать in-memory данные вместо реального бэкенда (демо UI).
   /// Сборка: `--dart-define=USE_MOCK=true`.

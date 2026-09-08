@@ -37,6 +37,7 @@ class BookingState extends Equatable {
     this.clubs = const <ClubEntity>[],
     this.club,
     this.stations = const <StationEntity>[],
+    this.stationsByClub = const <String, List<StationEntity>>{},
     this.prices = const <PriceRateEntity>[],
     this.packages = const <PackageEntity>[],
     this.selectedPackageId,
@@ -80,6 +81,11 @@ class BookingState extends Equatable {
 
   /// Все станции клуба.
   final List<StationEntity> stations;
+
+  /// Станции по каждому клубу — для карточек на первом шаге («4 шлема и 2 PS5»).
+  /// Заполняется при старте; для клуба, который ещё не загрузился, ключа нет,
+  /// и карточка просто рисуется без цифр.
+  final Map<String, List<StationEntity>> stationsByClub;
 
   /// Тарифы клуба.
   final List<PriceRateEntity> prices;
@@ -397,6 +403,7 @@ class BookingState extends Equatable {
     List<ClubEntity>? clubs,
     ClubEntity? club,
     List<StationEntity>? stations,
+    Map<String, List<StationEntity>>? stationsByClub,
     List<PriceRateEntity>? prices,
     List<PackageEntity>? packages,
     String? selectedPackageId,
@@ -435,6 +442,7 @@ class BookingState extends Equatable {
       clubs: clubs ?? this.clubs,
       club: club ?? this.club,
       stations: stations ?? this.stations,
+      stationsByClub: stationsByClub ?? this.stationsByClub,
       prices: prices ?? this.prices,
       packages: packages ?? this.packages,
       selectedPackageId:
@@ -473,6 +481,7 @@ class BookingState extends Equatable {
         clubs,
         club,
         stations,
+        stationsByClub,
         prices,
         packages,
         selectedPackageId,

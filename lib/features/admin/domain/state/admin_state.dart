@@ -352,11 +352,11 @@ class AdminState extends Equatable {
   /// Горизонт дней для ленты «Доступности».
   static const int horizonDays = 14;
 
-  /// Горизонт дней для календаря новой брони.
-  static const int calendarDays = 120;
+  /// Горизонт дней для календаря новой брони (длиннее публичного — см. конфиг).
+  static const int calendarDays = BookingConfig.staffHorizonDays;
 
   /// Длительности сеанса (минуты), общие с виджетом бронирования.
-  static const List<int> durations = <int>[60, 120, 180, 240, 300];
+  static const List<int> durations = BookingConfig.sessionDurations;
 
   /// Выбранный клуб.
   AdminClubEntity get club =>
