@@ -2,6 +2,7 @@ import '../../domain/entity/booking_failure.dart';
 import '../../domain/entity/busy_interval_entity.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/discount_entity.dart';
+import '../../domain/entity/package_entity.dart';
 import '../../domain/entity/price_rate_entity.dart';
 import '../../domain/entity/reservation_request_entity.dart';
 import '../../domain/entity/room_entity.dart';
@@ -78,6 +79,28 @@ class BookingRepositoryMock implements IBookingRepository {
         PriceRateEntity(stationType: StationType.ps5, dayKind: DayKind.weekday, pricePerHour: 300),
         PriceRateEntity(stationType: StationType.ps5, dayKind: DayKind.weekend, pricePerHour: 400),
       ]);
+
+  @override
+  Future<List<PackageEntity>> fetchPackages(String clubId) => _delay(
+        _packages.where((PackageEntity p) => p.clubId == clubId).toList(),
+      );
+
+  static const List<PackageEntity> _packages = <PackageEntity>[
+    PackageEntity(id: 'p1', clubId: 'club-effect', roomId: 'e-main', name: 'Вдвоём',
+        headsets: 2, consoles: 0, minutes: 120, price: 5000, note: '2 шлема на 2 часа', sortOrder: 10),
+    PackageEntity(id: 'p2', clubId: 'club-effect', roomId: 'e-main', name: 'Компания',
+        headsets: 4, consoles: 0, minutes: 120, price: 10000, note: 'все 4 шлема, 2 часа', sortOrder: 20),
+    PackageEntity(id: 'p3', clubId: 'club-effect', roomId: 'e-main', name: 'Полный зал',
+        headsets: 4, consoles: 2, minutes: 120, price: 14000, note: '4 шлема и 2 PS5, 2 часа', sortOrder: 30),
+    PackageEntity(id: 'p4', clubId: 'club-vray', roomId: 'v-big', name: 'Команда',
+        headsets: 6, consoles: 0, minutes: 120, price: 14000, note: '6 шлемов на арене, 2 часа', sortOrder: 10),
+    PackageEntity(id: 'p5', clubId: 'club-vray', roomId: 'v-big', name: 'Арена',
+        headsets: 12, consoles: 0, minutes: 120, price: 26000, note: 'все 12 шлемов, 2 часа', sortOrder: 20),
+    PackageEntity(id: 'p6', clubId: 'club-vray', roomId: 'v-small', name: 'Малый зал целиком',
+        headsets: 4, consoles: 2, minutes: 120, price: 14000, note: '4 шлема и 2 PS5, 2 часа', sortOrder: 30),
+    PackageEntity(id: 'p7', clubId: 'club-vray', roomId: 'v-small', name: 'Шлемы и PS5',
+        headsets: 2, consoles: 2, minutes: 60, price: 4300, note: '2 шлема и 2 PS5, 1 час', sortOrder: 40),
+  ];
 
   @override
   Future<List<BusyIntervalEntity>> fetchBusyIntervals({

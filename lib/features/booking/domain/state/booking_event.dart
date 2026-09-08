@@ -86,6 +86,18 @@ class BookingStationToggled extends BookingEvent {
   List<Object?> get props => <Object?>[stationId];
 }
 
+/// Выбран/снят пакет. `null` — снять.
+class BookingPackageSelected extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPackageSelected(this.package);
+
+  /// Пакет или `null` для снятия.
+  final PackageEntity? package;
+
+  @override
+  List<Object?> get props => <Object?>[package];
+}
+
 /// Быстрый выбор: взять сразу [count] свободных станций (`-1` — все).
 class BookingQuickPicked extends BookingEvent {
   /// Создаёт событие.

@@ -4,6 +4,7 @@ import '../../domain/entity/booking_failure.dart';
 import '../../domain/entity/busy_interval_entity.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/discount_entity.dart';
+import '../../domain/entity/package_entity.dart';
 import '../../domain/entity/price_rate_entity.dart';
 import '../../domain/entity/reservation_request_entity.dart';
 import '../../domain/entity/room_entity.dart';
@@ -12,6 +13,7 @@ import '../../domain/repository/i_booking_repository.dart';
 import '../dto/busy_interval_dto.dart';
 import '../dto/club_dto.dart';
 import '../dto/discount_dto.dart';
+import '../dto/package_dto.dart';
 import '../dto/price_rate_dto.dart';
 import '../dto/room_dto.dart';
 import '../dto/station_dto.dart';
@@ -78,6 +80,20 @@ class BookingRepository implements IBookingRepository {
       });
 
   @override
+  Future<List<PackageEntity>> fetchPackages(String clubId) => _guard(() async {
+        final List<dynamic> rows = await _client
+            .from('booking_packages')
+            .select()
+            .eq('club_id', clubId)
+            .eq('is_active', true)
+            .order('sort_order', ascending: true);
+        return rows
+            .map((dynamic e) =>
+                PackageDto.fromJson(e as Map<String, dynamic>).toEntity())
+            .toList(growable: false);
+      });
+
+  @override
   Future<List<BusyIntervalEntity>> fetchBusyIntervals({
     required String clubId,
     required DateTime day,
@@ -129,6 +145,7 @@ class BookingRepository implements IBookingRepository {
             'p_discount_code': request.discountCode,
             'p_comment': request.comment,
             'p_source': request.source,
+            'p_package_id': request.packageId,
           },
         );
         return orderId;

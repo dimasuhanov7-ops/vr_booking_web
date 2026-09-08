@@ -19,6 +19,7 @@ class HallPlan extends StatelessWidget {
     required this.onToggle,
     required this.onQuickPick,
     required this.onClear,
+    this.quickLabel = 'Взять сразу:',
     super.key,
   });
 
@@ -52,6 +53,9 @@ class HallPlan extends StatelessWidget {
   /// Сброс выбора.
   final VoidCallback onClear;
 
+  /// Подпись перед быстрым выбором («Взять сразу:» / «Или по часам:»).
+  final String quickLabel;
+
   @override
   Widget build(BuildContext context) {
     final Map<String, List<StationEntity>> groups = <String, List<StationEntity>>{};
@@ -71,10 +75,10 @@ class HallPlan extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Text('Взять сразу:',
-                    style: TextStyle(fontSize: 12, color: BookingColors.textDim)),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(quickLabel,
+                    style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
               ),
               for (final int n in quickOpts)
                 Padding(

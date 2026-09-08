@@ -47,9 +47,21 @@
 `20260904081507_online_booking_feature` + `..._harden_privileges` + `..._unexpose_quote`
 + `20260904083849_online_booking_clubs_sort_order`.
 
-⏳ **НЕ применена:** `20260907120000_online_booking_durations` (60/90/120/180 → 60/120/180/240
-в RPC `booking_create_order` и RLS `booking_order_items_anon_insert`). Код виджета
-уже на 60/120/180/240 — до применения миграции сеанс 4 ч даст `BAD_DURATION`.
+⏳ **НЕ применены к проду (нужен доступ):**
+- `20260907120000_online_booking_durations` — 60/90/120/180 → **60/120/180/240/300**
+  в RPC `booking_create_order` и RLS `booking_order_items_anon_insert`. До применения
+  сеанс 4 / 5 ч даст `BAD_DURATION`.
+- `20260908120000_online_booking_packages` — таблица `booking_packages` (+ RLS
+  public read, сид 7 пакетов из макета), колонка `booking_orders.package_id`,
+  **новая сигнатура `booking_create_order`** (+`p_package_id`, старая 10-арг дропается).
+  ⚠️ После применения **обязательно передеплоить Edge Function `booking-intake`**
+  (`supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx`) —
+  она уже шлёт `p_package_id` и отдаёт `GET /packages`.
+- ⚠️ **Цены пакетов из макета не бьются с тарифами в БД.** Макет: VR 1400 ₽/ч,
+  пакет «Компания» 10000 (дешевле почасовой 11200). БД: VR 600 ₽/ч → почасовая
+  4800, пакет 10000 — вдвое дороже. Нужно решение: поднять тарифы, снизить цены
+  пакетов или редактировать их в админке. Виджет технически работает: выбор пакета
+  фиксирует итог его ценой (скидка показывается только если пакет дешевле).
 Таблицы `booking_*` в схеме `public` (не конфликтуют с `public.bookings` — зеркало Bukza).
 Сид: 2 клуба, 3 зала, 24 станции, 8 тарифов, 0 скидок. Проверено сквозным тестом
 (бронь, конфликт 23P01, отмена освобождает слот, рабочие часы, расчёт цены).

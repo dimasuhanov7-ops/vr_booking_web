@@ -1,6 +1,7 @@
 import '../entity/busy_interval_entity.dart';
 import '../entity/club_entity.dart';
 import '../entity/discount_entity.dart';
+import '../entity/package_entity.dart';
 import '../entity/price_rate_entity.dart';
 import '../entity/reservation_request_entity.dart';
 import '../entity/room_entity.dart';
@@ -19,6 +20,9 @@ abstract interface class IBookingRepository {
 
   /// Тарифы клуба (цена за час по типу станции и типу дня).
   Future<List<PriceRateEntity>> fetchPrices(String clubId);
+
+  /// Пакеты клуба (фикс. цена за набор станций на фикс. длительность).
+  Future<List<PackageEntity>> fetchPackages(String clubId);
 
   /// Занятые интервалы всех станций клуба на дату [day].
   Future<List<BusyIntervalEntity>> fetchBusyIntervals({

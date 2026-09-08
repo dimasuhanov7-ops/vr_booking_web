@@ -5,6 +5,7 @@ import '../../../../app/config/booking_config.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
+import '../../domain/entity/package_entity.dart';
 import '../../domain/entity/price_rate_entity.dart';
 import '../../domain/entity/station_entity.dart';
 import '../../domain/entity/time_slot_entity.dart';
@@ -21,6 +22,7 @@ import '../components/duration_selector.dart';
 import '../components/empty_day_state.dart';
 import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
+import '../components/package_cards.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
 
@@ -423,28 +425,54 @@ class _FormBody extends StatelessWidget {
     ];
   }
 
-  List<Widget> _planBlock(BookingBloc bloc, ClubEntity club) => <Widget>[
-        SectionLabel(
-            'План зала · ${BookingFormat.range(club, state.slot!.startsAt, state.slot!.endsAt)}'),
-        const SizedBox(height: 6),
-        Text(
-          'Свободно ${state.freeHallStations.length} из ${state.hallCapacity} · выбрано ${state.pickedIds.length}',
-          style: const TextStyle(fontSize: 14, color: BookingColors.textSoft),
+  List<Widget> _planBlock(BookingBloc bloc, ClubEntity club) {
+    final double vrRate = _ratePerHour(StationType.vrHeadset).toDouble();
+    final double psRate = _ratePerHour(StationType.ps5).toDouble();
+    final List<PackageRow> packRows = <PackageRow>[
+      for (final PackageEntity p in state.hallPackages)
+        (
+          package: p,
+          ok: state.packageFit(p).ok,
+          reason: state.packageFit(p).reason,
+          hourly: ((vrRate * p.headsets + psRate * p.consoles) * p.minutes / 60).round(),
         ),
-        const SizedBox(height: 14),
-        HallPlan(
-          stations: state.hallStations,
-          isFree: state.isFree,
-          pickedIds: state.pickedIds,
-          takenIds: state.takenIds,
-          isCombo: state.hall!.isCombo,
+    ];
+
+    return <Widget>[
+      SectionLabel(
+          'План зала · ${BookingFormat.range(club, state.slot!.startsAt, state.slot!.endsAt)}'),
+      const SizedBox(height: 6),
+      Text(
+        'Свободно ${state.freeHallStations.length} из ${state.hallCapacity} · выбрано ${state.pickedIds.length}',
+        style: const TextStyle(fontSize: 14, color: BookingColors.textSoft),
+      ),
+      const SizedBox(height: 14),
+      if (packRows.isNotEmpty) ...<Widget>[
+        const SectionLabel('Пакеты'),
+        const SizedBox(height: 10),
+        PackageCards(
+          rows: packRows,
+          selectedId: state.selectedPackageId,
           accent: accent,
-          freeCount: state.freeHallStations.length,
-          onToggle: (String id) => bloc.add(BookingStationToggled(id)),
-          onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
-          onClear: () => bloc.add(const BookingSelectionCleared()),
+          onSelected: (PackageEntity? p) => bloc.add(BookingPackageSelected(p)),
         ),
-      ];
+        const SizedBox(height: 16),
+      ],
+      HallPlan(
+        stations: state.hallStations,
+        isFree: state.isFree,
+        pickedIds: state.pickedIds,
+        takenIds: state.takenIds,
+        isCombo: state.hall!.isCombo,
+        accent: accent,
+        freeCount: state.freeHallStations.length,
+        quickLabel: packRows.isNotEmpty ? 'Или по часам:' : 'Взять сразу:',
+        onToggle: (String id) => bloc.add(BookingStationToggled(id)),
+        onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
+        onClear: () => bloc.add(const BookingSelectionCleared()),
+      ),
+    ];
+  }
 
   List<Widget> _contactsBlock(BookingBloc bloc) => <Widget>[
         const SectionLabel('Кто бронирует'),

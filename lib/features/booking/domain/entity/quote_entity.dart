@@ -30,6 +30,7 @@ class QuoteEntity extends Equatable {
     required this.gross,
     this.discountPercent = 0,
     this.discountLabel = '',
+    this.netOverride,
   });
 
   /// Пустой расчёт.
@@ -45,18 +46,25 @@ class QuoteEntity extends Equatable {
   /// Процент скидки.
   final num discountPercent;
 
-  /// Подпись скидки.
+  /// Подпись скидки / пакета.
   final String discountLabel;
 
+  /// Фиксированный итог (цена пакета) вместо `gross − скидка`.
+  final num? netOverride;
+
   /// Есть ли скидка.
-  bool get hasDiscount => discountPercent > 0;
+  bool get hasDiscount =>
+      discountPercent > 0 || (netOverride != null && netOverride! < gross);
 
   /// Сумма скидки, ₽ (округление до рубля).
-  num get discountAmount => (gross * discountPercent / 100).round();
+  num get discountAmount => netOverride != null
+      ? (gross - netOverride!).clamp(0, gross)
+      : (gross * discountPercent / 100).round();
 
   /// Итог к оплате, ₽.
-  num get net => gross - discountAmount;
+  num get net => netOverride ?? (gross - discountAmount);
 
   @override
-  List<Object?> get props => <Object?>[lines, gross, discountPercent, discountLabel];
+  List<Object?> get props =>
+      <Object?>[lines, gross, discountPercent, discountLabel, netOverride];
 }

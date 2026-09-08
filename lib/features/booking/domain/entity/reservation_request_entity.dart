@@ -14,6 +14,7 @@ class ReservationRequestEntity extends Equatable {
     this.discountCode,
     this.comment,
     this.source = 'site',
+    this.packageId,
   });
 
   /// Клуб брони.
@@ -46,6 +47,9 @@ class ReservationRequestEntity extends Equatable {
   /// Источник брони (`site` / `vk`).
   final String source;
 
+  /// Выбранный пакет, если применён.
+  final String? packageId;
+
   @override
   List<Object?> get props => <Object?>[
         clubId,
@@ -58,5 +62,6 @@ class ReservationRequestEntity extends Equatable {
         discountCode,
         comment,
         source,
+        packageId,
       ];
 }

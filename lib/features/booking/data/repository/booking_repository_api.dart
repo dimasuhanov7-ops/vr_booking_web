@@ -6,6 +6,7 @@ import '../../domain/entity/booking_failure.dart';
 import '../../domain/entity/busy_interval_entity.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/discount_entity.dart';
+import '../../domain/entity/package_entity.dart';
 import '../../domain/entity/price_rate_entity.dart';
 import '../../domain/entity/reservation_request_entity.dart';
 import '../../domain/entity/room_entity.dart';
@@ -14,6 +15,7 @@ import '../../domain/repository/i_booking_repository.dart';
 import '../dto/busy_interval_dto.dart';
 import '../dto/club_dto.dart';
 import '../dto/discount_dto.dart';
+import '../dto/package_dto.dart';
 import '../dto/price_rate_dto.dart';
 import '../dto/station_dto.dart';
 
@@ -95,6 +97,19 @@ class BookingRepositoryApi implements IBookingRepository {
       });
 
   @override
+  Future<List<PackageEntity>> fetchPackages(String clubId) => _guard(() async {
+        final List<dynamic> rows = await _get('/packages', <String, String>{
+          'club_id': clubId,
+        });
+        return rows
+            .map((dynamic e) =>
+                PackageDto.fromJson(e as Map<String, dynamic>).toEntity())
+            .toList()
+          ..sort((PackageEntity a, PackageEntity b) =>
+              a.sortOrder.compareTo(b.sortOrder));
+      });
+
+  @override
   Future<List<BusyIntervalEntity>> fetchBusyIntervals({
     required String clubId,
     required DateTime day,
@@ -139,6 +154,7 @@ class BookingRepositoryApi implements IBookingRepository {
           'discount_code': request.discountCode,
           'comment': request.comment,
           'source': request.source,
+          'package_id': request.packageId,
         });
         final Object? id = body['order_id'];
         if (id is! String) {
@@ -188,7 +204,9 @@ class BookingRepositoryApi implements IBookingRepository {
         DiscountMinStationsFailure(requiredStations ?? 1),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||
-      'BAD_DURATION' =>
+      'BAD_DURATION' ||
+      'PACKAGE_MISMATCH' ||
+      'PACKAGE_NOT_FOUND' =>
         const BookingWindowFailure(),
       _ => BookingUnexpectedFailure('HTTP ${r.statusCode}'),
     };

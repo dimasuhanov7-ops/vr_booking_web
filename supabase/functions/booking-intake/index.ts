@@ -67,7 +67,7 @@ function reservationError(err: { code?: string; message?: string }): Response {
     return json({ error: "DISCOUNT_MIN_STATIONS", required_stations: n }, 422);
   }
   if (msg.includes("DISCOUNT_NOT_FOUND")) return json({ error: "DISCOUNT_NOT_FOUND" }, 422);
-  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND"]) {
+  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH"]) {
     if (msg.includes(e)) return json({ error: e }, 422);
   }
   return json({ error: "UNEXPECTED", detail: msg }, 500);
@@ -138,6 +138,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json(data);
     }
 
+    // ---- GET /packages?club_id= ----
+    if (req.method === "GET" && path === "/packages") {
+      const clubId = q.get("club_id");
+      if (!clubId) return json({ error: "club_id required" }, 400);
+      const { data, error } = await db
+        .from("booking_packages")
+        .select("id,club_id,room_id,name,headsets,consoles,minutes,price,note,sort_order")
+        .eq("club_id", clubId)
+        .eq("is_active", true)
+        .order("sort_order");
+      if (error) return json({ error: "DB", detail: error.message }, 500);
+      return json(data);
+    }
+
     // ---- GET /availability?club_id=&day= ----
     if (req.method === "GET" && path === "/availability") {
       const clubId = q.get("club_id");
@@ -186,6 +200,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         p_discount_code: b.discount_code ?? null,
         p_comment: b.comment ?? null,
         p_source: b.source ?? "site",
+        p_package_id: b.package_id ?? null,
       });
       if (error) return reservationError(error);
 

@@ -9,12 +9,14 @@ import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
 import '../entity/club_entity.dart';
 import '../entity/hall_option_entity.dart';
+import '../entity/package_entity.dart';
 import '../entity/price_rate_entity.dart';
 import '../entity/quote_entity.dart';
 import '../entity/reservation_request_entity.dart';
 import '../entity/station_entity.dart';
 import '../entity/time_slot_entity.dart';
 import '../repository/i_booking_repository.dart';
+import '../service/club_clock.dart';
 import '../service/pricing_service.dart';
 import '../service/slot_generator_service.dart';
 
@@ -47,6 +49,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingDurationSelected>(_onDurationSelected);
     on<BookingSlotSelected>(_onSlotSelected);
     on<BookingStationToggled>(_onStationToggled);
+    on<BookingPackageSelected>(_onPackageSelected);
     on<BookingQuickPicked>(_onQuickPicked);
     on<BookingSelectionCleared>(_onSelectionCleared);
     on<BookingContactChanged>(_onContactChanged);
@@ -113,24 +116,34 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       durationMinutes: duration,
       hallOptions: const <HallOptionEntity>[],
       stations: const <StationEntity>[],
+      packages: const <PackageEntity>[],
       pickedIds: const <String>{},
       takenIds: const <String>{},
       conflictShown: false,
       quote: QuoteEntity.empty,
       clearSlot: true,
       clearHall: true,
+      clearPackage: true,
     ));
     try {
       final List<StationEntity> stations =
           await _repository.fetchStations(event.club.id);
       final List<PriceRateEntity> prices =
           await _repository.fetchPrices(event.club.id);
+      // Пакеты необязательны: если бэкенд их ещё не отдаёт — просто без пакетов.
+      List<PackageEntity> packages = const <PackageEntity>[];
+      try {
+        packages = await _repository.fetchPackages(event.club.id);
+      } on BookingFailure {
+        packages = const <PackageEntity>[];
+      }
       final List<HallOptionEntity> options = _buildHallOptions(stations);
 
       emit(state.copyWith(
         status: BookingStatus.ready,
         stations: stations,
         prices: prices,
+        packages: packages,
         hallOptions: options,
       ));
 
@@ -153,6 +166,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       conflictShown: false,
       quote: QuoteEntity.empty,
       clearSlot: true,
+      clearPackage: true,
     ));
     await _reloadSchedule(emit);
   }
@@ -183,8 +197,53 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       conflictShown: false,
       quote: QuoteEntity.empty,
       clearSlot: true,
+      clearPackage: true,
     ));
     await _reloadSchedule(emit);
+  }
+
+  Future<void> _onPackageSelected(
+    BookingPackageSelected event,
+    Emitter<BookingState> emit,
+  ) async {
+    final PackageEntity? pkg = event.package;
+    if (pkg == null || pkg.id == state.selectedPackageId) {
+      emit(state.copyWith(
+        pickedIds: const <String>{},
+        takenIds: const <String>{},
+        conflictShown: false,
+        quote: QuoteEntity.empty,
+        clearPackage: true,
+      ));
+      return;
+    }
+
+    // Длительность пакета может отличаться — пересобираем сетку слотов,
+    // сохраняя момент старта.
+    emit(state.copyWith(
+      durationMinutes: pkg.minutes,
+      selectedPackageId: pkg.id,
+      pickedIds: const <String>{},
+      takenIds: const <String>{},
+      conflictShown: false,
+      quote: QuoteEntity.empty,
+    ));
+    await _reloadSchedule(emit, keepSelection: true);
+    if (state.slot == null) return;
+
+    // Подбираем нужное число свободных станций по типам в текущем слоте.
+    final List<StationEntity> free = state.freeHallStations;
+    final List<String> vr = free
+        .where((StationEntity s) => s.type != StationType.ps5)
+        .take(pkg.headsets)
+        .map((StationEntity s) => s.id)
+        .toList();
+    final List<String> ps = free
+        .where((StationEntity s) => s.type == StationType.ps5)
+        .take(pkg.consoles)
+        .map((StationEntity s) => s.id)
+        .toList();
+    emit(_withPicked(<String>{...vr, ...ps}));
   }
 
   void _onSlotSelected(BookingSlotSelected event, Emitter<BookingState> emit) {
@@ -260,6 +319,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           peopleCount: int.tryParse(state.peopleInput.trim()),
           comment: null,
           source: _source,
+          packageId: state.packageApplies ? state.selectedPackageId : null,
         ),
       );
       emit(state.copyWith(
@@ -423,7 +483,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final List<StationEntity> picked = state.stations
         .where((StationEntity s) => pickedIds.contains(s.id))
         .toList(growable: false);
-    return _pricing.quote(
+    final QuoteEntity q = _pricing.quote(
       club: club,
       stations: picked,
       startsAtUtc: slot.startsAt,
@@ -431,6 +491,22 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       rates: state.prices,
       showRoomInLabel: state.hall?.isCombo ?? false,
     );
+
+    // Пакет: если состав и длительность совпадают — фиксируем итог ценой пакета.
+    final PackageEntity? pkg = state.selectedPackage;
+    if (pkg != null && state.durationMinutes == pkg.minutes) {
+      final int vr = picked.where((StationEntity s) => s.type != StationType.ps5).length;
+      final int ps = picked.where((StationEntity s) => s.type == StationType.ps5).length;
+      if (vr == pkg.headsets && ps == pkg.consoles) {
+        return QuoteEntity(
+          lines: q.lines,
+          gross: q.gross,
+          netOverride: pkg.price,
+          discountLabel: 'Пакет «${pkg.name}»',
+        );
+      }
+    }
+    return q;
   }
 
   List<HallOptionEntity> _buildHallOptions(List<StationEntity> stations) {

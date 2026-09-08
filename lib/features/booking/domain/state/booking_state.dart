@@ -38,6 +38,8 @@ class BookingState extends Equatable {
     this.club,
     this.stations = const <StationEntity>[],
     this.prices = const <PriceRateEntity>[],
+    this.packages = const <PackageEntity>[],
+    this.selectedPackageId,
     this.hallOptions = const <HallOptionEntity>[],
     this.hall,
     this.date,
@@ -76,6 +78,12 @@ class BookingState extends Equatable {
 
   /// Тарифы клуба.
   final List<PriceRateEntity> prices;
+
+  /// Пакеты клуба.
+  final List<PackageEntity> packages;
+
+  /// Выбранный пакет (по id) — влияет на цену, пока состав совпадает.
+  final String? selectedPackageId;
 
   /// Варианты «зала» (залы + «Весь клуб»).
   final List<HallOptionEntity> hallOptions;
@@ -179,6 +187,77 @@ class BookingState extends Equatable {
   /// Всего станций в варианте зала.
   int get hallCapacity => hall?.capacity ?? 0;
 
+  /// Пакеты, доступные для выбранного зала (по комнате пакета).
+  List<PackageEntity> get hallPackages {
+    final HallOptionEntity? h = hall;
+    if (h == null || h.isCombo) return const <PackageEntity>[];
+    final String? roomId = h.roomIds.length == 1 ? h.roomIds.first : null;
+    return packages
+        .where((PackageEntity p) => p.roomId == null || p.roomId == roomId)
+        .toList(growable: false);
+  }
+
+  /// Выбранный пакет как сущность.
+  PackageEntity? get selectedPackage {
+    final String? id = selectedPackageId;
+    if (id == null) return null;
+    for (final PackageEntity p in packages) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  /// Можно ли применить пакет [p] к текущему слоту: хватает ли свободных
+  /// станций каждого типа и укладывается ли длительность в сетку до закрытия.
+  ({bool ok, String reason}) packageFit(PackageEntity p) {
+    final ClubEntity? c = club;
+    final TimeSlotEntity? s = slot;
+    if (c == null || s == null) return (ok: false, reason: 'Выберите время');
+
+    int freeVr = 0;
+    int freePs = 0;
+    for (final StationEntity st in hallStations) {
+      if (!st.isActive) continue;
+      if (!(isFree(st.id) || pickedIds.contains(st.id))) continue;
+      if (st.type == StationType.ps5) {
+        freePs++;
+      } else {
+        freeVr++;
+      }
+    }
+    if (freeVr < p.headsets || freePs < p.consoles) {
+      return (ok: false, reason: 'на это время не хватает свободных мест');
+    }
+
+    final DateTime wall = ClubClock(c).toWall(s.startsAt);
+    final int startWall = wall.hour * 60 + wall.minute;
+    final int step = p.minutes + c.slotGapMinutes;
+    if (startWall + p.minutes > c.closeTime.inMinutes) {
+      return (ok: false, reason: 'не влезает до закрытия — выберите время раньше');
+    }
+    if ((startWall - c.openTime.inMinutes) % step != 0) {
+      return (ok: false, reason: 'для пакета на ${p.minutes ~/ 60} ч выберите слот раньше');
+    }
+    return (ok: true, reason: '');
+  }
+
+  /// Текущий выбор станций и длительность совпадают с выбранным пакетом.
+  bool get packageApplies {
+    final PackageEntity? p = selectedPackage;
+    if (p == null || durationMinutes != p.minutes) return false;
+    int vr = 0;
+    int ps = 0;
+    for (final StationEntity s in stations) {
+      if (!pickedIds.contains(s.id)) continue;
+      if (s.type == StationType.ps5) {
+        ps++;
+      } else {
+        vr++;
+      }
+    }
+    return vr == p.headsets && ps == p.consoles;
+  }
+
   /// Свободная станция для замены при конфликте.
   StationEntity? get conflictAlternative {
     for (final StationEntity s in freeHallStations) {
@@ -204,6 +283,8 @@ class BookingState extends Equatable {
     ClubEntity? club,
     List<StationEntity>? stations,
     List<PriceRateEntity>? prices,
+    List<PackageEntity>? packages,
+    String? selectedPackageId,
     List<HallOptionEntity>? hallOptions,
     HallOptionEntity? hall,
     DateTime? date,
@@ -222,6 +303,7 @@ class BookingState extends Equatable {
     String? errorMessage,
     bool clearSlot = false,
     bool clearHall = false,
+    bool clearPackage = false,
     bool clearError = true,
   }) {
     return BookingState(
@@ -232,6 +314,9 @@ class BookingState extends Equatable {
       club: club ?? this.club,
       stations: stations ?? this.stations,
       prices: prices ?? this.prices,
+      packages: packages ?? this.packages,
+      selectedPackageId:
+          clearPackage ? null : (selectedPackageId ?? this.selectedPackageId),
       hallOptions: hallOptions ?? this.hallOptions,
       hall: clearHall ? null : (hall ?? this.hall),
       date: date ?? this.date,
@@ -260,6 +345,8 @@ class BookingState extends Equatable {
         club,
         stations,
         prices,
+        packages,
+        selectedPackageId,
         hallOptions,
         hall,
         date,
