@@ -178,18 +178,6 @@ class _HallOccupancyState extends State<_HallOccupancy> {
     }
     final int load = totalCells == 0 ? 0 : (busyCells * 100 / totalCells).round();
 
-    final List<Widget> legend = <Widget>[
-      for (int ri = 0; ri < bookings.length; ri++)
-        _LegendRow(
-          row: bookings[ri],
-          hue: AdminColors.hue(ri),
-          dim: _hoverId != null && _hoverId != bookings[ri].id,
-          highlighted: _hoverId == bookings[ri].id,
-          onHover: _hover,
-          onTap: () => bloc.add(AdminRowOpened(bookings[ri].id)),
-        ),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -271,16 +259,11 @@ class _HallOccupancyState extends State<_HallOccupancy> {
                 : stack;
           },
         ),
-        if (legend.isEmpty)
+        if (bookings.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text('На этот день записей в зале нет.',
                 style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(top: 11),
-            child: Wrap(spacing: 16, runSpacing: 6, children: legend),
           ),
       ],
     );
@@ -446,82 +429,17 @@ class _OccCell extends StatelessWidget {
             curve: _hoverCurve,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
-              // Подсвеченная бронь — чуть плотнее заливка и рамка её же цвета,
-              // без свечения: фокус создаётся приглушением остальных.
+              // Подсвеченная бронь — чёткий белый контур + чуть плотнее заливка;
+              // фокус усиливается приглушением остальных.
               color: active
                   ? h.bg.withValues(alpha: (h.bg.a + 0.12).clamp(0.0, 1.0))
                   : h.bg,
               border: Border.all(
-                color: active ? h.border.withValues(alpha: 0.95) : h.border,
-                width: active ? 1.5 : (ps5 ? 1.4 : 1),
+                color: active ? Colors.white : h.border,
+                width: active ? 2 : (ps5 ? 1.4 : 1),
               ),
             ),
             child: const SizedBox.expand(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({
-    required this.row,
-    required this.hue,
-    required this.dim,
-    required this.highlighted,
-    required this.onHover,
-    required this.onTap,
-  });
-
-  final BookingRowEntity row;
-  final ({Color bg, Color border, Color text}) hue;
-  final bool dim;
-  final bool highlighted;
-  final ValueChanged<String?> onHover;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => onHover(row.id),
-      onExit: (_) => onHover(null),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: _hoverAnim,
-          curve: _hoverCurve,
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            color: highlighted ? const Color(0xFF191C22) : Colors.transparent,
-          ),
-          child: AnimatedOpacity(
-            opacity: dim ? 0.5 : 1,
-            duration: _hoverAnim,
-            curve: _hoverCurve,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Container(
-                  width: 22,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    color: hue.bg,
-                    border: Border.all(color: hue.border),
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  '${row.clientName} · '
-                  '${AdminFormat.span(row.startMinutes, row.endMinutes)} · '
-                  '${AdminFormat.composition(row.headsets, row.consoles)}',
-                  style: const TextStyle(fontSize: 12, color: AdminColors.textMid),
-                ),
-              ],
-            ),
           ),
         ),
       ),
