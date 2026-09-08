@@ -66,7 +66,7 @@ class AdminScreen extends StatelessWidget {
                               accent: accent,
                               onSelected: (AdminTab t) => bloc.add(AdminTabChanged(t)),
                               trailing: AdminPrimaryButton(
-                                label: '＋ Новая запись',
+                                label: '+  Новая запись',
                                 accent: accent,
                                 onTap: () => bloc.add(const AdminNewBookingOpened()),
                               ),

@@ -64,15 +64,15 @@ class RecordsTab extends StatelessWidget {
       children: <Widget>[
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints c) {
-            const int cols = 2;
-            final double w = (c.maxWidth - 10) / cols;
+            final bool wide = c.maxWidth >= 340;
+            final double w = wide ? (c.maxWidth - 10) / 2 : c.maxWidth;
             return Wrap(
               spacing: 10,
               runSpacing: 10,
               children: <Widget>[
                 for (final ({String label, String value, String note}) k in kpis)
                   SizedBox(
-                    width: w.clamp(150, c.maxWidth),
+                    width: w,
                     child: KpiTile(
                       label: k.label,
                       value: k.value,
