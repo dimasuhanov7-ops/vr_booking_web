@@ -154,22 +154,37 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       }
       if (cover.isEmpty) continue;
       ({int u, int s})? first;
+      // Резервируем станции под максимум за сеанс, но заполняем каждый столбец
+      // только на столько, сколько нужно в этот час брони (12 → 6).
       for (final bool wantPs5 in <bool>[false, true]) {
-        int need = wantPs5 ? e.consoles : e.headsets;
+        final List<int> reserved = <int>[];
+        int need = wantPs5 ? e.maxConsoles : e.maxHeadsets;
         for (int ui = 0; ui < units.length && need > 0; ui++) {
           if (units[ui].ps5 != wantPs5) continue;
           if (cover.any((int si) => grid[ui][si] != null)) continue;
-          for (final int si in cover) {
-            grid[ui][si] = (row: e, hue: ri);
-          }
-          final ({int u, int s})? cur = first;
-          if (cur == null || ui < cur.u) first = (u: ui, s: cover.first);
+          reserved.add(ui);
           need--;
+        }
+        for (int ci = 0; ci < cover.length; ci++) {
+          final int want = wantPs5 ? e.consolesAt(ci) : e.headsetsAt(ci);
+          for (int k = 0; k < want && k < reserved.length; k++) {
+            final int ui = reserved[k];
+            grid[ui][cover[ci]] = (row: e, hue: ri);
+            final ({int u, int s})? cur = first;
+            if (cur == null || ui < cur.u || (ui == cur.u && cover[ci] < cur.s)) {
+              first = (u: ui, s: cover[ci]);
+            }
+          }
         }
       }
       final ({int u, int s})? f = first;
       if (f != null) {
-        heads.add((unit: f.u, slot: f.s, span: cover.length, row: e, hue: ri));
+        // Ширина подписи — по числу столбцов, где станция «головы» занята.
+        int span = 0;
+        for (int si = f.s; si < slots.length && grid[f.u][si] != null; si++) {
+          span++;
+        }
+        heads.add((unit: f.u, slot: f.s, span: span < 1 ? 1 : span, row: e, hue: ri));
       }
     }
 

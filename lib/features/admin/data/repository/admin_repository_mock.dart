@@ -73,7 +73,7 @@ class AdminRepositoryMock implements IAdminRepository {
         _row('l4', 'vray', 'v-small', 1, 780, 60, 0, 2, 'Кирилл', '+7 (964) 112-90-77', 'confirmed', 'виджет'),
         _row('l5', 'vray', 'v-big', 1, 1020, 120, 12, 0, 'Марина', '+7 (908) 555-31-20', 'paid', 'виджет', pack: 'Арена'),
         _row('l6', 'vray', 'v-small', 2, 660, 60, 4, 2, 'Олег', '+7 (917) 604-18-52', 'new', 'звонок'),
-        _row('l7', 'effect', 'e-main', 0, 730, 60, 4, 0, 'Лена', '+7 (905) 613-77-42', 'confirmed', 'виджет'),
+        _row('l7', 'effect', 'e-main', 0, 730, 60, 2, 0, 'Лена', '+7 (905) 613-77-42', 'confirmed', 'виджет'),
         _row('l8', 'effect', 'e-main', 0, 1150, 120, 4, 2, 'Артём', '+7 (962) 480-15-93', 'paid', 'виджет', pack: 'Полный зал'),
         _row('l9', 'effect', 'e-main', 1, 940, 60, 0, 2, 'Соня', '+7 (951) 220-64-09', 'new', 'виджет'),
         _row('l10', 'effect', 'e-main', 2, 1080, 120, 2, 0, 'Паша', '+7 (926) 337-45-11', 'confirmed', 'звонок'),
@@ -89,6 +89,9 @@ class AdminRepositoryMock implements IAdminRepository {
             note: 'Договорились на доплату на месте.'),
         _row('l16', 'effect', 'e-main', 0, 1010, 120, 2, 1, 'Тимур', '+7 (937) 556-04-77', 'confirmed', 'звонок',
             prepay: 1500, note: 'Просили PS5 с двумя геймпадами.'),
+        _row('l17', 'effect', 'e-main', 0, 660, 180, 4, 0, 'Настя (класс)', '+7 (900) 111-22-33', 'confirmed', 'звонок',
+            prepay: 3000, note: 'Класс из 4 человек, к третьему часу останутся двое.',
+            hourVr: <int>[4, 2, 2]),
       ]);
 
   // Демо-режим: правки живут только в состоянии AdminBloc, на «сервер» не уходят.
@@ -128,12 +131,16 @@ class AdminRepositoryMock implements IAdminRepository {
     String? pack,
     int prepay = 0,
     String note = '',
+    List<int>? hourVr,
+    List<int>? hourPs,
   }) =>
       BookingRowEntity(
         id: id,
         clubId: club,
         hallId: hall,
         dayIndex: day,
+        hourHeadsets: hourVr,
+        hourConsoles: hourPs,
         startMinutes: start,
         durationMinutes: dur,
         headsets: vr,

@@ -338,6 +338,8 @@ class AdminNewBookingChanged extends AdminEvent {
     this.durationMinutes,
     this.headsets,
     this.consoles,
+    this.hour = 0,
+    this.copyHourFromFirst,
     this.name,
     this.phone,
     this.prepay,
@@ -356,11 +358,17 @@ class AdminNewBookingChanged extends AdminEvent {
   /// Длительность, минут.
   final int? durationMinutes;
 
-  /// VR-шлемов.
+  /// VR-шлемов (для часа [hour]).
   final int? headsets;
 
-  /// PS5.
+  /// PS5 (для часа [hour]).
   final int? consoles;
+
+  /// Час брони, к которому относятся [headsets]/[consoles].
+  final int hour;
+
+  /// Скопировать состав 1-го часа в этот час.
+  final int? copyHourFromFirst;
 
   /// Имя.
   final String? name;
@@ -379,6 +387,8 @@ class AdminNewBookingChanged extends AdminEvent {
         hallId,
         dayIndex,
         startMinutes,
+        hour,
+        copyHourFromFirst,
         durationMinutes,
         headsets,
         consoles,

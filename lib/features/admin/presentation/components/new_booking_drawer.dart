@@ -11,7 +11,7 @@ import 'admin_drawer_shell.dart';
 import 'admin_month_calendar.dart';
 
 /// Drawer «Новая запись»: календарь + параметры сеанса + контакты.
-class NewBookingDrawer extends StatelessWidget {
+class NewBookingDrawer extends StatefulWidget {
   /// Создаёт drawer.
   const NewBookingDrawer({
     required this.state,
@@ -30,20 +30,34 @@ class NewBookingDrawer extends StatelessWidget {
   final AdminPricingService pricing;
 
   @override
+  State<NewBookingDrawer> createState() => _NewBookingDrawerState();
+}
+
+class _NewBookingDrawerState extends State<NewBookingDrawer> {
+  int _hour = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final AdminState state = widget.state;
+    final Color accent = widget.accent;
+    final AdminPricingService pricing = widget.pricing;
     final AdminBloc bloc = context.read<AdminBloc>();
     final NewBookingDraft? d = state.newBooking;
     final AdminHallEntity? hall = state.newBookingHall;
     if (d == null || hall == null) return const SizedBox.shrink();
 
+    final int hc = d.hourCount;
+    final int hour = _hour.clamp(0, hc - 1);
+
     final AdminClubEntity club = state.club;
     final DateTime date = pricing.dateOf(d.dayIndex);
     final bool weekend = pricing.isWeekend(d.dayIndex);
+    // Свободная ёмкость для текущего часа-вкладки.
     final FreeUnits free = state.freeUnits(
       hallId: d.hallId,
       dayIndex: d.dayIndex,
-      startMinutes: d.startMinutes,
-      durationMinutes: d.durationMinutes,
+      startMinutes: d.startMinutes + hour * 60,
+      durationMinutes: 60,
     );
     final bool noRoom = free.headsets + free.consoles == 0;
 
@@ -55,13 +69,16 @@ class NewBookingDrawer extends StatelessWidget {
       times.add(t);
     }
 
-    final int total = pricing.hourlyCost(
-      headsets: d.headsets,
-      consoles: d.consoles,
-      minutes: d.durationMinutes,
-      price: state.priceOf(hall.id),
-      weekend: weekend,
-    );
+    int total = 0;
+    for (int h = 0; h < hc; h++) {
+      total += pricing.hourlyCost(
+        headsets: d.headsetsAt(h),
+        consoles: d.consolesAt(h),
+        minutes: 60,
+        price: state.priceOf(hall.id),
+        weekend: weekend,
+      );
+    }
 
     void change({
       String? hallId,
@@ -70,6 +87,8 @@ class NewBookingDrawer extends StatelessWidget {
       int? durationMinutes,
       int? headsets,
       int? consoles,
+      int hourArg = 0,
+      int? copyHourFromFirst,
       String? name,
       String? phone,
       int? prepay,
@@ -82,6 +101,8 @@ class NewBookingDrawer extends StatelessWidget {
           durationMinutes: durationMinutes,
           headsets: headsets,
           consoles: consoles,
+          hour: hourArg,
+          copyHourFromFirst: copyHourFromFirst,
           name: name,
           phone: phone,
           prepay: prepay,
@@ -140,13 +161,43 @@ class NewBookingDrawer extends StatelessWidget {
                 (AdminFormat.hhmm(t), t == d.startMinutes, () => change(startMinutes: t)),
             ],
           ),
+          if (hc > 1) ...<Widget>[
+            const Text('Состав по часам',
+                style: TextStyle(fontSize: 12, color: AdminColors.textMuted)),
+            const SizedBox(height: 6),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: <Widget>[
+                  for (int h = 0; h < hc; h++)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: AdminPill(
+                        label: '${h + 1}-й · ${d.headsetsAt(h) + d.consolesAt(h)}',
+                        selected: h == hour,
+                        accent: accent,
+                        compact: true,
+                        onTap: () => setState(() => _hour = h),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${AdminFormat.hhmm(d.startMinutes + hour * 60)}–'
+              '${AdminFormat.hhmm(d.startMinutes + (hour + 1) * 60)}',
+              style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
+            ),
+            const SizedBox(height: 10),
+          ],
           _CountGroup(
             label: 'Шлемов · свободно ${free.headsets} из ${hall.headsets}',
             accent: accent,
             max: hall.headsets,
             free: free.headsets,
-            value: d.headsets,
-            onSelected: (int v) => change(headsets: v),
+            value: d.headsetsAt(hour),
+            onSelected: (int v) => change(headsets: v, hourArg: hour),
           ),
           if (hall.consoles > 0)
             _CountGroup(
@@ -154,9 +205,19 @@ class NewBookingDrawer extends StatelessWidget {
               accent: accent,
               max: hall.consoles,
               free: free.consoles,
-              value: d.consoles,
-              onSelected: (int v) => change(consoles: v),
+              value: d.consolesAt(hour),
+              onSelected: (int v) => change(consoles: v, hourArg: hour),
             ),
+          if (hc > 1 && hour > 0) ...<Widget>[
+            const SizedBox(height: 8),
+            AdminPill(
+              label: 'как в 1-м часе',
+              selected: false,
+              accent: accent,
+              compact: true,
+              onTap: () => change(copyHourFromFirst: hour),
+            ),
+          ],
           const SizedBox(height: 4),
           AdminTextInput(
             label: 'Имя',

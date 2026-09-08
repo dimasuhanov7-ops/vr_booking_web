@@ -43,7 +43,7 @@ class AdminPricingService {
     BookingRowEntity row,
     List<PackageEntity> packages,
   ) {
-    if (row.packageName == null) return null;
+    if (row.packageName == null || row.variesByHour) return null;
     for (final PackageEntity p in packages) {
       if (p.name == row.packageName &&
           p.clubId == row.clubId &&
@@ -58,6 +58,7 @@ class AdminPricingService {
   }
 
   /// Итоговая стоимость записи: цена пакета (если состав совпал) либо по часам.
+  /// При разном составе по часам суммируем каждый час отдельно.
   int rowCost({
     required BookingRowEntity row,
     required HallPriceEntity price,
@@ -65,12 +66,26 @@ class AdminPricingService {
   }) {
     final PackageEntity? pkg = matchPackage(row, packages);
     if (pkg != null) return pkg.price;
+    final bool weekend = isWeekend(row.dayIndex);
+    if (row.variesByHour) {
+      int sum = 0;
+      for (int h = 0; h < row.hourCount; h++) {
+        sum += hourlyCost(
+          headsets: row.headsetsAt(h),
+          consoles: row.consolesAt(h),
+          minutes: 60,
+          price: price,
+          weekend: weekend,
+        );
+      }
+      return sum;
+    }
     return hourlyCost(
       headsets: row.headsets,
       consoles: row.consoles,
       minutes: row.durationMinutes,
       price: price,
-      weekend: isWeekend(row.dayIndex),
+      weekend: weekend,
     );
   }
 

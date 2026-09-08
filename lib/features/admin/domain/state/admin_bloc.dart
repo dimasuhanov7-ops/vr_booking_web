@@ -386,35 +386,80 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   ) {
     final NewBookingDraft? current = state.newBooking;
     if (current == null) return;
+    final int h = event.hour;
+
+    // Общие поля + база (час 0).
     NewBookingDraft next = current.copyWith(
       hallId: event.hallId,
       dayIndex: event.dayIndex,
       startMinutes: event.startMinutes,
       durationMinutes: event.durationMinutes,
-      headsets: event.headsets,
-      consoles: event.consoles,
+      headsets: h == 0 ? event.headsets : null,
+      consoles: h == 0 ? event.consoles : null,
       name: event.name,
       phone: event.phone,
       prepay: event.prepay,
       note: event.note,
       message: '',
     );
+
+    // Смена длительности/зала/дня/времени — сбрасываем переопределения по часам.
+    if (event.durationMinutes != null ||
+        event.hallId != null ||
+        event.dayIndex != null ||
+        event.startMinutes != null) {
+      next = next.copyWith(clearHourly: true);
+    }
+
+    // Переопределение состава для часа ≥ 1.
+    if (h > 0 && (event.headsets != null || event.consoles != null)) {
+      next = next.copyWith(
+        hourHeadsets: <int, int>{
+          ...next.hourHeadsets,
+          if (event.headsets != null) h: event.headsets!,
+        },
+        hourConsoles: <int, int>{
+          ...next.hourConsoles,
+          if (event.consoles != null) h: event.consoles!,
+        },
+      );
+    }
+
+    // «Как в 1-м часе».
+    final int? copyTo = event.copyHourFromFirst;
+    if (copyTo != null && copyTo > 0) {
+      next = next.copyWith(
+        hourHeadsets: <int, int>{...next.hourHeadsets}..remove(copyTo),
+        hourConsoles: <int, int>{...next.hourConsoles}..remove(copyTo),
+      );
+    }
+
     // Не выпускаем сеанс за пределы рабочего дня.
     final int maxStart = state.club.closeMinutes - next.durationMinutes;
     if (next.startMinutes > maxStart) {
-      next = next.copyWith(startMinutes: maxStart.clamp(state.club.openMinutes, maxStart));
+      next = next.copyWith(
+          startMinutes: maxStart.clamp(state.club.openMinutes, maxStart));
     }
-    // Клампим состав по свободной ёмкости зала на выбранное окно.
-    final FreeUnits free = state.freeUnits(
-      hallId: next.hallId,
-      dayIndex: next.dayIndex,
-      startMinutes: next.startMinutes,
-      durationMinutes: next.durationMinutes,
-    );
-    next = next.copyWith(
-      headsets: next.headsets.clamp(0, free.headsets),
-      consoles: next.consoles.clamp(0, free.consoles),
-    );
+
+    // Клампим состав каждого часа по свободной ёмкости в его окне.
+    for (int hh = 0; hh < next.hourCount; hh++) {
+      final FreeUnits free = state.freeUnits(
+        hallId: next.hallId,
+        dayIndex: next.dayIndex,
+        startMinutes: next.startMinutes + hh * 60,
+        durationMinutes: 60,
+      );
+      final int vr = next.headsetsAt(hh).clamp(0, free.headsets);
+      final int ps = next.consolesAt(hh).clamp(0, free.consoles);
+      if (hh == 0) {
+        next = next.copyWith(headsets: vr, consoles: ps);
+      } else if (vr != next.headsetsAt(hh) || ps != next.consolesAt(hh)) {
+        next = next.copyWith(
+          hourHeadsets: <int, int>{...next.hourHeadsets, hh: vr},
+          hourConsoles: <int, int>{...next.hourConsoles, hh: ps},
+        );
+      }
+    }
     emit(state.copyWith(newBooking: next));
   }
 
@@ -436,17 +481,25 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     String? error;
     if (d.name.trim().length < 2) {
       error = 'Укажите имя гостя.';
-    } else if (d.headsets + d.consoles < 1) {
-      error = 'Добавьте хотя бы один шлем или одну PS5.';
     } else {
-      final FreeUnits free = state.freeUnits(
-        hallId: d.hallId,
-        dayIndex: d.dayIndex,
-        startMinutes: d.startMinutes,
-        durationMinutes: d.durationMinutes,
-      );
-      if (d.headsets > free.headsets || d.consoles > free.consoles) {
-        error = 'На это время свободно ${free.headsets} шлемов и ${free.consoles} PS5.';
+      bool anyStation = false;
+      for (int h = 0; h < d.hourCount; h++) {
+        final int vr = d.headsetsAt(h);
+        final int ps = d.consolesAt(h);
+        if (vr + ps > 0) anyStation = true;
+        final FreeUnits free = state.freeUnits(
+          hallId: d.hallId,
+          dayIndex: d.dayIndex,
+          startMinutes: d.startMinutes + h * 60,
+          durationMinutes: 60,
+        );
+        if (vr > free.headsets || ps > free.consoles) {
+          error = '${h + 1}-й час: свободно ${free.headsets} шлемов и ${free.consoles} PS5.';
+          break;
+        }
+      }
+      if (error == null && !anyStation) {
+        error = 'Добавьте хотя бы один шлем или одну PS5.';
       }
     }
     if (error != null) {
@@ -454,6 +507,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
+    final bool varies = d.variesByHour;
     final String id = 'c${DateTime.now().millisecondsSinceEpoch}';
     final BookingRowEntity row = BookingRowEntity(
       id: id,
@@ -464,6 +518,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       durationMinutes: d.durationMinutes,
       headsets: d.headsets,
       consoles: d.consoles,
+      hourHeadsets: varies
+          ? <int>[for (int h = 0; h < d.hourCount; h++) d.headsetsAt(h)]
+          : null,
+      hourConsoles: varies
+          ? <int>[for (int h = 0; h < d.hourCount; h++) d.consolesAt(h)]
+          : null,
       clientName: d.name.trim(),
       phone: d.phone.trim().isEmpty ? 'телефон не указан' : d.phone.trim(),
       status: RecordStatus.newRequest,

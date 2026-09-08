@@ -123,6 +123,8 @@ class NewBookingDraft extends Equatable {
     this.durationMinutes = 60,
     this.headsets = 2,
     this.consoles = 0,
+    this.hourHeadsets = const <int, int>{},
+    this.hourConsoles = const <int, int>{},
     this.name = '',
     this.phone = '',
     this.prepay = 0,
@@ -142,11 +144,17 @@ class NewBookingDraft extends Equatable {
   /// Длительность, минут.
   final int durationMinutes;
 
-  /// VR-шлемов.
+  /// VR-шлемов в 1-м часе (база).
   final int headsets;
 
-  /// PS5.
+  /// PS5 в 1-м часе (база).
   final int consoles;
+
+  /// Переопределения шлемов для часов ≥ 1 (наследуются от предыдущего часа).
+  final Map<int, int> hourHeadsets;
+
+  /// Переопределения PS5 для часов ≥ 1.
+  final Map<int, int> hourConsoles;
 
   /// Имя гостя.
   final String name;
@@ -163,6 +171,35 @@ class NewBookingDraft extends Equatable {
   /// Сообщение под формой (ошибка / подсказка).
   final String message;
 
+  /// Число часовых отрезков.
+  int get hourCount => (durationMinutes / 60).round().clamp(1, 12);
+
+  /// Шлемов в час [h] (с наследованием от нижних часов).
+  int headsetsAt(int h) {
+    for (int k = h; k >= 1; k--) {
+      final int? v = hourHeadsets[k];
+      if (v != null) return v;
+    }
+    return headsets;
+  }
+
+  /// PS5 в час [h].
+  int consolesAt(int h) {
+    for (int k = h; k >= 1; k--) {
+      final int? v = hourConsoles[k];
+      if (v != null) return v;
+    }
+    return consoles;
+  }
+
+  /// Разный ли состав по часам.
+  bool get variesByHour {
+    for (int h = 1; h < hourCount; h++) {
+      if (headsetsAt(h) != headsets || consolesAt(h) != consoles) return true;
+    }
+    return false;
+  }
+
   /// Копия с изменениями.
   NewBookingDraft copyWith({
     String? hallId,
@@ -171,6 +208,9 @@ class NewBookingDraft extends Equatable {
     int? durationMinutes,
     int? headsets,
     int? consoles,
+    Map<int, int>? hourHeadsets,
+    Map<int, int>? hourConsoles,
+    bool clearHourly = false,
     String? name,
     String? phone,
     int? prepay,
@@ -184,6 +224,12 @@ class NewBookingDraft extends Equatable {
         durationMinutes: durationMinutes ?? this.durationMinutes,
         headsets: headsets ?? this.headsets,
         consoles: consoles ?? this.consoles,
+        hourHeadsets: clearHourly
+            ? const <int, int>{}
+            : (hourHeadsets ?? this.hourHeadsets),
+        hourConsoles: clearHourly
+            ? const <int, int>{}
+            : (hourConsoles ?? this.hourConsoles),
         name: name ?? this.name,
         phone: phone ?? this.phone,
         prepay: prepay ?? this.prepay,
@@ -199,6 +245,8 @@ class NewBookingDraft extends Equatable {
         durationMinutes,
         headsets,
         consoles,
+        hourHeadsets,
+        hourConsoles,
         name,
         phone,
         prepay,
