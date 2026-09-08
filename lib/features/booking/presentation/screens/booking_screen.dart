@@ -90,7 +90,12 @@ class _BookingScreenState extends State<BookingScreen> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+            // На узких телефонах поля страницы съедают заметную долю ширины —
+            // отдаём её контенту.
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.sizeOf(context).width < 380 ? 8 : 16,
+              vertical: 28,
+            ),
             child: Center(
               child: BlocListener<BookingBloc, BookingState>(
                 listenWhen: (BookingState p, BookingState c) =>

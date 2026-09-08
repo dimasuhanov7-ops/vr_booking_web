@@ -1,12 +1,13 @@
 {
-    "name": "vr_booking_web",
-    "short_name": "vr_booking_web",
+    "name": "Бронирование VR — Effect VR и V-Ray",
+    "short_name": "Бронирование VR",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#08090A",
+    "theme_color": "#08090A",
+    "description": "Онлайн-бронирование VR-клубов Effect VR и V-Ray: выбор зала, времени и станций.",
+    "lang": "ru",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

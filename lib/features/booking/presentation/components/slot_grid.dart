@@ -46,13 +46,17 @@ class SlotGrid extends StatelessWidget {
       builder: (BuildContext context, BoxConstraints c) {
         const double min = 104;
         final int cols = (c.maxWidth / (min + 8)).floor().clamp(2, 6);
+        // Высоту задаём явно (а не через childAspectRatio): при системном
+        // увеличении шрифта фиксированная пропорция переполняет чип.
+        final TextScaler ts = MediaQuery.textScalerOf(context);
+        final double extent = 21 + ts.scale(16) * 1.25 + 18 + ts.scale(11) * 1.25;
         return GridView.count(
           crossAxisCount: cols,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 1.55,
+          childAspectRatio: (c.maxWidth - 8 * (cols - 1)) / cols / extent,
           children: <Widget>[
             for (final TimeSlotEntity s in slots)
               _SlotChip(
@@ -133,19 +137,24 @@ class _SlotChip extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 7),
-            Row(
-              children: <Widget>[
-                for (int i = 0; i < total.clamp(0, 12); i++)
-                  Container(
-                    width: 5,
-                    height: 5,
-                    margin: const EdgeInsets.only(right: 2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(2),
-                      color: i < free ? accent : BookingColors.podBorder,
+            // 12 точек по 7 px не влезают в узкий чип — ужимаем, а не режем.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: <Widget>[
+                  for (int i = 0; i < total.clamp(0, 12); i++)
+                    Container(
+                      width: 5,
+                      height: 5,
+                      margin: const EdgeInsets.only(right: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(2),
+                        color: i < free ? accent : BookingColors.podBorder,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 6),
             Text(

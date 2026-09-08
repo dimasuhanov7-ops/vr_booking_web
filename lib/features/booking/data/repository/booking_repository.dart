@@ -146,8 +146,6 @@ class BookingRepository implements IBookingRepository {
                   'ends_at': s.endsAt.toUtc().toIso8601String(),
                 },
             ],
-            'p_starts_at': request.startsAt.toUtc().toIso8601String(),
-            'p_minutes': request.minutes,
             'p_people_count': request.peopleCount,
             'p_discount_code': request.discountCode,
             'p_comment': request.comment,

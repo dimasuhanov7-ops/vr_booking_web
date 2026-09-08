@@ -29,15 +29,34 @@ import '../components/session_hours.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
 
-/// Порог перехода на двухколоночную раскладку (десктоп/планшет), CSS-px.
-const double _wideBreakpoint = 860;
+/// Порог «планшет»: телефон в ландшафте, iPad портрет — одна колонка, но шире.
+const double _bpTablet = 600;
 
-/// Максимальная ширина «рамки» виджета для узкой и широкой раскладки.
+/// Порог «десктоп»: две колонки.
+const double _bpDesktop = 900;
+
+/// Максимальная ширина «рамки» виджета для каждой раскладки.
 const double _frameNarrow = 460;
+const double _frameTablet = 680;
 const double _frameWide = 1000;
 
 /// Ширина левой (sticky в макете) колонки на широкой раскладке.
 const double _leftColWidth = 360;
+
+/// Ширина «рамки» под ширину области виджета.
+double _frameWidthFor(double vw) {
+  if (vw < _bpTablet) return _frameNarrow;
+  if (vw < _bpDesktop) return _frameTablet;
+  return _frameWide;
+}
+
+/// Горизонтальный отступ внутри «рамки».
+double _framePad(double vw) {
+  if (vw < 380) return 14;
+  if (vw < _bpTablet) return 18;
+  if (vw < _bpDesktop) return 22;
+  return 24;
+}
 
 /// Содержимое виджета бронирования (один прокручиваемый экран).
 class BookingView extends StatelessWidget {
@@ -61,10 +80,11 @@ class BookingView extends StatelessWidget {
       builder: (BuildContext context, BookingState state) {
         // Ширина области виджета (в iframe — размер фрейма, заданный родителем).
         final double vw = MediaQuery.sizeOf(context).width;
-        final bool wide = vw >= _wideBreakpoint;
-        final double frameW = wide ? _frameWide : _frameNarrow;
+        final bool wide = vw >= _bpDesktop;
+        final double frameW = _frameWidthFor(vw);
 
-        final Widget frame = _frame(context, state, wide: wide, frameW: frameW);
+        final Widget frame =
+            _frame(context, state, wide: wide, frameW: frameW, vw: vw);
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -88,6 +108,7 @@ class BookingView extends StatelessWidget {
     BookingState state, {
     required bool wide,
     required double frameW,
+    required double vw,
   }) {
     final bool bootstrapping = (state.status == BookingStatus.loading &&
             state.clubs.isEmpty) ||
@@ -140,8 +161,13 @@ class BookingView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Padding(
-            padding:
-                EdgeInsets.fromLTRB(wide ? 24 : 18, 22, wide ? 24 : 18, 26),
+            // Узкие телефоны отдают контенту каждый пиксель, десктоп — дышит.
+            padding: EdgeInsets.fromLTRB(
+              _framePad(vw),
+              22,
+              _framePad(vw),
+              26,
+            ),
             child: _FormBody(state: state, accent: accent, wide: wide),
           ),
           BookingBottomBar(

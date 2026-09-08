@@ -4,6 +4,13 @@ import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/station_entity.dart';
 import 'booking_atoms.dart';
 
+/// Зазор между плитками станций.
+const double _podGap = 8;
+
+/// Границы ширины плитки станции: макет — 74, узкий телефон — до 56.
+const double _podMinWidth = 56;
+const double _podMaxWidth = 74;
+
 /// «План зала»: ряды станций с состояниями свободно / занято / выбрано,
 /// быстрый выбор и легенда (шаг 3).
 class HallPlan extends StatelessWidget {
@@ -102,31 +109,42 @@ class HallPlan extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: BookingColors.borderSoft),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[Color(0xFF16161C), Color(0xFF101015)],
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (final MapEntry<String, List<StationEntity>> g in groups.entries) ...<Widget>[
-                if (isCombo) _groupHeader(g.key, g.value),
-                ..._rowsOf(g.value),
-                const SizedBox(height: 6),
-              ],
-              const SizedBox(height: 8),
-              const Divider(height: 1, color: BookingColors.borderSoft),
-              const SizedBox(height: 12),
-              _legend(),
-            ],
-          ),
+        LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints c) {
+            // Ряд зала — 4 станции (так задан row_index в БД). Плитку ужимаем,
+            // чтобы ряд не переносился на узких телефонах, но не растягиваем
+            // шире макетных 74 px.
+            final double inner = c.maxWidth - 28;
+            final double pod =
+                ((inner - _podGap * 3) / 4).clamp(_podMinWidth, _podMaxWidth);
+            return Container(
+              padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: BookingColors.borderSoft),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0xFF16161C), Color(0xFF101015)],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (final MapEntry<String, List<StationEntity>> g
+                      in groups.entries) ...<Widget>[
+                    if (isCombo) _groupHeader(g.key, g.value),
+                    ..._rowsOf(g.value, pod),
+                    const SizedBox(height: 6),
+                  ],
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, color: BookingColors.borderSoft),
+                  const SizedBox(height: 12),
+                  _legend(),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
@@ -149,7 +167,7 @@ class HallPlan extends StatelessWidget {
     );
   }
 
-  List<Widget> _rowsOf(List<StationEntity> list) {
+  List<Widget> _rowsOf(List<StationEntity> list, double podWidth) {
     final Map<int, List<StationEntity>> rows = <int, List<StationEntity>>{};
     for (final StationEntity s in list) {
       rows.putIfAbsent(s.rowIndex, () => <StationEntity>[]).add(s);
@@ -169,8 +187,8 @@ class HallPlan extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: _podGap,
+                runSpacing: _podGap,
                 children: <Widget>[
                   for (final StationEntity s in rows[k]!..sort(
                       (StationEntity a, StationEntity b) =>
@@ -181,6 +199,7 @@ class HallPlan extends StatelessWidget {
                       picked: pickedIds.contains(s.id),
                       taken: takenIds.contains(s.id),
                       accent: accent,
+                      width: podWidth,
                       onTap: () => onToggle(s.id),
                     ),
                 ],
@@ -263,6 +282,7 @@ class _Pod extends StatelessWidget {
     required this.picked,
     required this.taken,
     required this.accent,
+    required this.width,
     required this.onTap,
   });
 
@@ -271,7 +291,14 @@ class _Pod extends StatelessWidget {
   final bool picked;
   final bool taken;
   final Color accent;
+
+  /// Ширина плитки — считается от доступного места (см. [HallPlan.build]).
+  final double width;
+
   final VoidCallback onTap;
+
+  /// Коэффициент сжатия относительно макетных 74 px.
+  double get _k => width / _podMaxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -301,8 +328,8 @@ class _Pod extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 74,
-        padding: const EdgeInsets.fromLTRB(6, 12, 6, 10),
+        width: width,
+        padding: EdgeInsets.fromLTRB(4, 12 * _k, 4, 10 * _k),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(14),
@@ -312,14 +339,19 @@ class _Pod extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             _visor(picked ? tint : (busy ? const Color(0xFF3A3A44) : const Color(0xFF7E7E8C))),
-            const SizedBox(height: 8),
+            SizedBox(height: 8 * _k),
             Text(station.label,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13 * _k, fontWeight: FontWeight.w700, color: fg)),
             const SizedBox(height: 3),
             Text(
               taken ? 'заняли' : busy ? 'занято' : picked ? '✓ моя' : 'свободно',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 10 * _k,
                 letterSpacing: 0.2,
                 decoration: busy && !taken ? TextDecoration.lineThrough : null,
                 color: picked
@@ -338,8 +370,8 @@ class _Pod extends StatelessWidget {
   Widget _visor(Color color) {
     if (station.type == StationType.ps5) {
       return Container(
-        width: 34,
-        height: 16,
+        width: 34 * _k,
+        height: 16 * _k,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
           border: Border(
@@ -352,8 +384,8 @@ class _Pod extends StatelessWidget {
       );
     }
     return Container(
-      width: 38,
-      height: 22,
+      width: 38 * _k,
+      height: 22 * _k,
       decoration: BoxDecoration(
         borderRadius: const BorderRadius.vertical(
           top: Radius.circular(11),
