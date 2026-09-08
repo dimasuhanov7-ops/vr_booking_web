@@ -7,7 +7,7 @@ import '../../domain/state/admin_bloc.dart';
 import '../admin_format.dart';
 import '../admin_theme.dart';
 import 'admin_atoms.dart';
-import 'admin_month_calendar.dart';
+import 'admin_date_picker.dart';
 import 'kpi_tile.dart';
 import 'occupancy_grid.dart';
 
@@ -91,26 +91,22 @@ class RecordsTab extends StatelessWidget {
           },
         ),
         const SizedBox(height: 14),
-        AdminCard(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const AdminLabel('День'),
-              const SizedBox(height: 10),
-              AdminMonthCalendar(
-                selectedDayIndex: day,
-                accent: accent,
-                slug: state.accentSlug,
-                pricing: pricing,
-                onPick: (int di) => bloc.add(AdminFilterChanged(
-                  day: di,
-                  hallId: state.filterHallId,
-                  type: state.filterType,
-                )),
-              ),
-            ],
-          ),
+        Row(
+          children: <Widget>[
+            const AdminLabel('День'),
+            const SizedBox(width: 12),
+            AdminDatePicker(
+              selectedDayIndex: day,
+              accent: accent,
+              slug: state.accentSlug,
+              pricing: pricing,
+              onPick: (int di) => bloc.add(AdminFilterChanged(
+                day: di,
+                hallId: state.filterHallId,
+                type: state.filterType,
+              )),
+            ),
+          ],
         ),
         const SizedBox(height: 14),
         OccupancyGrid(state: state, accent: accent, pricing: pricing),
