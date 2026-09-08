@@ -38,6 +38,14 @@ abstract final class BookingConfig {
   /// Сборка: `--dart-define=USE_MOCK=true`.
   static const bool useMock = bool.fromEnvironment('USE_MOCK');
 
+  /// Адрес политики конфиденциальности на сайте клуба.
+  ///
+  /// Пока пуст — под формой показывается только текст об обработке данных,
+  /// без ссылки. Задать при сборке:
+  /// `--dart-define=PRIVACY_URL=https://effectvr.ru/privacy`.
+  /// Черновик самого документа — `docs/PRIVACY.md`.
+  static const String privacyUrl = String.fromEnvironment('PRIVACY_URL');
+
   /// Слово-пропуск на скрытой кнопке «в админку» на публичном виджете.
   /// Это лишь заслон от случайных нажатий — в боевой сборке админку всё равно
   /// защищает Supabase Auth. Меняется сборкой:

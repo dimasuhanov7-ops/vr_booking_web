@@ -2,3 +2,5 @@
 void toWidget() {}
 
 void toAdmin() {}
+
+void openExternal(String url) {}

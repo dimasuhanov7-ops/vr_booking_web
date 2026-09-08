@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -634,6 +635,8 @@ class _FormBody extends StatelessWidget {
           onPhoneChanged: (String v) => bloc.add(BookingContactChanged(phone: v)),
           onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
         ),
+        const SizedBox(height: 12),
+        const _ConsentNote(),
       ];
 
   /// Отмена необратима и освобождает станции — спрашиваем подтверждение.
@@ -795,6 +798,49 @@ class _FormBody extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: 22),
         child: Divider(height: 1, color: BookingColors.borderFaint),
       );
+}
+
+/// Уведомление об обработке персональных данных.
+///
+/// Форма запрашивает имя и телефон — это персональные данные, и клиент должен
+/// понимать, что отправляет и куда. Ссылка появляется, только когда задан
+/// [BookingConfig.privacyUrl]: показывать битую ссылку хуже, чем никакой.
+class _ConsentNote extends StatelessWidget {
+  const _ConsentNote();
+
+  @override
+  Widget build(BuildContext context) {
+    const TextStyle base = TextStyle(
+      fontSize: 12,
+      height: 1.45,
+      color: BookingColors.textDim,
+    );
+    const String text =
+        'Нажимая «Забронировать», вы соглашаетесь на обработку имени и '
+        'телефона — они нужны, чтобы подтвердить бронь и связаться с вами.';
+
+    if (BookingConfig.privacyUrl.isEmpty) {
+      return const Text(text, style: base);
+    }
+    return Text.rich(
+      TextSpan(
+        style: base,
+        children: <InlineSpan>[
+          const TextSpan(text: '$text '),
+          TextSpan(
+            text: 'Политика конфиденциальности',
+            style: const TextStyle(
+              color: BookingColors.textSoft,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () => Nav.openExternal(BookingConfig.privacyUrl),
+          ),
+          const TextSpan(text: '.'),
+        ],
+      ),
+    );
+  }
 }
 
 /// Клуб временно не принимает онлайн-брони.

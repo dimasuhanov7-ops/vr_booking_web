@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon (Android 8+): система сама обрежет слои своей маской —
+     кругом, сквиклом или каплей, в зависимости от лаунчера. Без этого файла
+     бралась бы legacy-иконка mipmap/ic_launcher.png и обрезалась грубо. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

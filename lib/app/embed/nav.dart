@@ -12,4 +12,9 @@ abstract final class Nav {
   /// Открыть админку: добавить `?admin=1` к текущему URL и перезагрузить.
   /// На не-web — no-op.
   static void toAdmin() => impl.toAdmin();
+
+  /// Открыть внешний адрес в новой вкладке (политика конфиденциальности).
+  /// Новой, а не текущей: виджет живёт в iframe, и увести его со страницы
+  /// значило бы потерять заполненную форму. На не-web — no-op.
+  static void openExternal(String url) => impl.openExternal(url);
 }

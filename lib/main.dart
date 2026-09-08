@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'app/booking_app.dart';
@@ -14,11 +15,27 @@ Future<void> main() async {
   // Для формы бронирования это значит, что со скринридером ей пользоваться
   // нельзя, — поэтому включаем сразу.
   SemanticsBinding.instance.ensureSemantics();
+  _styleSystemBars();
   _installErrorScreen();
   await initializeDateFormatting('ru');
   final LaunchParams params = LaunchParams.fromUri();
   await Injection.instance.init(adminMode: params.adminMode);
   runApp(BookingApp(params: params));
+}
+
+/// Системные панели под тёмный интерфейс.
+///
+/// На Android по умолчанию статус-бар получает иконки под светлую тему —
+/// на нашем почти чёрном фоне они не видны. В вебе вызов безвреден и не
+/// делает ничего.
+void _styleSystemBars() {
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFF08090A),
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
 }
 
 /// Заменяет серый экран Flutter на понятное сообщение с телефоном клуба.
