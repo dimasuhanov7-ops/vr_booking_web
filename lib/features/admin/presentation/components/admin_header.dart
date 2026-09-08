@@ -27,7 +27,7 @@ class AdminHeader extends StatelessWidget {
   /// Колбэк выбора клуба.
   final ValueChanged<String> onClubSelected;
 
-  /// Колбэк «Выйти» (если авторизация включена).
+  /// Колбэк «Выйти» из админки (сессия сотрудника / уход к виджету).
   final VoidCallback? onLogout;
 
   @override

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../app/config/booking_config.dart';
+import '../../../../app/embed/nav.dart';
 import '../../../../di/injection.dart';
 import '../../domain/state/admin_bloc.dart';
 import 'admin_login_screen.dart';
@@ -24,9 +25,11 @@ class AdminAuthGate extends StatelessWidget {
           repository: Injection.instance.adminRepository,
         )..add(const AdminStarted()),
         child: AdminScreen(
+          // С авторизацией — выход из сессии сотрудника; в демо — просто уход
+          // из админки к публичному виджету.
           onLogout: authEnabled
               ? () => Supabase.instance.client.auth.signOut()
-              : null,
+              : Nav.toWidget,
         ),
       );
 
