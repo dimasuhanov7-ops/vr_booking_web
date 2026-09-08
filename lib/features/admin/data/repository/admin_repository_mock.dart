@@ -39,14 +39,16 @@ class AdminRepositoryMock implements IAdminRepository {
         ),
       ]);
 
+  // Тарифы клуба (решение заказчика): VR-шлем 600 ₽/ч будни, 1000 выходные;
+  // PS5 300 будни, 400 выходные. Одинаковые у всех залов.
   @override
   Future<List<HallPriceEntity>> fetchPrices() => _delay(const <HallPriceEntity>[
         HallPriceEntity(
-            hallId: 'e-main', vrWeekday: 1400, vrWeekend: 1700, ps5Weekday: 1000, ps5Weekend: 1200),
+            hallId: 'e-main', vrWeekday: 600, vrWeekend: 1000, ps5Weekday: 300, ps5Weekend: 400),
         HallPriceEntity(
-            hallId: 'v-big', vrWeekday: 1400, vrWeekend: 1700, ps5Weekday: 1000, ps5Weekend: 1200),
+            hallId: 'v-big', vrWeekday: 600, vrWeekend: 1000, ps5Weekday: 300, ps5Weekend: 400),
         HallPriceEntity(
-            hallId: 'v-small', vrWeekday: 1400, vrWeekend: 1700, ps5Weekday: 1000, ps5Weekend: 1200),
+            hallId: 'v-small', vrWeekday: 600, vrWeekend: 1000, ps5Weekday: 300, ps5Weekend: 400),
       ]);
 
   @override
