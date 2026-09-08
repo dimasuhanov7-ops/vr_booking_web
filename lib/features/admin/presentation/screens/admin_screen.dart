@@ -44,15 +44,15 @@ class AdminScreen extends StatelessWidget {
 
               return Stack(
                 children: <Widget>[
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1400),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 44),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            AdminHeader(
+                  Column(
+                    children: <Widget>[
+                      // Закреплённая шапка — клуб можно переключить с любого места.
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1400),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: AdminHeader(
                               clubs: state.clubs,
                               selectedClubId: state.clubId,
                               accent: accent,
@@ -60,48 +60,69 @@ class AdminScreen extends StatelessWidget {
                                   bloc.add(AdminClubChanged(id)),
                               onLogout: onLogout,
                             ),
-                            const SizedBox(height: 22),
-                            AdminTabBar(
-                              current: state.tab,
-                              accent: accent,
-                              onSelected: (AdminTab t) => bloc.add(AdminTabChanged(t)),
-                              trailing: AdminPrimaryButton(
-                                label: '+  Новая запись',
-                                accent: accent,
-                                onTap: () => bloc.add(const AdminNewBookingOpened()),
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                            if (state.saveError != null) ...<Widget>[
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: AdminColors.dangerBg,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AdminColors.dangerBorder),
-                                ),
-                                child: Text(state.saveError!,
-                                    style: const TextStyle(
-                                        fontSize: 13, color: AdminColors.danger)),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            switch (state.tab) {
-                              AdminTab.prices =>
-                                PricesTab(state: state, accent: accent),
-                              AdminTab.packages =>
-                                PackagesTab(state: state, accent: accent),
-                              AdminTab.availability =>
-                                AvailabilityTab(state: state, accent: accent),
-                              AdminTab.records =>
-                                RecordsTab(state: state, accent: accent),
-                            },
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 44),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1400),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    AdminTabBar(
+                                      current: state.tab,
+                                      accent: accent,
+                                      onSelected: (AdminTab t) =>
+                                          bloc.add(AdminTabChanged(t)),
+                                      trailing: AdminPrimaryButton(
+                                        label: '+  Новая запись',
+                                        accent: accent,
+                                        onTap: () =>
+                                            bloc.add(const AdminNewBookingOpened()),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 22),
+                                    if (state.saveError != null) ...<Widget>[
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: AdminColors.dangerBg,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: AdminColors.dangerBorder),
+                                        ),
+                                        child: Text(state.saveError!,
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                color: AdminColors.danger)),
+                                      ),
+                                      const SizedBox(height: 14),
+                                    ],
+                                    switch (state.tab) {
+                                      AdminTab.prices =>
+                                        PricesTab(state: state, accent: accent),
+                                      AdminTab.packages =>
+                                        PackagesTab(state: state, accent: accent),
+                                      AdminTab.availability =>
+                                        AvailabilityTab(state: state, accent: accent),
+                                      AdminTab.records =>
+                                        RecordsTab(state: state, accent: accent),
+                                    },
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   if (state.openRow != null)
                     BookingDetailDrawer(state: state, accent: accent),
