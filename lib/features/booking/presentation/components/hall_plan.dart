@@ -114,9 +114,14 @@ class HallPlan extends StatelessWidget {
             // Ряд зала — 4 станции (так задан row_index в БД). Плитку ужимаем,
             // чтобы ряд не переносился на узких телефонах, но не растягиваем
             // шире макетных 74 px.
-            final double inner = c.maxWidth - 28;
-            final double pod =
-                ((inner - _podGap * 3) / 4).clamp(_podMinWidth, _podMaxWidth);
+            //
+            // Вычитаем padding (14+14) и рамку (1+1), а результат округляем
+            // вниз: дробная ширина превышала доступную на доли пикселя, и Wrap
+            // переносил четвёртую плитку на новую строку.
+            final double inner = c.maxWidth - 30;
+            final double pod = ((inner - _podGap * 3) / 4)
+                .floorToDouble()
+                .clamp(_podMinWidth, _podMaxWidth);
             return Container(
               padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
               decoration: BoxDecoration(
