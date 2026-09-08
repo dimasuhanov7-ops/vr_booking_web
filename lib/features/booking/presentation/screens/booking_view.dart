@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -91,13 +92,16 @@ class BookingView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             frame,
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: frameW),
-              child: const Padding(
-                padding: EdgeInsets.only(top: 14),
-                child: _AdminDoor(),
+            // Служебный вход — только в вебе: в мобильном приложении админки
+            // нет, и переход по адресу (?admin=1) там невозможен.
+            if (kIsWeb)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: frameW),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 14),
+                  child: _AdminDoor(),
+                ),
               ),
-            ),
           ],
         );
       },
