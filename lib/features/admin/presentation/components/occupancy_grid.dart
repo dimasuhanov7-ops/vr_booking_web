@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -111,10 +109,6 @@ class _HallOccupancy extends StatefulWidget {
 class _HallOccupancyState extends State<_HallOccupancy> {
   String? _hoverId;
 
-  /// Прямоугольник последней подсвеченной брони (в ячейках) — чтобы рамка
-  /// плавно уезжала на новую бронь и так же плавно гасла.
-  ({int minU, int maxU, int minS, int maxS, int hue})? _shownBounds;
-
   /// Ширина ячейки-часа — считается по доступному месту в [LayoutBuilder],
   /// поэтому мутируется в начале builder'а (всё чтение — синхронно там же).
   double _cw = OccupancyGrid.cellW;
@@ -148,9 +142,6 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       (_) => List<_Cell>.filled(slots.length, null),
     );
     final List<_Head> heads = <_Head>[];
-    // id брони -> прямоугольник её ячеек (для рамки-выделения).
-    final Map<String, ({int minU, int maxU, int minS, int maxS, int hue})> bounds =
-        <String, ({int minU, int maxU, int minS, int maxS, int hue})>{};
 
     for (int ri = 0; ri < bookings.length; ri++) {
       final BookingRowEntity e = bookings[ri];
@@ -161,8 +152,6 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       }
       if (cover.isEmpty) continue;
       ({int u, int s})? first;
-      int? minU;
-      int? maxU;
       for (final bool wantPs5 in <bool>[false, true]) {
         int need = wantPs5 ? e.consoles : e.headsets;
         for (int ui = 0; ui < units.length && need > 0; ui++) {
@@ -171,29 +160,16 @@ class _HallOccupancyState extends State<_HallOccupancy> {
           for (final int si in cover) {
             grid[ui][si] = (row: e, hue: ri);
           }
-          minU = minU == null ? ui : math.min(minU, ui);
-          maxU = maxU == null ? ui : math.max(maxU, ui);
           final ({int u, int s})? cur = first;
           if (cur == null || ui < cur.u) first = (u: ui, s: cover.first);
           need--;
         }
       }
       final ({int u, int s})? f = first;
-      if (f != null && minU != null && maxU != null) {
+      if (f != null) {
         heads.add((unit: f.u, slot: f.s, span: cover.length, row: e, hue: ri));
-        bounds[e.id] = (
-          minU: minU,
-          maxU: maxU,
-          minS: cover.first,
-          maxS: cover.last,
-          hue: ri,
-        );
       }
     }
-
-    final ({int minU, int maxU, int minS, int maxS, int hue})? activeBounds =
-        _hoverId == null ? null : bounds[_hoverId];
-    if (activeBounds != null) _shownBounds = activeBounds;
 
     final int totalCells = units.length * slots.length;
     int busyCells = 0;
@@ -285,8 +261,6 @@ class _HallOccupancyState extends State<_HallOccupancy> {
                     ],
                   ),
                   for (final _Head h in heads) _nameLabel(h),
-                  if (_shownBounds != null)
-                    _selectionOutline(_shownBounds!, activeBounds != null),
                 ],
               ),
             );
@@ -382,53 +356,6 @@ class _HallOccupancyState extends State<_HallOccupancy> {
           }),
       ]);
 
-  /// Плавная рамка-выделение вокруг всей брони.
-  Widget _selectionOutline(
-    ({int minU, int maxU, int minS, int maxS, int hue}) b,
-    bool visible,
-  ) {
-    final ({Color bg, Color border, Color text}) hue = AdminColors.hue(b.hue);
-    final double step = _cw + OccupancyGrid.gap;
-    final double left = OccupancyGrid.labelW + b.minS * step - 3;
-    final double top = (1 + b.minU) * OccupancyGrid.rowH - 3;
-    final double width = (b.maxS - b.minS + 1) * step - OccupancyGrid.gap + 6;
-    final double height =
-        (b.maxU - b.minU) * OccupancyGrid.rowH + OccupancyGrid.cellH + 6;
-
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      left: left,
-      top: top,
-      width: width,
-      height: height,
-      child: IgnorePointer(
-        child: AnimatedOpacity(
-          opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: hue.border.withValues(alpha: 0.95), width: 2),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                    color: hue.border.withValues(alpha: 0.40),
-                    blurRadius: 16,
-                    spreadRadius: 1),
-                const BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 3)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _nameLabel(_Head h) {
     final bool dim = _hoverId != null && _hoverId != h.row.id;
     final ({Color bg, Color border, Color text}) hue = AdminColors.hue(h.hue);
@@ -519,11 +446,23 @@ class _OccCell extends StatelessWidget {
             curve: _hoverCurve,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
-              // Подсвеченная бронь — чуть насыщеннее заливка.
+              // Подсвеченная бронь — насыщеннее заливка + светлая рамка её цвета.
               color: active
-                  ? h.bg.withValues(alpha: (h.bg.a + 0.22).clamp(0.0, 1.0))
+                  ? h.bg.withValues(alpha: (h.bg.a + 0.24).clamp(0.0, 1.0))
                   : h.bg,
-              border: Border.all(color: h.border, width: ps5 ? 1.4 : 1),
+              border: Border.all(
+                color: active ? h.text.withValues(alpha: 0.9) : h.border,
+                width: active ? 1.6 : (ps5 ? 1.4 : 1),
+              ),
+              boxShadow: active
+                  ? <BoxShadow>[
+                      BoxShadow(
+                        color: h.border.withValues(alpha: 0.5),
+                        blurRadius: 8,
+                        spreadRadius: 0.5,
+                      ),
+                    ]
+                  : const <BoxShadow>[],
             ),
             child: const SizedBox.expand(),
           ),
