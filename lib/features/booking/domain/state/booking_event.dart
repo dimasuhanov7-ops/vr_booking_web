@@ -226,3 +226,15 @@ class BookingAccountListToggled extends BookingEvent {
   /// Создаёт событие.
   const BookingAccountListToggled();
 }
+
+/// Клиент отменяет свою бронь из списка «Мои брони».
+class BookingCancelRequested extends BookingEvent {
+  /// Создаёт событие.
+  const BookingCancelRequested(this.orderId);
+
+  /// Идентификатор брони.
+  final String orderId;
+
+  @override
+  List<Object?> get props => <Object?>[orderId];
+}

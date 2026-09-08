@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:vr_booking_web/features/booking/data/repository/booking_repository_mock.dart';
 import 'package:vr_booking_web/features/booking/domain/entity/account_entity.dart';
+import 'package:vr_booking_web/features/booking/domain/entity/booking_failure.dart';
 import 'package:vr_booking_web/features/booking/domain/repository/i_account_store.dart';
 import 'package:vr_booking_web/features/booking/domain/state/booking_bloc.dart';
 import 'package:vr_booking_web/features/booking/domain/entity/time_slot_entity.dart';
@@ -20,6 +21,9 @@ class _MemStore implements IAccountStore {
   List<SavedBookingEntity> readBookings() => List<SavedBookingEntity>.of(_bookings);
   @override
   void addBooking(SavedBookingEntity b) => _bookings.add(b);
+  @override
+  void removeBooking(String orderId) =>
+      _bookings.removeWhere((SavedBookingEntity b) => b.orderId == orderId);
 }
 
 DateTime _weekdayAhead() {
@@ -79,5 +83,47 @@ void main() {
     expect(b.state.account, isNull);
     expect(store.readAccount(), isNull);
     await b.close();
+  });
+
+  test('отмена брони: уходит из «моих», чужой телефон не проходит', () async {
+    final _MemStore store = _MemStore();
+    final BookingRepositoryMock repo = BookingRepositoryMock();
+    final BookingBloc a = BookingBloc(
+      repository: repo,
+      accountStore: store,
+      lockedClubSlug: 'effect_vr',
+    );
+
+    a.add(const BookingStarted());
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    a.add(BookingDateSelected(_weekdayAhead()));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final TimeSlotEntity slot = a.state.slots.first;
+    a.add(BookingSlotSelected(slot));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    a.add(const BookingQuickPicked(2));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    a.add(const BookingContactChanged(name: 'Костя', phone: '+7 (900) 777-66-55'));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    a.add(const BookingSubmitted());
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+
+    expect(store.readBookings().length, 1, reason: 'бронь сохранена локально');
+    final String orderId = store.readBookings().first.orderId;
+
+    // Чужой номер: сервер не находит бронь, локальный список не трогаем.
+    await expectLater(
+      repo.cancelReservation(orderId: orderId, clientPhone: '+79111111111'),
+      throwsA(isA<BookingFailure>()),
+    );
+    expect(store.readBookings().length, 1, reason: 'чужой номер ничего не отменил');
+
+    // Свой номер в другом формате — как на сервере, сверка по последним 10 цифрам.
+    a.add(BookingCancelRequested(orderId));
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    expect(store.readBookings(), isEmpty, reason: 'бронь убрана после отмены');
+    expect(a.state.myBookings, isEmpty);
+    await a.close();
   });
 }

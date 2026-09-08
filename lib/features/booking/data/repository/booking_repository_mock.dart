@@ -61,6 +61,11 @@ class BookingRepositoryMock implements IBookingRepository {
 
   final List<ReservationRequestEntity> _created = <ReservationRequestEntity>[];
 
+  /// id брони -> заявка: нужно, чтобы демо умело отменять по тому же ключу,
+  /// что и сервер (id + телефон).
+  final Map<String, ReservationRequestEntity> _byId =
+      <String, ReservationRequestEntity>{};
+
   @override
   Future<List<ClubEntity>> fetchClubs() => _delay(_clubs);
 
@@ -163,7 +168,31 @@ class BookingRepositoryMock implements IBookingRepository {
                 rs.stationIds.any(qs.stationIds.contains))));
     if (clash) throw const SlotAlreadyTakenFailure();
     _created.add(request);
-    return 'mock-${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}';
+    final String id =
+        'mock-${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}';
+    _byId[id] = request;
+    return id;
+  }
+
+  @override
+  Future<void> cancelReservation({
+    required String orderId,
+    required String clientPhone,
+  }) async {
+    // Демо: снимаем бронь из in-memory списка, если телефон совпал по
+    // последним 10 цифрам (как в booking_phone_key на сервере).
+    String key(String p) {
+      final String d = p.replaceAll(RegExp(r'[^0-9]'), '');
+      return d.length <= 10 ? d : d.substring(d.length - 10);
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    final ReservationRequestEntity? r = _byId[orderId];
+    if (r == null || key(r.clientPhone) != key(clientPhone)) {
+      throw const BookingOrderNotFoundFailure();
+    }
+    _byId.remove(orderId);
+    _created.remove(r);
   }
 
   Future<T> _delay<T>(T value) =>

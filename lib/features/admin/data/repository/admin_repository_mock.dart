@@ -1,4 +1,5 @@
 import '../../domain/entity/admin_club_entity.dart';
+import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/entity/package_entity.dart';
@@ -114,6 +115,30 @@ class AdminRepositoryMock implements IAdminRepository {
 
   @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {}
+
+  // Демо-режим: доступность стартует пустой, а правки живут в состоянии BLoC —
+  // как и раньше. Сервера здесь нет, сохранять некуда.
+  @override
+  Future<AvailabilityEntity> fetchAvailability() async =>
+      _delay(const AvailabilityEntity());
+
+  @override
+  Future<void> setIntakeOpen(String clubId, {required bool open}) async {}
+
+  @override
+  Future<void> setHallClosed({
+    required String clubId,
+    required String hallId,
+    required bool closed,
+  }) async {}
+
+  @override
+  Future<void> setSlotClosed({
+    required String clubId,
+    required DateTime day,
+    required int startMinutes,
+    required bool closed,
+  }) async {}
 
   static BookingRowEntity _row(
     String id,

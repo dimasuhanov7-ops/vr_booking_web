@@ -1,12 +1,13 @@
 import '../entity/admin_club_entity.dart';
+import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
 
 /// Контракт данных админки.
 ///
-/// Чтение — стартовые данные всех вкладок. Запись — цены, пакеты, статус броней
-/// (доступность пока живёт только в состоянии `AdminBloc`).
+/// Чтение — стартовые данные всех вкладок, запись — цены, пакеты, статус броней
+/// и доступность.
 abstract interface class IAdminRepository {
   /// Клубы с залами и рабочими часами.
   Future<List<AdminClubEntity>> fetchClubs();
@@ -19,6 +20,9 @@ abstract interface class IAdminRepository {
 
   /// Единый список записей (брони + журнал).
   Future<List<BookingRowEntity>> fetchRows();
+
+  /// Пауза приёма и закрытые залы/окна.
+  Future<AvailabilityEntity> fetchAvailability();
 
   // -- запись ---------------------------------------------------------------
 
@@ -40,4 +44,22 @@ abstract interface class IAdminRepository {
 
   /// Отменить / вернуть бронь (`status` = `cancelled` / `confirmed`).
   Future<void> setOrderCancelled(String orderId, {required bool cancelled});
+
+  /// Приём онлайн-броней клуба (пауза).
+  Future<void> setIntakeOpen(String clubId, {required bool open});
+
+  /// Закрыть / открыть зал целиком и бессрочно.
+  Future<void> setHallClosed({
+    required String clubId,
+    required String hallId,
+    required bool closed,
+  });
+
+  /// Закрыть / открыть часовое окно клуба на дату.
+  Future<void> setSlotClosed({
+    required String clubId,
+    required DateTime day,
+    required int startMinutes,
+    required bool closed,
+  });
 }

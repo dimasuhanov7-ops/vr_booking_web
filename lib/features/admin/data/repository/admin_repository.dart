@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entity/admin_club_entity.dart';
 import '../../domain/entity/admin_failure.dart';
+import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/entity/package_entity.dart';
@@ -176,6 +177,37 @@ class AdminRepository implements IAdminRepository {
     return out;
   }
 
+  @override
+  Future<AvailabilityEntity> fetchAvailability() async {
+    final List<dynamic> clubs = await _client
+        .from('booking_clubs')
+        .select('id,intake_open')
+        .eq('is_active', true);
+    final List<dynamic> rows = await _client
+        .from('booking_availability')
+        .select('id,club_id,room_id,day,from_minutes,to_minutes');
+
+    return AvailabilityEntity(
+      pausedClubIds: <String>{
+        for (final dynamic c in clubs)
+          if ((c as Map<String, dynamic>)['intake_open'] == false)
+            c['id'] as String,
+      },
+      closures: rows.map((dynamic r) {
+        final Map<String, dynamic> m = r as Map<String, dynamic>;
+        final String? day = m['day'] as String?;
+        return ClosureEntity(
+          id: m['id'] as String,
+          clubId: m['club_id'] as String,
+          hallId: m['room_id'] as String?,
+          day: day == null ? null : DateTime.parse(day),
+          fromMinutes: (m['from_minutes'] as num?)?.toInt(),
+          toMinutes: (m['to_minutes'] as num?)?.toInt(),
+        );
+      }).toList(growable: false),
+    );
+  }
+
   // -- запись -------------------------------------------------------------
 
   @override
@@ -241,6 +273,67 @@ class AdminRepository implements IAdminRepository {
           'status': cancelled ? 'cancelled' : 'confirmed',
         }).eq('id', orderId));
   }
+
+  @override
+  Future<void> setIntakeOpen(String clubId, {required bool open}) async {
+    await _guard(() => _client
+        .from('booking_clubs')
+        .update(<String, dynamic>{'intake_open': open}).eq('id', clubId));
+  }
+
+  @override
+  Future<void> setHallClosed({
+    required String clubId,
+    required String hallId,
+    required bool closed,
+  }) async {
+    if (closed) {
+      // Зал закрыт бессрочно: day и окно не задаём.
+      await _guard(() => _client.from('booking_availability').insert(
+            <String, dynamic>{'club_id': clubId, 'room_id': hallId},
+          ));
+      return;
+    }
+    await _guard(() => _client
+        .from('booking_availability')
+        .delete()
+        .eq('club_id', clubId)
+        .eq('room_id', hallId)
+        .isFilter('day', null)
+        .isFilter('from_minutes', null));
+  }
+
+  @override
+  Future<void> setSlotClosed({
+    required String clubId,
+    required DateTime day,
+    required int startMinutes,
+    required bool closed,
+  }) async {
+    final String date = _dateOnly(day);
+    if (closed) {
+      await _guard(() => _client.from('booking_availability').insert(
+            <String, dynamic>{
+              'club_id': clubId,
+              'day': date,
+              'from_minutes': startMinutes,
+              'to_minutes': startMinutes + 60,
+            },
+          ));
+      return;
+    }
+    await _guard(() => _client
+        .from('booking_availability')
+        .delete()
+        .eq('club_id', clubId)
+        .eq('day', date)
+        .eq('from_minutes', startMinutes));
+  }
+
+  static String _dateOnly(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// Переводит ошибку PostgREST в [AdminFailure] с понятным сотруднику текстом.
   ///

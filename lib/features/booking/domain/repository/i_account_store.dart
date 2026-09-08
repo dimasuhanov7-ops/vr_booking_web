@@ -19,4 +19,7 @@ abstract interface class IAccountStore {
 
   /// Добавить бронь в локальный список.
   void addBooking(SavedBookingEntity booking);
+
+  /// Убрать бронь из локального списка (после отмены на сервере).
+  void removeBooking(String orderId);
 }

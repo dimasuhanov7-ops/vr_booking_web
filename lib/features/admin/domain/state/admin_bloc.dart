@@ -7,6 +7,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../app/config/booking_config.dart';
 import '../entity/admin_club_entity.dart';
 import '../entity/admin_failure.dart';
+import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
@@ -57,8 +58,29 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final List<HallPriceEntity> prices = await _repository.fetchPrices();
     final List<PackageEntity> packages = await _repository.fetchPackages();
     final List<BookingRowEntity> rows = await _repository.fetchRows();
+    final AvailabilityEntity avail = await _repository.fetchAvailability();
 
     final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
+    final String clubId =
+        hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
+
+    // Закрытия из БД раскладываем в две коллекции состояния: залы закрыты
+    // бессрочно, окна привязаны к дате и переводятся в ключи «клуб-день-минуты».
+    final DateTime today = _today();
+    final Set<String> closedHalls = <String>{};
+    final Set<String> closedSlots = <String>{};
+    for (final ClosureEntity c in avail.closures) {
+      if (c.isWholeHall) {
+        closedHalls.add(c.hallId!);
+        continue;
+      }
+      if (c.day == null || c.fromMinutes == null) continue;
+      final int dayIndex = DateTime(c.day!.year, c.day!.month, c.day!.day)
+          .difference(today)
+          .inDays;
+      closedSlots.add('${c.clubId}-$dayIndex-${c.fromMinutes}');
+    }
+
     emit(state.copyWith(
       status: AdminStatus.ready,
       clubId: hasClub ? null : (clubs.isEmpty ? null : clubs.first.id),
@@ -72,7 +94,17 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         for (final BookingRowEntity r in rows)
           if (r.isCancelled) r.id,
       },
+      intakeOpen: !avail.pausedClubIds.contains(clubId),
+      closedHallIds: closedHalls,
+      closedSlotKeys: closedSlots,
+      pausedClubIds: avail.pausedClubIds,
     ));
+  }
+
+  /// Сегодня без времени — база для [AdminState.availDay] и индексов дней.
+  static DateTime _today() {
+    final DateTime n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
   }
 
   /// Оптимистичная запись: если провалилась — показываем ошибку в шапке вкладки.
@@ -93,6 +125,9 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     if (event.clubId == state.clubId) return;
     emit(state.copyWith(
       clubId: event.clubId,
+      // Пауза приёма — свойство клуба, а не панели: показываем статус того,
+      // на кого переключились.
+      intakeOpen: !state.pausedClubIds.contains(event.clubId),
       availDayIndex: 0,
       filterDay: 0,
       filterHallId: '',
@@ -260,40 +295,85 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onIntakeToggled(AdminIntakeToggled event, Emitter<AdminState> emit) =>
-      emit(state.copyWith(intakeOpen: !state.intakeOpen));
+  Future<void> _onIntakeToggled(
+    AdminIntakeToggled event,
+    Emitter<AdminState> emit,
+  ) async {
+    final bool open = !state.intakeOpen;
+    emit(state.copyWith(intakeOpen: open));
+    await _persist(
+      () => _repository.setIntakeOpen(state.clubId, open: open),
+      emit,
+    );
+  }
 
-  void _onHallClosureToggled(
+  Future<void> _onHallClosureToggled(
     AdminHallClosureToggled event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
     final Set<String> next = Set<String>.of(state.closedHallIds);
-    if (!next.remove(event.hallId)) next.add(event.hallId);
+    final bool closed = !next.remove(event.hallId);
+    if (closed) next.add(event.hallId);
     emit(state.copyWith(closedHallIds: next));
+    await _persist(
+      () => _repository.setHallClosed(
+        clubId: state.clubId,
+        hallId: event.hallId,
+        closed: closed,
+      ),
+      emit,
+    );
   }
 
   void _onAvailDayChanged(AdminAvailDayChanged event, Emitter<AdminState> emit) =>
       emit(state.copyWith(availDayIndex: event.dayIndex));
 
-  void _onSlotClosureToggled(
+  Future<void> _onSlotClosureToggled(
     AdminSlotClosureToggled event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
     final String key = state.slotKey(event.startMinutes);
     final Set<String> next = Set<String>.of(state.closedSlotKeys);
-    if (!next.remove(key)) next.add(key);
+    final bool closed = !next.remove(key);
+    if (closed) next.add(key);
     emit(state.copyWith(closedSlotKeys: next));
+    await _persist(
+      () => _repository.setSlotClosed(
+        clubId: state.clubId,
+        day: state.availDay,
+        startMinutes: event.startMinutes,
+        closed: closed,
+      ),
+      emit,
+    );
   }
 
-  void _onDayClosureChanged(
+  Future<void> _onDayClosureChanged(
     AdminDayClosureChanged event,
     Emitter<AdminState> emit,
-  ) {
-    final Set<String> keys =
-        state.slotStarts.map(state.slotKey).toSet();
-    final Set<String> next = Set<String>.of(state.closedSlotKeys)..removeAll(keys);
+  ) async {
+    final List<int> starts = state.slotStarts;
+    final Set<String> keys = starts.map(state.slotKey).toSet();
+    final Set<String> was = state.closedSlotKeys;
+    final Set<String> next = Set<String>.of(was)..removeAll(keys);
     if (event.closeAll) next.addAll(keys);
     emit(state.copyWith(closedSlotKeys: next));
+
+    // Пишем только фактические изменения: закрыть весь день, где половина
+    // слотов уже закрыта, не должно порождать дублей в booking_availability.
+    final DateTime day = state.availDay;
+    await _persist(() async {
+      for (final int m in starts) {
+        final bool before = was.contains(state.slotKey(m));
+        if (before == event.closeAll) continue;
+        await _repository.setSlotClosed(
+          clubId: state.clubId,
+          day: day,
+          startMinutes: m,
+          closed: event.closeAll,
+        );
+      }
+    }, emit);
   }
 
   void _onFilterChanged(AdminFilterChanged event, Emitter<AdminState> emit) {

@@ -44,8 +44,9 @@ class AvailabilityTab extends StatelessWidget {
             border: Border.all(color: AdminColors.warnBorder),
           ),
           child: const Text(
-            'Изменения доступности пока действуют только в этой сессии и не '
-            'сохраняются на сервер — виджет их не видит.',
+            'Изменения применяются сразу: закрытые залы и окна пропадают из '
+            'публичного виджета, а на паузе он не принимает новые брони. '
+            'Уже созданные брони не отменяются — отмените их вручную.',
             style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.warn),
           ),
         ),

@@ -39,4 +39,13 @@ abstract interface class IBookingRepository {
   /// Создаёт групповую бронь одной транзакцией. Возвращает id брони.
   /// Бросает [SlotAlreadyTakenFailure] при конфликте (`23P01`).
   Future<String> createReservation(ReservationRequestEntity request);
+
+  /// Отменить бронь клиента по паре (id брони, телефон).
+  ///
+  /// Доступа к аккаунту у клиента нет, поэтому подтверждением служит его
+  /// собственный телефон. Чужая и несуществующая бронь неразличимы.
+  Future<void> cancelReservation({
+    required String orderId,
+    required String clientPhone,
+  });
 }

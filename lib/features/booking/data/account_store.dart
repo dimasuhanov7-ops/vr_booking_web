@@ -63,4 +63,15 @@ class AccountStore implements IAccountStore {
       jsonEncode(all.map((SavedBookingEntity b) => b.toJson()).toList()),
     );
   }
+
+  @override
+  void removeBooking(String orderId) {
+    final List<SavedBookingEntity> left = readBookings()
+        .where((SavedBookingEntity b) => b.orderId != orderId)
+        .toList(growable: false);
+    LocalStore.write(
+      _bookingsKey,
+      jsonEncode(left.map((SavedBookingEntity b) => b.toJson()).toList()),
+    );
+  }
 }

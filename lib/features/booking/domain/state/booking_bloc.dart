@@ -70,6 +70,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingAccountLoginSubmitted>(_onAccountLoginSubmitted);
     on<BookingAccountLoggedOut>(_onAccountLoggedOut);
     on<BookingAccountListToggled>(_onAccountListToggled);
+    on<BookingCancelRequested>(_onCancelRequested);
   }
 
   final IBookingRepository _repository;
@@ -517,6 +518,31 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     Emitter<BookingState> emit,
   ) {
     emit(state.copyWith(accountListOpen: !state.accountListOpen));
+  }
+
+  /// Отмена брони клиентом: сервер сверяет телефон, локальный список чистим
+  /// только после успеха — иначе бронь пропадёт с экрана, оставшись в базе.
+  Future<void> _onCancelRequested(
+    BookingCancelRequested event,
+    Emitter<BookingState> emit,
+  ) async {
+    final String phone = state.account?.phone ?? state.clientPhone;
+    if (phone.trim().isEmpty) return;
+
+    emit(state.copyWith(status: BookingStatus.submitting));
+    try {
+      await _repository.cancelReservation(
+        orderId: event.orderId,
+        clientPhone: phone,
+      );
+      _account?.removeBooking(event.orderId);
+      emit(state.copyWith(
+        status: BookingStatus.ready,
+        savedBookings: _account?.readBookings() ?? state.savedBookings,
+      ));
+    } on BookingFailure catch (e) {
+      emit(state.copyWith(status: BookingStatus.ready, errorMessage: e.message));
+    }
   }
 
   Future<void> _handleConflict(Emitter<BookingState> emit) async {

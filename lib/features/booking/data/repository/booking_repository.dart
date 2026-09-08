@@ -156,6 +156,21 @@ class BookingRepository implements IBookingRepository {
         return orderId;
       });
 
+  @override
+  Future<void> cancelReservation({
+    required String orderId,
+    required String clientPhone,
+  }) =>
+      _guard(() async {
+        await _client.rpc<dynamic>(
+          'booking_cancel_order',
+          params: <String, dynamic>{
+            'p_order_id': orderId,
+            'p_client_phone': clientPhone,
+          },
+        );
+      });
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();
@@ -176,6 +191,12 @@ class BookingRepository implements IBookingRepository {
       final int req =
           int.tryParse(m.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
       return DiscountMinStationsFailure(req);
+    }
+    if (m.contains('ORDER_NOT_FOUND')) {
+      return const BookingOrderNotFoundFailure();
+    }
+    if (m.contains('TOO_LATE_TO_CANCEL')) {
+      return const BookingTooLateToCancelFailure();
     }
     if (m.contains('INTAKE_CLOSED')) return const BookingIntakeClosedFailure();
     if (m.contains('SLOT_CLOSED')) return const BookingSlotClosedFailure();

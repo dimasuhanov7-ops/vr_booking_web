@@ -79,6 +79,20 @@ class BookingSlotClosedFailure extends BookingFailure {
       : super('Это время закрыто для записи. Выберите другое.');
 }
 
+/// Бронь не найдена — либо её нет, либо телефон не совпал.
+class BookingOrderNotFoundFailure extends BookingFailure {
+  /// Создаёт ошибку.
+  const BookingOrderNotFoundFailure()
+      : super('Бронь не найдена. Проверьте номер телефона.');
+}
+
+/// Сеанс уже начался — отменять поздно.
+class BookingTooLateToCancelFailure extends BookingFailure {
+  /// Создаёт ошибку.
+  const BookingTooLateToCancelFailure()
+      : super('Сеанс уже начался — отменить онлайн нельзя. Позвоните в клуб.');
+}
+
 /// Прочая непредвиденная ошибка сети/сервера.
 class BookingUnexpectedFailure extends BookingFailure {
   /// Создаёт непредвиденную ошибку.

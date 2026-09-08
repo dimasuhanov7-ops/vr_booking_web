@@ -278,6 +278,7 @@ class AdminState extends Equatable {
     this.intakeOpen = true,
     this.closedHallIds = const <String>{},
     this.closedSlotKeys = const <String>{},
+    this.pausedClubIds = const <String>{},
     this.filterDay = 0,
     this.filterHallId = '',
     this.filterType = AdminTypeFilter.all,
@@ -332,6 +333,10 @@ class AdminState extends Equatable {
 
   /// Закрытые слоты (`clubId-dayIndex-minutes`).
   final Set<String> closedSlotKeys;
+
+  /// Клубы с приостановленным приёмом онлайн-броней. Нужен, чтобы при смене
+  /// клуба показать его собственный статус, а не статус предыдущего.
+  final Set<String> pausedClubIds;
 
   /// День, по которому смотрим записи (смещение от сегодняшнего). По умолчанию
   /// и после обновления страницы — сегодня (`0`).
@@ -391,6 +396,13 @@ class AdminState extends Equatable {
 
   /// Ключ слота выбранного дня.
   String slotKey(int minutes) => '$clubId-$availDayIndex-$minutes';
+
+  /// Дата, выбранная на вкладке «Доступность» (от сегодняшнего дня).
+  DateTime get availDay {
+    final DateTime now = DateTime.now();
+    return DateTime(now.year, now.month, now.day)
+        .add(Duration(days: availDayIndex));
+  }
 
   /// Записи с наложенными правками ([rowEdits]).
   List<BookingRowEntity> get effectiveRows =>
@@ -516,6 +528,7 @@ class AdminState extends Equatable {
     bool? intakeOpen,
     Set<String>? closedHallIds,
     Set<String>? closedSlotKeys,
+    Set<String>? pausedClubIds,
     int? filterDay,
     String? filterHallId,
     AdminTypeFilter? filterType,
@@ -541,6 +554,7 @@ class AdminState extends Equatable {
       intakeOpen: intakeOpen ?? this.intakeOpen,
       closedHallIds: closedHallIds ?? this.closedHallIds,
       closedSlotKeys: closedSlotKeys ?? this.closedSlotKeys,
+      pausedClubIds: pausedClubIds ?? this.pausedClubIds,
       filterDay: filterDay ?? this.filterDay,
       filterHallId: filterHallId ?? this.filterHallId,
       filterType: filterType ?? this.filterType,
@@ -567,6 +581,7 @@ class AdminState extends Equatable {
         intakeOpen,
         closedHallIds,
         closedSlotKeys,
+        pausedClubIds,
         filterDay,
         filterHallId,
         filterType,

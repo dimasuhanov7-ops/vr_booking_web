@@ -20,6 +20,7 @@ class AccountBlock extends StatelessWidget {
     required this.onLogout,
     required this.onLoginPhoneChanged,
     required this.onLoginSubmit,
+    required this.onCancel,
     super.key,
   });
 
@@ -46,6 +47,9 @@ class AccountBlock extends StatelessWidget {
 
   /// «Выйти».
   final VoidCallback onLogout;
+
+  /// Отмена брони из списка.
+  final ValueChanged<SavedBookingEntity> onCancel;
 
   /// Ввод телефона.
   final ValueChanged<String> onLoginPhoneChanged;
@@ -188,12 +192,37 @@ class AccountBlock extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(b.total,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                      )),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(b.total,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: <FontFeature>[
+                              FontFeature.tabularFigures()
+                            ],
+                          )),
+                      const SizedBox(height: 4),
+                      InkWell(
+                        onTap: () => onCancel(b),
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          child: Text(
+                            'отменить',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: BookingColors.textMuted,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

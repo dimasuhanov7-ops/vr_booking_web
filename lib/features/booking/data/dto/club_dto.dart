@@ -12,6 +12,7 @@ class ClubDto {
     required this.closeTime,
     required this.slotGapMinutes,
     required this.sortOrder,
+    this.intakeOpen = true,
   });
 
   /// Разбирает JSON от Supabase.
@@ -24,6 +25,7 @@ class ClubDto {
         closeTime: _parseTime(json['close_time'] as String? ?? '23:00:00'),
         slotGapMinutes: (json['slot_gap_minutes'] as num?)?.toInt() ?? 0,
         sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
+        intakeOpen: json['intake_open'] as bool? ?? true,
       );
 
   /// Идентификатор клуба.
@@ -50,6 +52,9 @@ class ClubDto {
   /// Порядок отображения.
   final int sortOrder;
 
+  /// Принимает ли клуб онлайн-брони (пауза из админки).
+  final bool intakeOpen;
+
   /// В доменную сущность.
   ClubEntity toEntity() => ClubEntity(
         id: id,
@@ -60,6 +65,7 @@ class ClubDto {
         closeTime: closeTime,
         slotGapMinutes: slotGapMinutes,
         sortOrder: sortOrder,
+        intakeOpen: intakeOpen,
       );
 
   static Duration _parseTime(String raw) {

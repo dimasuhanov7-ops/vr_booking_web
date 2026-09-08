@@ -12,6 +12,7 @@ class ClubEntity extends Equatable {
     required this.closeTime,
     required this.slotGapMinutes,
     this.sortOrder = 0,
+    this.intakeOpen = true,
   });
 
   /// Идентификатор клуба.
@@ -38,6 +39,10 @@ class ClubEntity extends Equatable {
   /// Порядок отображения в списке клубов.
   final int sortOrder;
 
+  /// Принимает ли клуб онлайн-брони. `false` — пауза, включённая в админке:
+  /// форму показываем, но предупреждаем сразу, а не в конце.
+  final bool intakeOpen;
+
   @override
   List<Object?> get props => <Object?>[
         id,
@@ -48,5 +53,6 @@ class ClubEntity extends Equatable {
         closeTime,
         slotGapMinutes,
         sortOrder,
+        intakeOpen,
       ];
 }

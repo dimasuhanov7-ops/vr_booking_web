@@ -170,6 +170,18 @@ class BookingRepositoryApi implements IBookingRepository {
         return id;
       });
 
+  @override
+  Future<void> cancelReservation({
+    required String orderId,
+    required String clientPhone,
+  }) =>
+      _guard(() async {
+        await _post('/reservations/cancel', <String, dynamic>{
+          'order_id': orderId,
+          'client_phone': clientPhone,
+        });
+      });
+
   // ---------------------------------------------------------------------------
 
   Future<List<dynamic>> _get(String path, [Map<String, String>? query]) async {
@@ -213,6 +225,8 @@ class BookingRepositoryApi implements IBookingRepository {
       'TOO_MANY_ACTIVE' => const BookingTooManyActiveFailure(),
       'BAD_PHONE' => const BookingBadPhoneFailure(),
       'INTAKE_CLOSED' => const BookingIntakeClosedFailure(),
+      'ORDER_NOT_FOUND' => const BookingOrderNotFoundFailure(),
+      'TOO_LATE_TO_CANCEL' => const BookingTooLateToCancelFailure(),
       'SLOT_CLOSED' => const BookingSlotClosedFailure(),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||

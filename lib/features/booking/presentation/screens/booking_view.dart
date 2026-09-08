@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../app/config/booking_config.dart';
 import '../../../../app/embed/nav.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../domain/entity/account_entity.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
 import '../../domain/entity/package_entity.dart';
@@ -374,8 +375,15 @@ class _FormBody extends StatelessWidget {
           onLoginPhoneChanged: (String v) =>
               bloc.add(BookingAccountLoginPhoneChanged(v)),
           onLoginSubmit: () => bloc.add(const BookingAccountLoginSubmitted()),
+          onCancel: (SavedBookingEntity b) => _confirmCancel(context, bloc, b),
         ),
         const SizedBox(height: 20),
+        // Пауза приёма: предупреждаем сразу после выбора клуба, а не после
+        // того, как человек заполнил всю форму и нажал «Забронировать».
+        if (club != null && !club.intakeOpen) ...<Widget>[
+          const _IntakePaused(),
+          const SizedBox(height: 20),
+        ],
         if (state.conflictShown) ...<Widget>[
           _conflict(bloc),
           const SizedBox(height: 4),
@@ -624,6 +632,37 @@ class _FormBody extends StatelessWidget {
         ),
       ];
 
+  /// Отмена необратима и освобождает станции — спрашиваем подтверждение.
+  Future<void> _confirmCancel(
+    BuildContext context,
+    BookingBloc bloc,
+    SavedBookingEntity b,
+  ) async {
+    final bool? yes = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        backgroundColor: BookingColors.frame,
+        title: const Text('Отменить бронь?', style: TextStyle(fontSize: 16)),
+        content: Text(
+          '${b.title}\n${b.meta}\n\n'
+          'Станции освободятся, и время смогут занять другие.',
+          style: const TextStyle(fontSize: 13, height: 1.45),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Оставить'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Отменить бронь'),
+          ),
+        ],
+      ),
+    );
+    if (yes ?? false) bloc.add(BookingCancelRequested(b.orderId));
+  }
+
   Widget _idlePlaceholder() {
     return Container(
       width: double.infinity,
@@ -752,6 +791,47 @@ class _FormBody extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: 22),
         child: Divider(height: 1, color: BookingColors.borderFaint),
       );
+}
+
+/// Клуб временно не принимает онлайн-брони.
+class _IntakePaused extends StatelessWidget {
+  const _IntakePaused();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: BookingColors.warnBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: BookingColors.warnBorder),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Онлайн-запись сейчас на паузе',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: BookingColors.warnTitle,
+            ),
+          ),
+          SizedBox(height: 5),
+          Text(
+            'Посмотреть свободное время можно, но подтвердить бронь пока '
+            'не получится. Позвоните в клуб — забронируем вручную.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: BookingColors.warnText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Hint extends StatelessWidget {
