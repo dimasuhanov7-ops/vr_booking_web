@@ -369,7 +369,8 @@ class _FormBody extends StatelessWidget {
             bloc.add(BookingHallSelected(other));
           },
         )
-      else
+      // «Другой клуб» — только когда клуб не зафиксирован через ?club=.
+      else if (!s.clubLocked && s.clubs.length > 1)
         (
           label: 'Посмотреть другой клуб',
           primary: false,
