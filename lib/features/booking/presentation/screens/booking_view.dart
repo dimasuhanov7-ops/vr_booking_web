@@ -9,8 +9,10 @@ import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/account_entity.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
+import '../../domain/entity/package_advice_entity.dart';
 import '../../domain/entity/package_entity.dart';
 import '../../domain/entity/price_rate_entity.dart';
+import '../../domain/entity/quote_entity.dart';
 import '../../domain/entity/station_entity.dart';
 import '../../domain/entity/time_slot_entity.dart';
 import '../../domain/state/booking_bloc.dart';
@@ -28,6 +30,7 @@ import '../components/account_block.dart';
 import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
 import '../components/package_cards.dart';
+import '../components/package_hint.dart';
 import '../components/session_hours.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
@@ -354,6 +357,7 @@ class _FormBody extends StatelessWidget {
       if (club != null) _whenBlock(bloc, club),
       if (state.slot != null && state.hall != null) _planBlock(bloc, club!),
       if (state.pickedIds.isNotEmpty) _contactsBlock(bloc),
+      _packageHintBlock(bloc),
     ];
     if (wide && club == null) right.add(<Widget>[_idlePlaceholder()]);
 
@@ -538,7 +542,7 @@ class _FormBody extends StatelessWidget {
       Row(
         children: <Widget>[
           const Expanded(child: SectionLabel('Время начала', big: true)),
-          Text('свободных мест из ${state.hallCapacity}',
+          Text(state.hall == null ? '' : 'свободных мест из ${state.hallCapacity}',
               style: const TextStyle(fontSize: 12, color: BookingColors.textDim)),
         ],
       ),
@@ -619,6 +623,8 @@ class _FormBody extends StatelessWidget {
           onToggle: (String id) => bloc.add(BookingStationToggled(id)),
           onQuickPick: (int n) => bloc.add(BookingQuickPicked(n)),
           onClear: () => bloc.add(const BookingSelectionCleared()),
+          onPickGroup: (Set<String> ids, {required bool pick}) =>
+              bloc.add(BookingStationsPicked(ids, pick: pick)),
         ),
     ];
   }
@@ -638,6 +644,34 @@ class _FormBody extends StatelessWidget {
         const SizedBox(height: 12),
         const _ConsentNote(),
       ];
+
+  /// Подсказка о пакете прямо над кнопкой «Забронировать»: пакет побольше
+  /// выйдет не дороже — или итог уже посчитан по пакету.
+  List<Widget> _packageHintBlock(BookingBloc bloc) {
+    if (state.pickedIds.isEmpty) return const <Widget>[];
+    final PackageAdviceEntity? advice = state.packageAdvice;
+    if (advice != null) {
+      return <Widget>[
+        PackageUpgradeHint(
+          advice: advice,
+          accent: accent,
+          onApply: () => bloc.add(BookingPackageUpgraded(advice.package)),
+        ),
+      ];
+    }
+    final QuoteEntity q = state.quote;
+    if (q.packageId != null && q.hasDiscount) {
+      return <Widget>[
+        PackageAppliedHint(
+          label: q.discountLabel,
+          net: q.net,
+          gross: q.gross,
+          accent: accent,
+        ),
+      ];
+    }
+    return const <Widget>[];
+  }
 
   /// Отмена необратима и освобождает станции — спрашиваем подтверждение.
   Future<void> _confirmCancel(
@@ -771,10 +805,11 @@ class _FormBody extends StatelessWidget {
   Map<String, ({int headsets, int consoles, int capacity})> _kits() {
     final Map<String, ({int headsets, int consoles, int capacity})> out = {};
     for (final ClubEntity c in state.clubs) {
+      // Только данные самого клуба. Раньше для выбранного клуба брался текущий
+      // список станций — пока он перезагружался при смене клуба, карточка
+      // показывала состав предыдущего.
       final List<StationEntity> list =
-          c.id == state.club?.id && state.stations.isNotEmpty
-              ? state.stations
-              : (state.stationsByClub[c.id] ?? const <StationEntity>[]);
+          state.stationsByClub[c.id] ?? const <StationEntity>[];
       if (list.isEmpty) continue;
 
       final int h = list

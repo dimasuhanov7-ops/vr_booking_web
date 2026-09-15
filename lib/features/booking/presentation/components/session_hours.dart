@@ -126,6 +126,8 @@ class _SessionHoursState extends State<SessionHours> {
                 bloc.add(BookingStationToggled(id, hour: hour)),
             onQuickPick: (int n) => bloc.add(BookingQuickPicked(n, hour: hour)),
             onClear: () => bloc.add(BookingSelectionCleared(hour: hour)),
+            onPickGroup: (Set<String> ids, {required bool pick}) =>
+                bloc.add(BookingStationsPicked(ids, pick: pick, hour: hour)),
           ),
         ),
       ],

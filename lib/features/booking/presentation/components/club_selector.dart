@@ -122,47 +122,53 @@ class _Card extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Text(
-                      '$capacity',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        height: 1,
+                // Пока состав клуба не загружен, цифр не показываем: «0 мест»
+                // читается как «мест нет».
+                if (kit != null) ...<Widget>[
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Text(
+                        '$capacity',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'МЕСТ СРАЗУ',
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 0.6,
-                        color: BookingColors.textFaint,
+                      const SizedBox(height: 2),
+                      const Text(
+                        'МЕСТ СРАЗУ',
+                        style: TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 0.6,
+                          color: BookingColors.textFaint,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 13),
-            const Divider(height: 1, color: BookingColors.borderSoft),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 14,
-              runSpacing: 8,
-              children: <Widget>[
-                _Kit(
-                  glyph: _headsetGlyph(accent),
-                  label:
-                      '$headsets ${BookingFormat.plural(headsets, 'VR-шлем', 'VR-шлема', 'VR-шлемов')}',
-                ),
-                if (consoles > 0)
-                  _Kit(glyph: _ps5Glyph(), label: '$consoles PS5'),
-              ],
-            ),
+            if (kit != null) ...<Widget>[
+              const SizedBox(height: 13),
+              const Divider(height: 1, color: BookingColors.borderSoft),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 14,
+                runSpacing: 8,
+                children: <Widget>[
+                  _Kit(
+                    glyph: _headsetGlyph(accent),
+                    label:
+                        '$headsets ${BookingFormat.plural(headsets, 'VR-шлем', 'VR-шлема', 'VR-шлемов')}',
+                  ),
+                  if (consoles > 0)
+                    _Kit(glyph: _ps5Glyph(), label: '$consoles PS5'),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             Text(
               _hours(club),

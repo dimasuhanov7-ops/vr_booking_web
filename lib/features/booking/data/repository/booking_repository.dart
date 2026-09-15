@@ -205,6 +205,7 @@ class BookingRepository implements IBookingRepository {
     if (m.contains('BAD_PHONE')) return const BookingBadPhoneFailure();
     if (m.contains('OUTSIDE_WORKING_HOURS') ||
         m.contains('STARTS_IN_PAST') ||
+        m.contains('TOO_LATE_TO_BOOK') ||
         m.contains('BAD_DURATION')) {
       return const BookingWindowFailure();
     }

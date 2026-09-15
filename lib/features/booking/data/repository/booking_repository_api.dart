@@ -230,6 +230,7 @@ class BookingRepositoryApi implements IBookingRepository {
       'SLOT_CLOSED' => const BookingSlotClosedFailure(),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||
+      'TOO_LATE_TO_BOOK' ||
       'BAD_DURATION' ||
       'PACKAGE_MISMATCH' ||
       'PACKAGE_NOT_FOUND' =>

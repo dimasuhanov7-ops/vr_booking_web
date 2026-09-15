@@ -15,14 +15,14 @@ class BookingRepositoryMock implements IBookingRepository {
   /// Создаёт mock-репозиторий.
   BookingRepositoryMock();
 
-  static const Duration _tz = Duration(hours: 3); // Europe/Moscow
+  static const Duration _tz = Duration(hours: 5); // Asia/Yekaterinburg (Пермь)
 
   final List<ClubEntity> _clubs = const <ClubEntity>[
     ClubEntity(
       id: 'club-effect',
       slug: 'effect_vr',
       name: 'Effect VR',
-      timezone: 'Europe/Moscow',
+      timezone: 'Asia/Yekaterinburg',
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 22, minutes: 30),
       slotGapMinutes: 10,
@@ -32,7 +32,7 @@ class BookingRepositoryMock implements IBookingRepository {
       id: 'club-vray',
       slug: 'v_ray',
       name: 'V-Ray',
-      timezone: 'Europe/Moscow',
+      timezone: 'Asia/Yekaterinburg',
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 23),
       slotGapMinutes: 0,
@@ -206,6 +206,8 @@ class BookingRepositoryMock implements IBookingRepository {
     required int base,
   }) {
     final List<StationEntity> out = <StationEntity>[];
+    // Как в БД: арена на 12 шлемов — две половины по 6, остальные залы — по 4.
+    final int perRow = headsets >= 12 ? 6 : 4;
     for (int i = 0; i < headsets; i++) {
       out.add(StationEntity(
         id: '$roomId-vr${i + 1}',
@@ -213,8 +215,8 @@ class BookingRepositoryMock implements IBookingRepository {
         roomName: roomName,
         type: StationType.vrHeadset,
         label: '#${i + 1}',
-        rowIndex: i ~/ 4,
-        positionInRow: i % 4,
+        rowIndex: i ~/ perRow,
+        positionInRow: i % perRow,
         sortOrder: base + i,
         isActive: true,
       ));
@@ -226,7 +228,7 @@ class BookingRepositoryMock implements IBookingRepository {
         roomName: roomName,
         type: StationType.ps5,
         label: 'PS5-${i + 1}',
-        rowIndex: (headsets / 4).ceil(),
+        rowIndex: (headsets / perRow).ceil(),
         positionInRow: i,
         sortOrder: base + headsets + i,
         isActive: true,

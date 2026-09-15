@@ -42,19 +42,34 @@ class _FocusRingState extends State<FocusRing> {
       onFocusChange: (bool v) {
         if (v != _focused) setState(() => _focused = v);
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.radius + 3),
-          border: Border.all(
-            color: _focused
-                ? (widget.color ?? BookingColors.text)
-                : Colors.transparent,
-            width: 2,
+      // Обводка рисуется поверх, в зазоре вокруг элемента, и не занимает места
+      // в раскладке: рамка с отступом прибавляла каждой плитке по 6 px, и
+      // четвёртая станция в ряду переносилась на новую строку.
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          widget.child,
+          Positioned(
+            left: -3,
+            top: -3,
+            right: -3,
+            bottom: -3,
+            child: IgnorePointer(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(widget.radius + 3),
+                  border: Border.all(
+                    color: _focused
+                        ? (widget.color ?? BookingColors.text)
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-        padding: const EdgeInsets.all(1),
-        child: widget.child,
+        ],
       ),
     );
   }

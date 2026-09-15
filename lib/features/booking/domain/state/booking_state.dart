@@ -359,17 +359,41 @@ class BookingState extends Equatable {
   bool get packageApplies {
     final PackageEntity? p = selectedPackage;
     if (p == null || durationMinutes != p.minutes || hasHourOverrides) return false;
+    final ({int headsets, int consoles}) kit = pickedKit;
+    return kit.headsets == p.headsets && kit.consoles == p.consoles;
+  }
+
+  /// Сколько шлемов и PS5 выбрано за сеанс.
+  ({int headsets, int consoles}) get pickedKit {
+    final Set<String> ids = pickedIds;
     int vr = 0;
     int ps = 0;
     for (final StationEntity s in stations) {
-      if (!pickedIds.contains(s.id)) continue;
+      if (!ids.contains(s.id)) continue;
       if (s.type == StationType.ps5) {
         ps++;
       } else {
         vr++;
       }
     }
-    return vr == p.headsets && ps == p.consoles;
+    return (headsets: vr, consoles: ps);
+  }
+
+  /// Пакет побольше, который выйдет не дороже текущего выбора, — для подсказки
+  /// перед подтверждением. `null`, если такого нет или состав разный по часам
+  /// (пакет — один состав на весь сеанс).
+  PackageAdviceEntity? get packageAdvice {
+    if (slot == null || hasHourOverrides || quote.net <= 0) return null;
+    final ({int headsets, int consoles}) kit = pickedKit;
+    return const PackageAdvisorService().upgrade(
+      packages: hallPackages
+          .where((PackageEntity p) => packageFit(p).ok)
+          .toList(growable: false),
+      headsets: kit.headsets,
+      consoles: kit.consoles,
+      minutes: durationMinutes,
+      currentPrice: quote.net,
+    );
   }
 
   /// Свободная станция для замены при конфликте.

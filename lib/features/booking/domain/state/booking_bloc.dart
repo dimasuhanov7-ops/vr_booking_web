@@ -12,6 +12,7 @@ import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
 import '../entity/club_entity.dart';
 import '../entity/hall_option_entity.dart';
+import '../entity/package_advice_entity.dart';
 import '../entity/package_entity.dart';
 import '../entity/price_rate_entity.dart';
 import '../entity/quote_entity.dart';
@@ -21,8 +22,10 @@ import '../entity/time_slot_entity.dart';
 import '../repository/i_account_store.dart';
 import '../repository/i_booking_repository.dart';
 import '../service/club_clock.dart';
+import '../service/package_advisor_service.dart';
 import '../service/pricing_service.dart';
 import '../service/slot_generator_service.dart';
+import '../service/station_picker_service.dart';
 
 part 'booking_event.dart';
 part 'booking_state.dart';
@@ -56,7 +59,9 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingSlotSelected>(_onSlotSelected);
     on<BookingStationToggled>(_onStationToggled);
     on<BookingPackageSelected>(_onPackageSelected);
+    on<BookingPackageUpgraded>(_onPackageUpgraded);
     on<BookingQuickPicked>(_onQuickPicked);
+    on<BookingStationsPicked>(_onStationsPicked);
     on<BookingSelectionCleared>(_onSelectionCleared);
     on<BookingHourCopied>(_onHourCopied);
     on<BookingContactChanged>(_onContactChanged);
@@ -170,11 +175,19 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       } on BookingFailure {
         packages = const <PackageEntity>[];
       }
+      // Пока грузили, клиент мог выбрать другой клуб: чужой ответ не применяем,
+      // иначе на экране окажутся залы и станции предыдущего клуба.
+      if (state.club?.id != event.club.id) return;
       final List<HallOptionEntity> options = _buildHallOptions(stations);
 
       emit(state.copyWith(
         status: BookingStatus.ready,
         stations: stations,
+        // Заодно освежаем состав клуба для карточек первого шага.
+        stationsByClub: <String, List<StationEntity>>{
+          ...state.stationsByClub,
+          event.club.id: stations,
+        },
         prices: prices,
         packages: packages,
         hallOptions: options,
@@ -265,18 +278,62 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     if (state.slot == null) return;
 
     // Подбираем нужное число свободных станций по типам в текущем слоте.
+    // Компактно, как и быстрый выбор: пакет «Команда» — одна половина арены.
     final List<StationEntity> free = state.freeHallStations;
-    final List<String> vr = free
-        .where((StationEntity s) => s.type != StationType.ps5)
-        .take(pkg.headsets)
+    const StationPickerService picker = StationPickerService();
+    final List<String> vr = picker
+        .compact(
+          free.where((StationEntity s) => s.type != StationType.ps5).toList(),
+          pkg.headsets,
+        )
         .map((StationEntity s) => s.id)
         .toList();
-    final List<String> ps = free
-        .where((StationEntity s) => s.type == StationType.ps5)
-        .take(pkg.consoles)
+    final List<String> ps = picker
+        .compact(
+          free.where((StationEntity s) => s.type == StationType.ps5).toList(),
+          pkg.consoles,
+        )
         .map((StationEntity s) => s.id)
         .toList();
     emit(_withHours(<int, Set<String>>{0: <String>{...vr, ...ps}}));
+  }
+
+  void _onPackageUpgraded(
+    BookingPackageUpgraded event,
+    Emitter<BookingState> emit,
+  ) {
+    final PackageEntity pkg = event.package;
+    if (state.slot == null ||
+        state.hasHourOverrides ||
+        state.durationMinutes != pkg.minutes) {
+      return;
+    }
+
+    // В отличие от выбора карточки пакета, выбор клиента не сбрасываем:
+    // к его 5 шлемам добавляется шестой, а не подбираются заново все шесть.
+    final Set<String> picked = state.pickedAt(0);
+    final List<StationEntity> chosen =
+        state.stations.where((StationEntity s) => picked.contains(s.id)).toList();
+    final List<StationEntity> free = state.freeHallStations
+        .where((StationEntity s) => !picked.contains(s.id))
+        .toList();
+    const StationPickerService picker = StationPickerService();
+    Iterable<String> more({required bool ps5, required int want}) {
+      bool ofType(StationEntity s) => (s.type == StationType.ps5) == ps5;
+      final List<StationEntity> mine = chosen.where(ofType).toList();
+      return picker
+          .extend(free.where(ofType).toList(), mine, want - mine.length)
+          .map((StationEntity s) => s.id);
+    }
+
+    emit(state.copyWith(selectedPackageId: pkg.id));
+    emit(_withHours(<int, Set<String>>{
+      0: <String>{
+        ...picked,
+        ...more(ps5: false, want: pkg.headsets),
+        ...more(ps5: true, want: pkg.consoles),
+      },
+    }));
   }
 
   void _onSlotSelected(BookingSlotSelected event, Emitter<BookingState> emit) {
@@ -306,11 +363,32 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
   void _onQuickPicked(BookingQuickPicked event, Emitter<BookingState> emit) {
     final int h = event.hour.clamp(0, state.hourCount - 1);
-    final List<String> free =
-        state.freeHallStationsAt(h).map((StationEntity s) => s.id).toList();
+    final List<StationEntity> free = state.freeHallStationsAt(h);
     final int n = event.count < 0 ? free.length : event.count.clamp(0, free.length);
     final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
-    next[h] = free.take(n).toSet();
+    // Компактно: компания садится одним рядом или залом, а не вразброс
+    // (в «Весь клуб» раньше 4 шлема делились 2+2 между залами).
+    next[h] = const StationPickerService()
+        .compact(free, n)
+        .map((StationEntity s) => s.id)
+        .toSet();
+    emit(_withHours(next));
+  }
+
+  void _onStationsPicked(
+    BookingStationsPicked event,
+    Emitter<BookingState> emit,
+  ) {
+    final int h = event.hour.clamp(0, state.hourCount - 1);
+    final Set<String> cur = Set<String>.of(state.pickedAt(h));
+    if (event.pick) {
+      // Как и при поштучном выборе: добавить можно только свободные.
+      cur.addAll(event.stationIds.where((String id) => state.isFreeAt(h, id)));
+    } else {
+      cur.removeAll(event.stationIds);
+    }
+    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    next[h] = cur;
     emit(_withHours(next));
   }
 
@@ -382,7 +460,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           peopleCount: int.tryParse(state.peopleInput.trim()),
           comment: null,
           source: _source,
-          packageId: state.packageApplies ? state.selectedPackageId : null,
+          packageId: state.quote.packageId,
         ),
       );
       _rememberBooking(orderId, club, slot);
@@ -632,6 +710,9 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     emit(BookingState(
       status: BookingStatus.ready,
       clubs: clubs,
+      // Состав клубов не меняется от новой брони — без него карточки первого
+      // шага после «Забронировать ещё» показывали нули.
+      stationsByClub: state.stationsByClub,
       clubLocked: locked,
       account: account,
       savedBookings: state.savedBookings,
@@ -799,23 +880,26 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       showRoomInLabel: state.hall?.isCombo ?? false,
     );
 
-    // Пакет: одинаковый состав на весь сеанс и совпадение — фиксируем цену пакета.
-    final PackageEntity? pkg = state.selectedPackage;
-    if (pkg != null && state.durationMinutes == pkg.minutes && !s.hasHourOverrides) {
-      final int vr =
-          picked.where((StationEntity st) => st.type != StationType.ps5).length;
-      final int ps =
-          picked.where((StationEntity st) => st.type == StationType.ps5).length;
-      if (vr == pkg.headsets && ps == pkg.consoles) {
-        return QuoteEntity(
-          lines: q.lines,
-          gross: q.gross,
-          netOverride: pkg.price,
-          discountLabel: 'Пакет «${pkg.name}»',
-        );
-      }
-    }
-    return q;
+    // Пакет — одинаковый состав на весь сеанс. Цена пакета, если состав совпал
+    // с выбранным пакетом или с пакетом, который дешевле, чем по часам.
+    if (s.hasHourOverrides) return q;
+    final ({int headsets, int consoles}) kit = s.pickedKit;
+    final PackageEntity? pkg = const PackageAdvisorService().priceFor(
+      packages: state.hallPackages,
+      selected: state.selectedPackage,
+      headsets: kit.headsets,
+      consoles: kit.consoles,
+      minutes: state.durationMinutes,
+      gross: q.gross,
+    );
+    if (pkg == null) return q;
+    return QuoteEntity(
+      lines: q.lines,
+      gross: q.gross,
+      netOverride: pkg.price,
+      discountLabel: 'Пакет «${pkg.name}»',
+      packageId: pkg.id,
+    );
   }
 
   List<HallOptionEntity> _buildHallOptions(List<StationEntity> stations) {

@@ -101,6 +101,19 @@ class BookingPackageSelected extends BookingEvent {
   List<Object?> get props => <Object?>[package];
 }
 
+/// Взять пакет из подсказки «6 шлемов выйдет дешевле»: уже выбранные станции
+/// остаются, недостающие добираются рядом с ними.
+class BookingPackageUpgraded extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPackageUpgraded(this.package);
+
+  /// Пакет из подсказки.
+  final PackageEntity package;
+
+  @override
+  List<Object?> get props => <Object?>[package];
+}
+
 /// Быстрый выбор: взять сразу [count] свободных станций (`-1` — все).
 class BookingQuickPicked extends BookingEvent {
   /// Создаёт событие.
@@ -114,6 +127,24 @@ class BookingQuickPicked extends BookingEvent {
 
   @override
   List<Object?> get props => <Object?>[count, hour];
+}
+
+/// Взять или снять группу станций разом — например, половину арены.
+class BookingStationsPicked extends BookingEvent {
+  /// Создаёт событие.
+  const BookingStationsPicked(this.stationIds, {this.pick = true, this.hour = 0});
+
+  /// Станции группы.
+  final Set<String> stationIds;
+
+  /// `true` — добавить свободные к выбору, `false` — убрать из выбора.
+  final bool pick;
+
+  /// Час сеанса.
+  final int hour;
+
+  @override
+  List<Object?> get props => <Object?>[stationIds, pick, hour];
 }
 
 /// Сбросить выбор станций. [hour] `null` — во всём сеансе, иначе — в этом часе.

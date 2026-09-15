@@ -7,9 +7,15 @@ import 'booking_atoms.dart';
 /// Зазор между плитками станций.
 const double _podGap = 8;
 
-/// Границы ширины плитки станции: макет — 74, узкий телефон — до 56.
+/// Ширина плитки станции: макет — 74, узкий телефон — до 56.
+const double _podBaseWidth = 74;
 const double _podMinWidth = 56;
-const double _podMaxWidth = 74;
+
+/// До какой ширины растягивать плитки, если ряд пришлось разбить на строки.
+const double _podStretchWidth = 104;
+
+/// С какого размера два ряда VR считаются «половинами» зала.
+const int _halfMinSize = 6;
 
 /// «План зала»: ряды станций с состояниями свободно / занято / выбрано,
 /// быстрый выбор и легенда (шаг 3).
@@ -26,6 +32,7 @@ class HallPlan extends StatelessWidget {
     required this.onToggle,
     required this.onQuickPick,
     required this.onClear,
+    required this.onPickGroup,
     this.quickLabel = 'Взять сразу:',
     super.key,
   });
@@ -59,6 +66,9 @@ class HallPlan extends StatelessWidget {
 
   /// Сброс выбора.
   final VoidCallback onClear;
+
+  /// Взять (`pick: true`) или снять группу станций — половину арены.
+  final void Function(Set<String> ids, {required bool pick}) onPickGroup;
 
   /// Подпись перед быстрым выбором («Взять сразу:» / «Или по часам:»).
   final String quickLabel;
@@ -125,17 +135,9 @@ class HallPlan extends StatelessWidget {
         const SizedBox(height: 14),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints c) {
-            // Ряд зала — 4 станции (так задан row_index в БД). Плитку ужимаем,
-            // чтобы ряд не переносился на узких телефонах, но не растягиваем
-            // шире макетных 74 px.
-            //
-            // Вычитаем padding (14+14) и рамку (1+1), а результат округляем
-            // вниз: дробная ширина превышала доступную на доли пикселя, и Wrap
-            // переносил четвёртую плитку на новую строку.
+            // Вычитаем padding (14+14) и рамку (1+1): плитки считаются от
+            // ширины, реально доступной внутри контейнера.
             final double inner = c.maxWidth - 30;
-            final double pod = ((inner - _podGap * 3) / 4)
-                .floorToDouble()
-                .clamp(_podMinWidth, _podMaxWidth);
             return Container(
               padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
               decoration: BoxDecoration(
@@ -153,7 +155,7 @@ class HallPlan extends StatelessWidget {
                   for (final MapEntry<String, List<StationEntity>> g
                       in groups.entries) ...<Widget>[
                     if (isCombo) _groupHeader(g.key, g.value),
-                    ..._rowsOf(g.value, pod),
+                    ..._rowsOf(g.value, inner),
                     const SizedBox(height: 6),
                   ],
                   const SizedBox(height: 8),
@@ -190,49 +192,103 @@ class HallPlan extends StatelessWidget {
     );
   }
 
-  List<Widget> _rowsOf(List<StationEntity> list, double podWidth) {
+  List<Widget> _rowsOf(List<StationEntity> list, double inner) {
     final Map<int, List<StationEntity>> rows = <int, List<StationEntity>>{};
     for (final StationEntity s in list) {
       rows.putIfAbsent(s.rowIndex, () => <StationEntity>[]).add(s);
     }
     final List<int> keys = rows.keys.toList()..sort();
+    for (final List<StationEntity> r in rows.values) {
+      r.sort(
+        (StationEntity a, StationEntity b) =>
+            a.positionInRow.compareTo(b.positionInRow),
+      );
+    }
+
+    // Зал из двух больших рядов VR — это две половины арены. Половина —
+    // готовый вариант для компании, поэтому называем её так и даём взять
+    // одним нажатием.
+    final bool halves =
+        keys.length == 2 &&
+        rows.values.every(
+          (List<StationEntity> r) =>
+              r.length >= _halfMinSize && r.first.type == StationType.vrHeadset,
+        );
+
     return <Widget>[
-      for (final int k in keys)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SectionLabel(
-                rows[k]!.first.type == StationType.ps5
-                    ? 'приставки PS5 · диван'
-                    : 'ряд ${k + 1} · VR',
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: _podGap,
-                runSpacing: _podGap,
-                children: <Widget>[
-                  for (final StationEntity s
-                      in rows[k]!..sort(
-                        (StationEntity a, StationEntity b) =>
-                            a.positionInRow.compareTo(b.positionInRow),
-                      ))
-                    _Pod(
-                      station: s,
-                      free: isFree(s.id),
-                      picked: pickedIds.contains(s.id),
-                      taken: takenIds.contains(s.id),
-                      accent: accent,
-                      width: podWidth,
-                      onTap: () => onToggle(s.id),
-                    ),
-                ],
-              ),
-            ],
-          ),
+      for (int i = 0; i < keys.length; i++)
+        _row(
+          rows[keys[i]]!,
+          label: halves
+              ? 'половина ${i + 1} · ${rows[keys[i]]!.length} шлемов'
+              : rows[keys[i]]!.first.type == StationType.ps5
+              ? 'приставки PS5 · диван'
+              : 'ряд ${keys[i] + 1} · VR',
+          groupAction: halves,
+          inner: inner,
         ),
     ];
+  }
+
+  Widget _row(
+    List<StationEntity> row, {
+    required String label,
+    required bool groupAction,
+    required double inner,
+  }) {
+    final ({int cols, double pod}) fit = hallRowFit(row.length, inner);
+    final Set<String> free = <String>{
+      for (final StationEntity s in row)
+        if (isFree(s.id) && !takenIds.contains(s.id)) s.id,
+    };
+    final bool allPicked = free.isNotEmpty && free.every(pickedIds.contains);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            height: 30,
+            child: Row(
+              children: <Widget>[
+                Expanded(child: SectionLabel(label)),
+                if (groupAction && (allPicked || free.length >= 2))
+                  _GroupAction(
+                    label: allPicked ? 'снять' : 'взять половину',
+                    active: !allPicked,
+                    accent: accent,
+                    onTap: () => onPickGroup(free, pick: !allPicked),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Ширина задаёт, сколько плиток встанет в строку: Wrap переносит
+          // ровно после [fit.cols], и половина арены на телефоне складывается
+          // блоком 3×2, а не рвётся на 4+2.
+          SizedBox(
+            width: fit.cols * fit.pod + (fit.cols - 1) * _podGap + 0.5,
+            child: Wrap(
+              spacing: _podGap,
+              runSpacing: _podGap,
+              children: <Widget>[
+                for (final StationEntity s in row)
+                  _Pod(
+                    station: s,
+                    free: isFree(s.id),
+                    picked: pickedIds.contains(s.id),
+                    taken: takenIds.contains(s.id),
+                    accent: accent,
+                    width: fit.pod,
+                    onTap: () => onToggle(s.id),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _legend() {
@@ -303,6 +359,64 @@ class HallPlan extends StatelessWidget {
   }
 }
 
+/// Раскладка ряда из [count] станций в ширину [inner]: сколько плиток в строке
+/// и какой они ширины.
+///
+/// Ряд ставится целиком, если плитки не уже [_podMinWidth]. Иначе он делится
+/// пополам (6 → 3+3, 4 → 2+2), а не переносится как придётся: половина
+/// остаётся цельным блоком. Разбитый ряд растягивает плитки на всю ширину,
+/// чтобы блок не жался к левому краю; целый — не шире макета.
+@visibleForTesting
+({int cols, double pod}) hallRowFit(int count, double inner) {
+  double podFor(int cols) =>
+      ((inner - _podGap * (cols - 1)) / cols).floorToDouble();
+
+  int cols = count < 1 ? 1 : count;
+  while (cols > 1 && podFor(cols) < _podMinWidth) {
+    cols = (cols / 2).ceil();
+  }
+  final double max = cols < count ? _podStretchWidth : _podBaseWidth;
+  return (cols: cols, pod: podFor(cols).clamp(_podMinWidth, max));
+}
+
+/// Кнопка в заголовке ряда: «взять половину» / «снять».
+class _GroupAction extends StatelessWidget {
+  const _GroupAction({
+    required this.label,
+    required this.active,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusRing(
+      radius: 8,
+      color: accent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: active ? accent : BookingColors.textDim,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Pod extends StatelessWidget {
   const _Pod({
     required this.station,
@@ -320,13 +434,14 @@ class _Pod extends StatelessWidget {
   final bool taken;
   final Color accent;
 
-  /// Ширина плитки — считается от доступного места (см. [HallPlan.build]).
+  /// Ширина плитки — считается от доступного места (см. [hallRowFit]).
   final double width;
 
   final VoidCallback onTap;
 
-  /// Коэффициент сжатия относительно макетных 74 px.
-  double get _k => width / _podMaxWidth;
+  /// Коэффициент сжатия относительно макетных 74 px. Растянутая плитка
+  /// становится шире, но содержимое не крупнее макета.
+  double get _k => (width / _podBaseWidth).clamp(0.0, 1.0);
 
   @override
   Widget build(BuildContext context) {
