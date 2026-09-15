@@ -1,15 +1,15 @@
 // Supabase Edge Function `booking-intake` — единая точка приёма брони.
 //
 // Клиенты (виджет, Telegram-бот, приложение) знают только этот HTTP-контракт
-// (docs/INTEGRATION.md). Функция валидирует, вызывает RPC booking_create_order
-// и рассылает бронь дальше (Telegram; позже — приложение / CRM).
+// (docs/INTEGRATION.md). Функция валидирует и вызывает RPC booking_create_order.
+// Уведомления о бронях отсюда больше не шлются: их отправляет `booking-mirror`
+// по триггеру в базе — для всех источников сразу, включая брони, которые
+// виджет пишет в базу напрямую (docs/MIRROR.md).
 //
 // Задеплоена на cpjmirlujtfuzvdnysyx 2026-09-04 (v1, verify_jwt=true).
 // Обновление:
 //   supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx
-// Для Telegram-уведомлений задать секреты:
-//   supabase secrets set --project-ref cpjmirlujtfuzvdnysyx \
-//     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... [BOOKING_INTAKE_KEY=...] [BOOKING_CORS_ORIGIN=...]
+// Секреты: [BOOKING_INTAKE_KEY=...] [BOOKING_CORS_ORIGIN=...]
 //
 // BOOKING_CORS_ORIGIN: "*" (по умолчанию) либо список origin через запятую —
 //   BOOKING_CORS_ORIGIN=https://booking.effectvr.ru,https://vrayarena.ru
@@ -26,8 +26,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INTAKE_KEY = Deno.env.get("BOOKING_INTAKE_KEY") ?? "";
 const CORS_ORIGIN = Deno.env.get("BOOKING_CORS_ORIGIN") ?? "*";
-const TG_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
-const TG_CHAT = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
 
 const db = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
@@ -104,23 +102,10 @@ function reservationError(err: { code?: string; message?: string }): Response {
   if (msg.includes("DISCOUNT_NOT_FOUND")) return json({ error: "DISCOUNT_NOT_FOUND" }, 422);
   if (msg.includes("RATE_LIMITED")) return json({ error: "RATE_LIMITED" }, 429);
   if (msg.includes("TOO_MANY_ACTIVE")) return json({ error: "TOO_MANY_ACTIVE" }, 429);
-  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH", "INTAKE_CLOSED", "SLOT_CLOSED"]) {
+  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "TOO_LATE_TO_BOOK", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH", "INTAKE_CLOSED", "SLOT_CLOSED"]) {
     if (msg.includes(e)) return json({ error: e }, 422);
   }
   return json({ error: "UNEXPECTED", detail: msg }, 500);
-}
-
-async function notifyTelegram(text: string): Promise<void> {
-  if (!TG_TOKEN || !TG_CHAT) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: "HTML" }),
-    });
-  } catch (_) {
-    // Уведомление не должно влиять на успех брони.
-  }
 }
 
 Deno.serve(async (req: Request): Promise<Response> =>
@@ -261,23 +246,7 @@ async function handle(req: Request): Promise<Response> {
         p_package_id: b.package_id ?? null,
       });
       if (error) return reservationError(error);
-
-      const orderId = data as string;
-      const stationsMax = Math.max(
-        0,
-        ...segments.map((s: { station_ids?: unknown[] }) =>
-          Array.isArray(s.station_ids) ? s.station_ids.length : 0
-        ),
-      );
-      const varies = segments.length > 1;
-      await notifyTelegram(
-        `🎮 <b>Новая бронь</b>\n` +
-          `${b.client_name} · ${b.client_phone}\n` +
-          `${stationsMax} ст.${varies ? " (меняется по часам)" : ""} · ` +
-          `${b.minutes ?? ""} мин · с ${segments[0].starts_at}\n` +
-          `источник: ${b.source ?? "site"} · №${String(orderId).slice(0, 8)}`,
-      );
-      return json({ order_id: orderId }, 201);
+      return json({ order_id: data as string }, 201);
     }
 
     // ---- POST /reservations/cancel ----
