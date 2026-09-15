@@ -1,52 +1,81 @@
 import '../../domain/entity/booking_row_entity.dart';
 
-/// Разбор заказа `booking_orders` (с позициями и пакетом) в запись админки.
+/// Разбор заказа `booking_orders` (с позициями и пакетом) в записи админки.
 ///
-/// Вынесено из репозитория, потому что здесь живёт нетривиальное правило:
-/// одна бронь может держать **разное число станций в разные часы**. В БД это
+/// Вынесено из репозитория, потому что здесь живут два нетривиальных правила.
+///
+/// Одна бронь может держать **разное число станций в разные часы**. В БД это
 /// отрезки — у позиций разные `starts_at`/`ends_at`. Габариты брони считаем по
 /// всем позициям, а состав — почасово; иначе бронь «12 шлемов первый час,
 /// 6 второй и третий» выглядела бы как 24 шлема на один час.
+///
+/// Одна бронь может держать станции **в нескольких залах** («Весь клуб» в
+/// виджете, бронь сотрудника на два зала). Админка считает занятость по залу,
+/// поэтому такая бронь раскладывается на запись для каждого зала. Раньше вся
+/// бронь приписывалась залу первой позиции, и сетка второго зала её не видела.
 abstract final class BookingRowDto {
   const BookingRowDto._();
 
-  /// Собирает запись из строки `booking_orders` с вложенными
+  /// Собирает записи из строки `booking_orders` с вложенными
   /// `booking_order_items` → `booking_stations`.
   ///
   /// [tz] — смещение таймзоны клуба, [today] — «сегодня» в этой же таймзоне
   /// (от него считается [BookingRowEntity.dayIndex]).
-  /// Возвращает `null`, если у заказа нет позиций.
-  static BookingRowEntity? fromOrderJson(
+  /// Бронь в одном зале — одна запись с `id` заказа; в нескольких — запись на
+  /// зал с `id` вида `<заказ>#<зал>` и общим [BookingRowEntity.orderId].
+  /// Заказ без позиций — пустой список.
+  static List<BookingRowEntity> fromOrderJson(
     Map<String, dynamic> json, {
     required DateTime today,
     required Duration tz,
   }) {
     final List<dynamic> raw =
         json['booking_order_items'] as List<dynamic>? ?? const <dynamic>[];
-    if (raw.isEmpty) return null;
+    if (raw.isEmpty) return const <BookingRowEntity>[];
 
-    final List<_Item> items = <_Item>[];
+    // Позиции по залам, в порядке появления.
+    final Map<String, List<_Item>> byHall = <String, List<_Item>>{};
     for (final dynamic it in raw) {
       final Map<String, dynamic> im = it as Map<String, dynamic>;
       final Map<String, dynamic>? st =
           im['booking_stations'] as Map<String, dynamic>?;
-      items.add(_Item(
-        start: DateTime.parse(im['starts_at'] as String).toUtc().add(tz),
-        end: DateTime.parse(im['ends_at'] as String).toUtc().add(tz),
-        isPs5: st?['type'] == 'ps5',
-        roomId: st?['room_id'] as String? ?? '',
-      ));
+      final String hallId = st?['room_id'] as String? ?? '';
+      byHall.putIfAbsent(hallId, () => <_Item>[]).add(_Item(
+            start: DateTime.parse(im['starts_at'] as String).toUtc().add(tz),
+            end: DateTime.parse(im['ends_at'] as String).toUtc().add(tz),
+            isPs5: st?['type'] == 'ps5',
+          ));
     }
 
+    final String orderId = json['id'] as String;
+    final bool split = byHall.length > 1;
+    return <BookingRowEntity>[
+      for (final MapEntry<String, List<_Item>> e in byHall.entries)
+        _row(
+          json,
+          e.value,
+          id: split ? '$orderId#${e.key}' : orderId,
+          orderId: orderId,
+          hallId: e.key,
+          today: today,
+        ),
+    ];
+  }
+
+  /// Запись одного зала заказа.
+  static BookingRowEntity _row(
+    Map<String, dynamic> json,
+    List<_Item> items, {
+    required String id,
+    required String orderId,
+    required String hallId,
+    required DateTime today,
+  }) {
     DateTime minStart = items.first.start;
     DateTime maxEnd = items.first.end;
-    String hallId = '';
     for (final _Item it in items) {
       if (it.start.isBefore(minStart)) minStart = it.start;
       if (it.end.isAfter(maxEnd)) maxEnd = it.end;
-      // Бронь «весь клуб» держит станции из разных залов — админка знает только
-      // один hallId, берём зал первой позиции.
-      if (hallId.isEmpty) hallId = it.roomId;
     }
 
     final int duration = maxEnd.difference(minStart).inMinutes;
@@ -77,7 +106,8 @@ abstract final class BookingRowDto {
     final String status = json['status'] as String? ?? 'confirmed';
 
     return BookingRowEntity(
-      id: json['id'] as String,
+      id: id,
+      orderId: orderId,
       clubId: json['club_id'] as String,
       hallId: hallId,
       dayIndex: day.difference(today).inDays,
@@ -93,6 +123,8 @@ abstract final class BookingRowDto {
       isCancelled: status == 'cancelled',
       hourHeadsets: varies ? vrByHour : null,
       hourConsoles: varies ? psByHour : null,
+      note: json['comment'] as String? ?? '',
+      prepay: (json['prepay'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -116,11 +148,9 @@ class _Item {
     required this.start,
     required this.end,
     required this.isPs5,
-    required this.roomId,
   });
 
   final DateTime start;
   final DateTime end;
   final bool isPs5;
-  final String roomId;
 }

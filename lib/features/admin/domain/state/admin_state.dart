@@ -1,7 +1,10 @@
 part of 'admin_bloc.dart';
 
-/// Вкладка админки.
+/// Вкладка админки. Порядок — как в панели вкладок.
 enum AdminTab {
+  /// Записи: занятость и брони на день — главный экран сотрудника.
+  records,
+
   /// Цены.
   prices,
 
@@ -9,17 +12,14 @@ enum AdminTab {
   packages,
 
   /// Доступность.
-  availability,
-
-  /// Журнал записей.
-  records;
+  availability;
 
   /// Подпись.
   String get label => switch (this) {
+        AdminTab.records => 'Записи',
         AdminTab.prices => 'Цены',
         AdminTab.packages => 'Пакеты',
         AdminTab.availability => 'Доступность',
-        AdminTab.records => 'Записи',
       };
 }
 
@@ -30,6 +30,9 @@ enum AdminStatus {
 
   /// Готово.
   ready,
+
+  /// Не удалось загрузить стартовые данные.
+  failure,
 }
 
 /// Фильтр журнала по типу станций.
@@ -114,26 +117,24 @@ class NewPackageDraft extends Equatable {
 }
 
 /// Черновик новой брони, создаваемой сотрудником в админке.
+///
+/// Состав задаётся по залам: одна бронь может держать станции в нескольких
+/// залах сразу — например, компания на арене и пара человек в малом зале.
 class NewBookingDraft extends Equatable {
   /// Создаёт черновик.
   const NewBookingDraft({
-    required this.hallId,
     this.dayIndex = 0,
     this.startMinutes = 660,
     this.durationMinutes = 60,
-    this.headsets = 2,
-    this.consoles = 0,
-    this.hourHeadsets = const <int, int>{},
-    this.hourConsoles = const <int, int>{},
+    this.units = const <String, HallUnits>{},
+    this.hourUnits = const <int, Map<String, HallUnits>>{},
     this.name = '',
     this.phone = '',
     this.prepay = 0,
     this.note = '',
     this.message = '',
+    this.saving = false,
   });
-
-  /// Зал.
-  final String hallId;
 
   /// День (смещение от сегодняшнего).
   final int dayIndex;
@@ -144,17 +145,12 @@ class NewBookingDraft extends Equatable {
   /// Длительность, минут.
   final int durationMinutes;
 
-  /// VR-шлемов в 1-м часе (база).
-  final int headsets;
+  /// Состав 1-го часа (база): зал → шлемы и PS5.
+  final Map<String, HallUnits> units;
 
-  /// PS5 в 1-м часе (база).
-  final int consoles;
-
-  /// Переопределения шлемов для часов ≥ 1 (наследуются от предыдущего часа).
-  final Map<int, int> hourHeadsets;
-
-  /// Переопределения PS5 для часов ≥ 1.
-  final Map<int, int> hourConsoles;
+  /// Переопределения состава для часов ≥ 1: час → зал → шлемы и PS5.
+  /// Зал без переопределения в часе наследует состав предыдущего часа.
+  final Map<int, Map<String, HallUnits>> hourUnits;
 
   /// Имя гостя.
   final String name;
@@ -171,87 +167,91 @@ class NewBookingDraft extends Equatable {
   /// Сообщение под формой (ошибка / подсказка).
   final String message;
 
+  /// Бронь отправляется на сервер — форма заблокирована.
+  final bool saving;
+
   /// Число часовых отрезков.
   int get hourCount => (durationMinutes / 60).round().clamp(1, 12);
 
-  /// Шлемов в час [h] (с наследованием от нижних часов).
-  int headsetsAt(int h) {
+  /// Залы, упомянутые в черновике.
+  Set<String> get hallIds => <String>{
+        ...units.keys,
+        for (final Map<String, HallUnits> m in hourUnits.values) ...m.keys,
+      };
+
+  /// Состав зала [hallId] в час [h] (с наследованием от нижних часов).
+  HallUnits unitsAt(String hallId, int h) {
     for (int k = h; k >= 1; k--) {
-      final int? v = hourHeadsets[k];
+      final HallUnits? v = hourUnits[k]?[hallId];
       if (v != null) return v;
     }
-    return headsets;
+    return units[hallId] ?? (headsets: 0, consoles: 0);
   }
 
-  /// PS5 в час [h].
-  int consolesAt(int h) {
-    for (int k = h; k >= 1; k--) {
-      final int? v = hourConsoles[k];
-      if (v != null) return v;
+  /// Станций во всех залах в час [h].
+  int totalAt(int h) {
+    int sum = 0;
+    for (final String id in hallIds) {
+      final HallUnits u = unitsAt(id, h);
+      sum += u.headsets + u.consoles;
     }
-    return consoles;
+    return sum;
   }
 
-  /// Разный ли состав по часам.
+  /// Разный ли состав по часам (хотя бы в одном зале).
   bool get variesByHour {
     for (int h = 1; h < hourCount; h++) {
-      if (headsetsAt(h) != headsets || consolesAt(h) != consoles) return true;
+      for (final String id in hallIds) {
+        if (unitsAt(id, h) != unitsAt(id, 0)) return true;
+      }
     }
     return false;
   }
 
   /// Копия с изменениями.
   NewBookingDraft copyWith({
-    String? hallId,
     int? dayIndex,
     int? startMinutes,
     int? durationMinutes,
-    int? headsets,
-    int? consoles,
-    Map<int, int>? hourHeadsets,
-    Map<int, int>? hourConsoles,
+    Map<String, HallUnits>? units,
+    Map<int, Map<String, HallUnits>>? hourUnits,
     bool clearHourly = false,
     String? name,
     String? phone,
     int? prepay,
     String? note,
     String? message,
+    bool? saving,
   }) =>
       NewBookingDraft(
-        hallId: hallId ?? this.hallId,
         dayIndex: dayIndex ?? this.dayIndex,
         startMinutes: startMinutes ?? this.startMinutes,
         durationMinutes: durationMinutes ?? this.durationMinutes,
-        headsets: headsets ?? this.headsets,
-        consoles: consoles ?? this.consoles,
-        hourHeadsets: clearHourly
-            ? const <int, int>{}
-            : (hourHeadsets ?? this.hourHeadsets),
-        hourConsoles: clearHourly
-            ? const <int, int>{}
-            : (hourConsoles ?? this.hourConsoles),
+        units: units ?? this.units,
+        hourUnits: clearHourly
+            ? const <int, Map<String, HallUnits>>{}
+            : (hourUnits ?? this.hourUnits),
         name: name ?? this.name,
         phone: phone ?? this.phone,
         prepay: prepay ?? this.prepay,
         note: note ?? this.note,
         message: message ?? this.message,
+        saving: saving ?? this.saving,
       );
 
   @override
   List<Object?> get props => <Object?>[
-        hallId,
         dayIndex,
         startMinutes,
         durationMinutes,
-        headsets,
-        consoles,
-        hourHeadsets,
-        hourConsoles,
+        units,
+        hourUnits,
         name,
         phone,
         prepay,
         note,
         message,
+        saving,
       ];
 }
 
@@ -263,13 +263,12 @@ class AdminState extends Equatable {
   /// Создаёт состояние.
   const AdminState({
     this.status = AdminStatus.loading,
-    this.tab = AdminTab.prices,
+    this.tab = AdminTab.records,
     this.clubId = 'vray',
     this.clubs = const <AdminClubEntity>[],
     this.prices = const <String, HallPriceEntity>{},
     this.packages = const <PackageEntity>[],
     this.rows = const <BookingRowEntity>[],
-    this.rowEdits = const <String, BookingRowEntity>{},
     this.cancelledRowIds = const <String>{},
     this.openRowId,
     this.newBooking,
@@ -284,6 +283,8 @@ class AdminState extends Equatable {
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
     this.saveError,
+    this.refreshing = false,
+    this.refreshedAt,
   });
 
   /// Статус загрузки.
@@ -304,11 +305,9 @@ class AdminState extends Equatable {
   /// Пакеты (всех клубов).
   final List<PackageEntity> packages;
 
-  /// Записи (всех клубов), как пришли с сервера + созданные в этой сессии.
+  /// Записи (всех клубов): с сервера и созданные в этой сессии. Бронь на
+  /// несколько залов — строка на зал с общим [BookingRowEntity.orderId].
   final List<BookingRowEntity> rows;
-
-  /// Правки записей (оверлей поверх [rows], ключ — id записи).
-  final Map<String, BookingRowEntity> rowEdits;
 
   /// Отменённые записи.
   final Set<String> cancelledRowIds;
@@ -351,8 +350,14 @@ class AdminState extends Equatable {
   /// Черновик нового пакета.
   final NewPackageDraft newPackage;
 
-  /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
+  /// Текст ошибки (последняя неудачная запись или загрузка), `null` — ок.
   final String? saveError;
+
+  /// Идёт обновление броней с сервера.
+  final bool refreshing;
+
+  /// Когда брони последний раз пришли с сервера.
+  final DateTime? refreshedAt;
 
   /// Горизонт дней для ленты «Доступности».
   static const int horizonDays = 14;
@@ -394,6 +399,22 @@ class AdminState extends Equatable {
     return out;
   }
 
+  /// Начала сеансов длительностью [durationMinutes] на день [dayIndex]: шаг —
+  /// час плюс перерыв клуба. На сегодня — только ещё не начавшиеся: прошедшее
+  /// время база отклонит (`STARTS_IN_PAST`).
+  List<int> sessionStarts(int dayIndex, int durationMinutes) {
+    if (clubs.isEmpty) return const <int>[];
+    final AdminClubEntity c = club;
+    final DateTime now = DateTime.now();
+    final int nowMinutes = now.hour * 60 + now.minute;
+    return <int>[
+      for (int t = c.openMinutes;
+          t + durationMinutes <= c.closeMinutes;
+          t += 60 + c.gapMinutes)
+        if (dayIndex > 0 || t > nowMinutes) t,
+    ];
+  }
+
   /// Ключ слота выбранного дня.
   String slotKey(int minutes) => '$clubId-$availDayIndex-$minutes';
 
@@ -404,26 +425,19 @@ class AdminState extends Equatable {
         .add(Duration(days: availDayIndex));
   }
 
-  /// Записи с наложенными правками ([rowEdits]).
-  List<BookingRowEntity> get effectiveRows =>
-      rows.map((BookingRowEntity r) => rowEdits[r.id] ?? r).toList(growable: false);
-
-  /// Запись по id с учётом правок.
+  /// Запись по id.
   BookingRowEntity? rowById(String id) {
     for (final BookingRowEntity r in rows) {
-      if (r.id == id) return rowEdits[id] ?? r;
+      if (r.id == id) return r;
     }
     return null;
   }
 
-  /// Есть ли несохранённая правка у записи.
-  bool isEdited(String id) => rowEdits.containsKey(id);
-
-  /// Открытая запись (с учётом правок).
+  /// Открытая запись.
   BookingRowEntity? get openRow => openRowId == null ? null : rowById(openRowId!);
 
   /// Отфильтрованные записи журнала (без учёта отмен).
-  List<BookingRowEntity> get filteredRows => effectiveRows
+  List<BookingRowEntity> get filteredRows => rows
       .where((BookingRowEntity r) => r.clubId == clubId)
       .where((BookingRowEntity r) => filterDay < 0 || r.dayIndex == filterDay)
       .where((BookingRowEntity r) => filterHallId.isEmpty || r.hallId == filterHallId)
@@ -447,7 +461,7 @@ class AdminState extends Equatable {
   int get occupancyDayIndex => filterDay < 0 ? 0 : filterDay;
 
   /// Записи выбранного клуба на день сетки занятости (живые).
-  List<BookingRowEntity> occupancyRows(String hallId) => effectiveRows
+  List<BookingRowEntity> occupancyRows(String hallId) => rows
       .where((BookingRowEntity r) =>
           r.clubId == clubId &&
           r.hallId == hallId &&
@@ -457,20 +471,29 @@ class AdminState extends Equatable {
     ..sort((BookingRowEntity a, BookingRowEntity b) =>
         a.startMinutes.compareTo(b.startMinutes));
 
+  /// Брони выбранного клуба на день сетки — по заказам (строки брони на
+  /// несколько залов собраны вместе), по времени начала. Для списка под сеткой.
+  List<List<BookingRowEntity>> get dayOrders {
+    final Map<String, List<BookingRowEntity>> byOrder =
+        <String, List<BookingRowEntity>>{};
+    for (final BookingRowEntity r in rows) {
+      if (r.clubId != clubId || r.dayIndex != occupancyDayIndex) continue;
+      byOrder.putIfAbsent(r.orderId, () => <BookingRowEntity>[]).add(r);
+    }
+    int startOf(List<BookingRowEntity> parts) => parts
+        .map((BookingRowEntity r) => r.startMinutes)
+        .reduce((int a, int b) => a < b ? a : b);
+    return byOrder.values.toList()
+      ..sort((List<BookingRowEntity> a, List<BookingRowEntity> b) =>
+          startOf(a).compareTo(startOf(b)));
+  }
+
   /// Отменена ли запись.
   bool isCancelled(String id) => cancelledRowIds.contains(id);
 
   /// Зал для формы нового пакета.
   String? get newPackageHallId =>
       newPackage.hallId ?? (clubHalls.isEmpty ? null : clubHalls.first.id);
-
-  /// Зал черновика новой брони.
-  AdminHallEntity? get newBookingHall {
-    final NewBookingDraft? d = newBooking;
-    if (d == null || clubHalls.isEmpty) return null;
-    return clubHalls.firstWhere((AdminHallEntity h) => h.id == d.hallId,
-        orElse: () => clubHalls.first);
-  }
 
   /// Свободные станции зала на пересечении с интервалом (исключая отменённые
   /// и, при [ignoreRowId], указанную запись — для проверки при её же правке).
@@ -488,7 +511,7 @@ class AdminState extends Equatable {
     final int end = startMinutes + durationMinutes;
     int vr = 0;
     int ps = 0;
-    for (final BookingRowEntity r in effectiveRows) {
+    for (final BookingRowEntity r in rows) {
       if (r.clubId != clubId ||
           r.hallId != hallId ||
           r.dayIndex != dayIndex ||
@@ -516,7 +539,6 @@ class AdminState extends Equatable {
     Map<String, HallPriceEntity>? prices,
     List<PackageEntity>? packages,
     List<BookingRowEntity>? rows,
-    Map<String, BookingRowEntity>? rowEdits,
     Set<String>? cancelledRowIds,
     String? openRowId,
     bool clearOpenRow = false,
@@ -535,6 +557,8 @@ class AdminState extends Equatable {
     NewPackageDraft? newPackage,
     String? saveError,
     bool clearSaveError = false,
+    bool? refreshing,
+    DateTime? refreshedAt,
   }) {
     return AdminState(
       status: status ?? this.status,
@@ -544,7 +568,6 @@ class AdminState extends Equatable {
       prices: prices ?? this.prices,
       packages: packages ?? this.packages,
       rows: rows ?? this.rows,
-      rowEdits: rowEdits ?? this.rowEdits,
       cancelledRowIds: cancelledRowIds ?? this.cancelledRowIds,
       openRowId: clearOpenRow ? null : (openRowId ?? this.openRowId),
       newBooking: clearNewBooking ? null : (newBooking ?? this.newBooking),
@@ -560,6 +583,8 @@ class AdminState extends Equatable {
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
+      refreshing: refreshing ?? this.refreshing,
+      refreshedAt: refreshedAt ?? this.refreshedAt,
     );
   }
 
@@ -572,7 +597,6 @@ class AdminState extends Equatable {
         prices,
         packages,
         rows,
-        rowEdits,
         cancelledRowIds,
         openRowId,
         newBooking,
@@ -587,5 +611,7 @@ class AdminState extends Equatable {
         filterType,
         newPackage,
         saveError,
+        refreshing,
+        refreshedAt,
       ];
 }

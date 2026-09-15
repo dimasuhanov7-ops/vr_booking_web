@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entity/admin_club_entity.dart';
@@ -12,7 +11,13 @@ import '../admin_theme.dart';
 import 'admin_atoms.dart';
 import 'admin_drawer_shell.dart';
 
-/// Drawer «Карточка брони»: просмотр + правка одной записи.
+/// Drawer «Карточка брони»: сводка, контакты и оплата, отмена.
+///
+/// Бронь на несколько залов показывается целиком — по всем своим строкам.
+/// Контакты, комментарий и предоплата сохраняются в БД. Время и состав не
+/// редактируются: для этого нужно заново подобрать станции, поэтому такую
+/// бронь отменяют и создают новую. Раньше эти поля были, но правка жила только
+/// на экране под надписью «сохранено» и пропадала при перезапуске.
 class BookingDetailDrawer extends StatelessWidget {
   /// Создаёт drawer.
   const BookingDetailDrawer({
@@ -37,67 +42,77 @@ class BookingDetailDrawer extends StatelessWidget {
     final BookingRowEntity? row = state.openRow;
     if (row == null) return const SizedBox.shrink();
 
-    final AdminHallEntity hall = state.clubHalls.firstWhere(
-      (AdminHallEntity h) => h.id == row.hallId,
-      orElse: () => state.clubHalls.first,
-    );
+    final List<BookingRowEntity> parts = state.rows
+        .where((BookingRowEntity r) => r.orderId == row.orderId)
+        .toList(growable: false);
+    String hallName(String id) => state.clubHalls
+        .firstWhere((AdminHallEntity h) => h.id == id,
+            orElse: () => state.clubHalls.first)
+        .name;
+
     final DateTime date = pricing.dateOf(row.dayIndex);
     final bool weekend = pricing.isWeekend(row.dayIndex);
-    final PackageEntity? pkg = pricing.matchPackage(row, state.packages);
-    final int full = pricing.rowCost(
-      row: row,
-      price: state.priceOf(row.hallId),
-      packages: state.packages,
-    );
+    final PackageEntity? pkg =
+        parts.length == 1 ? pricing.matchPackage(row, state.packages) : null;
+    int full = 0;
+    int start = row.startMinutes;
+    int end = row.endMinutes;
+    for (final BookingRowEntity r in parts) {
+      full += pricing.rowCost(
+        row: r,
+        price: state.priceOf(r.hallId),
+        packages: state.packages,
+      );
+      if (r.startMinutes < start) start = r.startMinutes;
+      if (r.endMinutes > end) end = r.endMinutes;
+    }
     final int due = (full - row.prepay).clamp(0, full);
-    final bool edited = state.isEdited(row.id);
     final bool cancelled = state.isCancelled(row.id);
     final Color tint = AdminColors.tintFor(state.accentSlug);
 
-    void edit({
-      String? clientName,
-      String? phone,
-      int? startMinutes,
-      int? durationMinutes,
-      int? headsets,
-      int? consoles,
-      int? prepay,
-      String? note,
-      bool clearHourly = false,
-    }) =>
+    String composition(BookingRowEntity r) => r.variesByHour
+        ? <String>[
+            for (int h = 0; h < r.hourCount; h++)
+              '${h + 1}ч ${r.headsetsAt(h) + r.consolesAt(h)}'
+          ].join(' · ')
+        : AdminFormat.composition(r.headsets, r.consoles);
+
+    void edit({String? clientName, String? phone, int? prepay, String? note}) =>
         bloc.add(AdminRowEdited(
           rowId: row.id,
           clientName: clientName,
           phone: phone,
-          startMinutes: startMinutes,
-          durationMinutes: durationMinutes,
-          headsets: headsets,
-          consoles: consoles,
           prepay: prepay,
           note: note,
-          clearHourly: clearHourly,
         ));
 
+    final String name = row.clientName.trim();
+    final String phone = row.phone.trim();
+
     return AdminDrawerShell(
-      title: row.clientName,
+      title: name.isEmpty ? 'Без имени' : row.clientName,
       subtitle: row.phone,
       onClose: () => bloc.add(const AdminRowClosed()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // Плашка ошибки основного экрана скрыта под панелью — дублируем.
+          if (state.saveError != null) ...<Widget>[
+            AdminErrorBox(state.saveError!),
+            const SizedBox(height: 14),
+          ],
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: <Widget>[
               if (cancelled) _chip('отменена', danger: true),
               _chip(state.club.name),
-              _chip(hall.name),
+              for (final BookingRowEntity r in parts) _chip(hallName(r.hallId)),
               _chip('источник: ${row.source.label}'),
             ],
           ),
           const SizedBox(height: 16),
           _InfoTable(rows: <(String, String)>[
-            ('Клуб и зал', '${state.club.name} · ${hall.name}'),
             (
               'Дата',
               '${AdminFormat.dowShort(date)}, ${date.day} ${AdminFormat.monShort(date)}'
@@ -105,20 +120,11 @@ class BookingDetailDrawer extends StatelessWidget {
             ),
             (
               'Сеанс',
-              '${AdminFormat.span(row.startMinutes, row.endMinutes)}'
-                  ' · ${AdminFormat.hours(row.durationMinutes)}'
+              '${AdminFormat.span(start, end)} · ${AdminFormat.hours(end - start)}'
             ),
-            (
-              'Состав',
-              row.variesByHour
-                  ? <String>[
-                      for (int h = 0; h < row.hourCount; h++)
-                        '${h + 1}ч ${row.headsetsAt(h) + row.consolesAt(h)}'
-                    ].join(' · ')
-                  : AdminFormat.composition(row.headsets, row.consoles)
-            ),
+            for (final BookingRowEntity r in parts)
+              (hallName(r.hallId), composition(r)),
             ('Расчёт', pkg != null ? 'пакет «${pkg.name}»' : 'почасовая оплата'),
-            ('Источник', row.source.label),
           ]),
           const SizedBox(height: 10),
           _InfoTable(
@@ -135,21 +141,18 @@ class BookingDetailDrawer extends StatelessWidget {
             bold: true,
           ),
           const SizedBox(height: 20),
-          Row(
-            children: <Widget>[
-              const Expanded(child: AdminLabel('Редактирование')),
-              if (edited)
-                Text('изменено, сохранено',
-                    style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700, color: tint)),
-            ],
-          ),
+          const AdminLabel('Контакты и оплата'),
+          const SizedBox(height: 4),
+          const Text('Сохраняется само через секунду после ввода.',
+              style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
           const SizedBox(height: 12),
           AdminTextInput(
             label: 'Имя',
             value: row.clientName,
             onChanged: (String v) => edit(clientName: v),
           ),
+          if (name.length < 2)
+            const _FieldHint('Имя — от 2 букв, иначе не сохранится.'),
           const SizedBox(height: 13),
           AdminTextInput(
             label: 'Телефон',
@@ -157,51 +160,8 @@ class BookingDetailDrawer extends StatelessWidget {
             keyboardType: TextInputType.phone,
             onChanged: (String v) => edit(phone: v),
           ),
-          const SizedBox(height: 13),
-          _TimeField(
-            minutes: row.startMinutes,
-            onChanged: (int m) => edit(startMinutes: m),
-          ),
-          const SizedBox(height: 13),
-          _ChipGroup(
-            label: 'Длительность',
-            options: <(String, int)>[
-              for (final int m in AdminState.durations) ('${m ~/ 60} ч', m),
-            ],
-            value: row.durationMinutes,
-            accent: accent,
-            onSelected: (int m) => edit(durationMinutes: m),
-          ),
-          if (row.variesByHour) ...<Widget>[
-            const SizedBox(height: 13),
-            const Text(
-              'Состав меняется по часам. Здесь можно задать один состав на весь '
-              'сеанс — разбивку по часам меняйте через «Новую запись».',
-              style: TextStyle(fontSize: 12, color: AdminColors.warn),
-            ),
-          ],
-          const SizedBox(height: 13),
-          _ChipGroup(
-            label: row.variesByHour ? 'Шлемов (весь сеанс)' : 'Шлемов',
-            options: <(String, int)>[
-              for (int i = 0; i <= hall.headsets; i++) ('$i', i),
-            ],
-            value: row.variesByHour ? row.maxHeadsets : row.headsets,
-            accent: accent,
-            onSelected: (int v) => edit(headsets: v, clearHourly: true),
-          ),
-          if (hall.consoles > 0) ...<Widget>[
-            const SizedBox(height: 13),
-            _ChipGroup(
-              label: row.variesByHour ? 'PS5 (весь сеанс)' : 'PS5',
-              options: <(String, int)>[
-                for (int i = 0; i <= hall.consoles; i++) ('$i', i),
-              ],
-              value: row.variesByHour ? row.maxConsoles : row.consoles,
-              accent: accent,
-              onSelected: (int v) => edit(consoles: v, clearHourly: true),
-            ),
-          ],
+          if (phone.isNotEmpty && phone.length < 5)
+            const _FieldHint('Телефон слишком короткий — не сохранится.'),
           const SizedBox(height: 13),
           AdminNumberField(
             label: 'Предоплата, ₽',
@@ -216,23 +176,33 @@ class BookingDetailDrawer extends StatelessWidget {
             maxLines: 3,
             onChanged: (String v) => edit(note: v),
           ),
+          const SizedBox(height: 14),
+          const Text(
+            'Время и состав брони не меняются: отмените её и создайте новую '
+            'запись — станции подберутся заново.',
+            style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.textMuted),
+          ),
           const SizedBox(height: 18),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _WideButton(
-                  label: 'Вернуть исходные',
-                  enabled: edited,
-                  onTap: () => bloc.add(AdminRowEditReset(row.id)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _WideButton(
-                label: cancelled ? 'Вернуть бронь' : 'Отменить бронь',
-                danger: !cancelled,
-                onTap: () => bloc.add(AdminRowCancelToggled(row.id)),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: _WideButton(
+              label: cancelled ? 'Вернуть бронь' : 'Отменить бронь',
+              danger: !cancelled,
+              onTap: () async {
+                if (!cancelled) {
+                  final bool ok = await confirmAdminAction(
+                    context,
+                    title: 'Отменить бронь?',
+                    message: '${name.isEmpty ? 'Гость' : name}, '
+                        '${AdminFormat.span(start, end)}. Места освободятся и '
+                        'станут доступны другим клиентам.',
+                    confirmLabel: 'Отменить бронь',
+                  );
+                  if (!ok) return;
+                }
+                bloc.add(AdminRowCancelToggled(row.id));
+              },
+            ),
           ),
         ],
       ),
@@ -253,6 +223,21 @@ class BookingDetailDrawer extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: danger ? AdminColors.danger : AdminColors.textMid)),
       );
+}
+
+class _FieldHint extends StatelessWidget {
+  const _FieldHint(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Text(text,
+          style: const TextStyle(fontSize: 12, color: AdminColors.warn)),
+    );
+  }
 }
 
 class _InfoTable extends StatelessWidget {
@@ -298,7 +283,9 @@ class _InfoTable extends StatelessWidget {
                       style: TextStyle(
                         fontSize: bold ? 15 : 13,
                         fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
-                        color: valueColors != null && valueColors![i] != null
+                        color: valueColors != null &&
+                                i < valueColors!.length &&
+                                valueColors![i] != null
                             ? valueColors![i]
                             : AdminColors.text,
                       ),
@@ -313,172 +300,37 @@ class _InfoTable extends StatelessWidget {
   }
 }
 
-class _ChipGroup extends StatelessWidget {
-  const _ChipGroup({
-    required this.label,
-    required this.options,
-    required this.value,
-    required this.accent,
-    required this.onSelected,
-  });
-
-  final String label;
-  final List<(String, int)> options;
-  final int value;
-  final Color accent;
-  final ValueChanged<int> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(label,
-              style: const TextStyle(fontSize: 12, color: AdminColors.textMuted)),
-        ),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: <Widget>[
-            for (final (String, int) o in options)
-              AdminPill(
-                label: o.$1,
-                selected: value == o.$2,
-                accent: accent,
-                compact: true,
-                onTap: () => onSelected(o.$2),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _TimeField extends StatefulWidget {
-  const _TimeField({required this.minutes, required this.onChanged});
-
-  final int minutes;
-  final ValueChanged<int> onChanged;
-
-  @override
-  State<_TimeField> createState() => _TimeFieldState();
-}
-
-class _TimeFieldState extends State<_TimeField> {
-  late final TextEditingController _c =
-      TextEditingController(text: AdminFormat.hhmm(widget.minutes));
-  final FocusNode _focus = FocusNode();
-
-  @override
-  void didUpdateWidget(covariant _TimeField old) {
-    super.didUpdateWidget(old);
-    if (!_focus.hasFocus) {
-      final String v = AdminFormat.hhmm(widget.minutes);
-      if (v != _c.text) _c.text = v;
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  void _parse(String s) {
-    final RegExpMatch? m =
-        RegExp(r'^(\d{1,2})[:.\s]?(\d{2})$').firstMatch(s.trim());
-    if (m == null) return;
-    final int mins = int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
-    widget.onChanged(mins);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final OutlineInputBorder b = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(11),
-      borderSide: const BorderSide(color: AdminColors.borderInput),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Padding(
-          padding: EdgeInsets.only(bottom: 6),
-          child: Text('Начало (чч:мм)',
-              style: TextStyle(fontSize: 12, color: AdminColors.textMuted)),
-        ),
-        SizedBox(
-          width: 140,
-          child: TextField(
-            controller: _c,
-            focusNode: _focus,
-            keyboardType: TextInputType.datetime,
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9:. ]')),
-              LengthLimitingTextInputFormatter(5),
-            ],
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-              color: AdminColors.text,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-              filled: true,
-              fillColor: AdminColors.input,
-              border: b,
-              enabledBorder: b,
-              focusedBorder: b,
-            ),
-            onChanged: _parse,
-            onSubmitted: _parse,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _WideButton extends StatelessWidget {
   const _WideButton({
     required this.label,
     required this.onTap,
-    this.enabled = true,
     this.danger = false,
   });
 
   final String label;
   final VoidCallback onTap;
-  final bool enabled;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final Color fg = !enabled
-        ? const Color(0xFF4A4C55)
-        : danger
-            ? AdminColors.danger
-            : AdminColors.textSoft;
     return InkWell(
-      onTap: enabled ? onTap : null,
+      onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: danger && enabled ? AdminColors.dangerBg : Colors.transparent,
+          color: danger ? AdminColors.dangerBg : Colors.transparent,
           border: Border.all(
-            color: danger && enabled ? AdminColors.dangerBorder : AdminColors.borderInput,
+            color: danger ? AdminColors.dangerBorder : AdminColors.borderInput,
           ),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: fg)),
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: danger ? AdminColors.danger : AdminColors.textSoft)),
       ),
     );
   }

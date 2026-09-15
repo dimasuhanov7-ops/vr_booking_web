@@ -55,6 +55,9 @@ enum RecordSource {
 
 /// Единая запись брони — источник и для «Броней» (сегодняшний срез), и для
 /// «Записей» (полный список + агрегаты).
+///
+/// Запись описывает бронь в **одном зале**. Бронь сразу на несколько залов
+/// показывается строкой на каждый зал; строки связывает общий [orderId].
 class BookingRowEntity extends Equatable {
   /// Создаёт запись.
   const BookingRowEntity({
@@ -76,10 +79,15 @@ class BookingRowEntity extends Equatable {
     this.note = '',
     this.hourHeadsets,
     this.hourConsoles,
-  });
+    String? orderId,
+  }) : orderId = orderId ?? id;
 
-  /// Идентификатор.
+  /// Идентификатор строки.
   final String id;
+
+  /// Заказ в БД, к которому относится запись. У всех строк брони на несколько
+  /// залов он один: отменять и искать в базе нужно по нему, а не по [id].
+  final String orderId;
 
   /// Клуб.
   final String clubId;
@@ -209,6 +217,7 @@ class BookingRowEntity extends Equatable {
   }) =>
       BookingRowEntity(
         id: id,
+        orderId: orderId,
         clubId: clubId,
         hallId: hallId,
         dayIndex: dayIndex,
@@ -231,6 +240,7 @@ class BookingRowEntity extends Equatable {
   @override
   List<Object?> get props => <Object?>[
         id,
+        orderId,
         clubId,
         hallId,
         dayIndex,

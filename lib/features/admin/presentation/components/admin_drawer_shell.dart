@@ -6,8 +6,8 @@ import '../admin_theme.dart';
 
 /// Выезжающая справа панель (карточка брони / новая запись).
 ///
-/// Затемняет фон, ловит тап по подложке и «×» для закрытия, при первом
-/// появлении проигрывает выезд справа.
+/// Затемняет фон, ловит тап по подложке, «×» и системную кнопку «назад» для
+/// закрытия, при первом появлении проигрывает выезд справа.
 class AdminDrawerShell extends StatelessWidget {
   /// Создаёт панель.
   const AdminDrawerShell({
@@ -40,75 +40,83 @@ class AdminDrawerShell extends StatelessWidget {
         math.min(560, MediaQuery.sizeOf(context).width);
 
     return Positioned.fill(
-      child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        tween: Tween<double>(begin: 0, end: 1),
-        builder: (BuildContext context, double t, Widget? _) {
-          return Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: onClose,
-                  child: ColoredBox(color: Color.fromRGBO(4, 5, 6, 0.6 * t)),
+      // Панель — не отдельный экран, а слой поверх админки. Без перехвата
+      // «назад» на Android закрывало всё приложение вместо панели.
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) onClose();
+        },
+        child: TweenAnimationBuilder<double>(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          tween: Tween<double>(begin: 0, end: 1),
+          builder: (BuildContext context, double t, Widget? _) {
+            return Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: onClose,
+                    child: ColoredBox(color: Color.fromRGBO(4, 5, 6, 0.6 * t)),
+                  ),
                 ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FractionalTranslation(
-                  translation: Offset(1 - t, 0),
-                  child: SizedBox(
-                    width: panelWidth,
-                    height: double.infinity,
-                    child: DecoratedBox(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF0F1115),
-                        border: Border(left: BorderSide(color: Color(0xFF262830))),
-                      ),
-                      child: SafeArea(
-                        left: false,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Text(title,
-                                            style: const TextStyle(
-                                                fontSize: 22, fontWeight: FontWeight.w800)),
-                                        if (subtitle != null) ...<Widget>[
-                                          const SizedBox(height: 3),
-                                          Text(subtitle!,
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FractionalTranslation(
+                    translation: Offset(1 - t, 0),
+                    child: SizedBox(
+                      width: panelWidth,
+                      height: double.infinity,
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0F1115),
+                          border: Border(left: BorderSide(color: Color(0xFF262830))),
+                        ),
+                        child: SafeArea(
+                          left: false,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Text(title,
                                               style: const TextStyle(
-                                                  fontSize: 13, color: AdminColors.textMuted)),
+                                                  fontSize: 22, fontWeight: FontWeight.w800)),
+                                          if (subtitle != null) ...<Widget>[
+                                            const SizedBox(height: 3),
+                                            Text(subtitle!,
+                                                style: const TextStyle(
+                                                    fontSize: 13, color: AdminColors.textMuted)),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  ?trailingHeader,
-                                  _CloseButton(onTap: onClose),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              child,
-                            ],
+                                    const SizedBox(width: 12),
+                                    ?trailingHeader,
+                                    _CloseButton(onTap: onClose),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+                                child,
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -121,19 +129,23 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AdminColors.borderInput),
+    return Semantics(
+      button: true,
+      label: 'Закрыть',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AdminColors.borderInput),
+          ),
+          child: const Text('×',
+              style: TextStyle(fontSize: 20, color: AdminColors.textMid)),
         ),
-        child: const Text('×',
-            style: TextStyle(fontSize: 18, color: AdminColors.textMid)),
       ),
     );
   }

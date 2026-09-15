@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../domain/entity/admin_booking_request_entity.dart';
 import '../../domain/entity/admin_club_entity.dart';
 import '../../domain/service/admin_pricing_service.dart';
 import '../../domain/state/admin_bloc.dart';
@@ -10,7 +11,10 @@ import 'admin_atoms.dart';
 import 'admin_drawer_shell.dart';
 import 'admin_month_calendar.dart';
 
-/// Drawer «Новая запись»: календарь + параметры сеанса + контакты.
+/// Drawer «Новая запись»: календарь, параметры сеанса, состав по залам, контакты.
+///
+/// Состав задаётся для каждого зала клуба отдельно — одной бронью можно занять
+/// места сразу в нескольких залах.
 class NewBookingDrawer extends StatefulWidget {
   /// Создаёт drawer.
   const NewBookingDrawer({
@@ -43,8 +47,8 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
     final AdminPricingService pricing = widget.pricing;
     final AdminBloc bloc = context.read<AdminBloc>();
     final NewBookingDraft? d = state.newBooking;
-    final AdminHallEntity? hall = state.newBookingHall;
-    if (d == null || hall == null) return const SizedBox.shrink();
+    final List<AdminHallEntity> halls = state.clubHalls;
+    if (d == null || halls.isEmpty) return const SizedBox.shrink();
 
     final int hc = d.hourCount;
     final int hour = _hour.clamp(0, hc - 1);
@@ -52,32 +56,34 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
     final AdminClubEntity club = state.club;
     final DateTime date = pricing.dateOf(d.dayIndex);
     final bool weekend = pricing.isWeekend(d.dayIndex);
-    // Свободная ёмкость для текущего часа-вкладки.
-    final FreeUnits free = state.freeUnits(
-      hallId: d.hallId,
-      dayIndex: d.dayIndex,
-      startMinutes: d.startMinutes + hour * 60,
-      durationMinutes: 60,
-    );
-    final bool noRoom = free.headsets + free.consoles == 0;
+    // Свободная ёмкость каждого зала в текущем часе-вкладке.
+    final Map<String, FreeUnits> free = <String, FreeUnits>{
+      for (final AdminHallEntity h in halls)
+        h.id: state.freeUnits(
+          hallId: h.id,
+          dayIndex: d.dayIndex,
+          startMinutes: d.startMinutes + hour * 60,
+          durationMinutes: 60,
+        ),
+    };
+    final bool noRoom = free.values
+        .every((FreeUnits f) => f.headsets + f.consoles == 0);
 
-    // Начала сеансов — час + перерыв клуба (Effect — 10 мин).
-    final List<int> times = <int>[];
-    for (int t = club.openMinutes;
-        t + d.durationMinutes <= club.closeMinutes;
-        t += 60 + club.gapMinutes) {
-      times.add(t);
-    }
+    // Начала сеансов — час + перерыв клуба; на сегодня только ещё не начавшиеся.
+    final List<int> times = state.sessionStarts(d.dayIndex, d.durationMinutes);
 
     int total = 0;
     for (int h = 0; h < hc; h++) {
-      total += pricing.hourlyCost(
-        headsets: d.headsetsAt(h),
-        consoles: d.consolesAt(h),
-        minutes: 60,
-        price: state.priceOf(hall.id),
-        weekend: weekend,
-      );
+      for (final AdminHallEntity hall in halls) {
+        final HallUnits u = d.unitsAt(hall.id, h);
+        total += pricing.hourlyCost(
+          headsets: u.headsets,
+          consoles: u.consoles,
+          minutes: 60,
+          price: state.priceOf(hall.id),
+          weekend: weekend,
+        );
+      }
     }
 
     void change({
@@ -111,9 +117,12 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
 
     final String message = d.message.isNotEmpty
         ? d.message
-        : noRoom
-            ? 'На это время в зале всё занято — выберите другое время, день или зал.'
-            : '';
+        : times.isEmpty
+            ? 'На этот день сеансы такой длительности уже не начать — выберите другой день.'
+            : noRoom
+                ? 'На это время всё занято — выберите другое время или день.'
+                : '';
+    final bool canSubmit = !noRoom && !d.saving && times.isNotEmpty;
 
     return AdminDrawerShell(
       title: 'Новая запись',
@@ -136,15 +145,6 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
             onPick: (int di) => change(dayIndex: di),
           ),
           const SizedBox(height: 14),
-          if (club.halls.length > 1)
-            _Group(
-              label: 'Зал',
-              accent: accent,
-              options: <(String, bool, VoidCallback)>[
-                for (final AdminHallEntity h in club.halls)
-                  (h.name, h.id == d.hallId, () => change(hallId: h.id)),
-              ],
-            ),
           _Group(
             label: 'Длительность',
             accent: accent,
@@ -156,6 +156,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
           _Group(
             label: 'Начало сеанса',
             accent: accent,
+            empty: 'Свободных начал на этот день нет.',
             options: <(String, bool, VoidCallback)>[
               for (final int t in times)
                 (AdminFormat.hhmm(t), t == d.startMinutes, () => change(startMinutes: t)),
@@ -173,7 +174,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: AdminPill(
-                        label: '${h + 1}-й · ${d.headsetsAt(h) + d.consolesAt(h)}',
+                        label: '${h + 1}-й · ${d.totalAt(h)}',
                         selected: h == hour,
                         accent: accent,
                         compact: true,
@@ -191,23 +192,41 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
             ),
             const SizedBox(height: 10),
           ],
-          _CountGroup(
-            label: 'Шлемов · свободно ${free.headsets} из ${hall.headsets}',
-            accent: accent,
-            max: hall.headsets,
-            free: free.headsets,
-            value: d.headsetsAt(hour),
-            onSelected: (int v) => change(headsets: v, hourArg: hour),
-          ),
-          if (hall.consoles > 0)
-            _CountGroup(
-              label: 'PS5 · свободно ${free.consoles} из ${hall.consoles}',
-              accent: accent,
-              max: hall.consoles,
-              free: free.consoles,
-              value: d.consolesAt(hour),
-              onSelected: (int v) => change(consoles: v, hourArg: hour),
+          if (halls.length > 1)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Text(
+                'Места можно занять сразу в нескольких залах — одной записью.',
+                style: TextStyle(fontSize: 12, color: AdminColors.textFaint),
+              ),
             ),
+          for (final AdminHallEntity h in halls) ...<Widget>[
+            if (halls.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  h.name,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+            _CountGroup(
+              label: 'Шлемов · свободно ${free[h.id]!.headsets} из ${h.headsets}',
+              accent: accent,
+              max: h.headsets,
+              free: free[h.id]!.headsets,
+              value: d.unitsAt(h.id, hour).headsets,
+              onSelected: (int v) => change(hallId: h.id, headsets: v, hourArg: hour),
+            ),
+            if (h.consoles > 0)
+              _CountGroup(
+                label: 'PS5 · свободно ${free[h.id]!.consoles} из ${h.consoles}',
+                accent: accent,
+                max: h.consoles,
+                free: free[h.id]!.consoles,
+                value: d.unitsAt(h.id, hour).consoles,
+                onSelected: (int v) => change(hallId: h.id, consoles: v, hourArg: hour),
+              ),
+          ],
           if (hc > 1 && hour > 0) ...<Widget>[
             const SizedBox(height: 8),
             AdminPill(
@@ -229,7 +248,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
           AdminTextInput(
             label: 'Телефон',
             value: d.phone,
-            hint: '+7 (900) 000-00-00',
+            hint: '+7 (900) 000-00-00 — можно оставить пустым',
             keyboardType: TextInputType.phone,
             onChanged: (String v) => change(phone: v),
           ),
@@ -282,7 +301,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
           ],
           const SizedBox(height: 14),
           InkWell(
-            onTap: noRoom ? null : () => bloc.add(const AdminNewBookingSubmitted()),
+            onTap: canSubmit ? () => bloc.add(const AdminNewBookingSubmitted()) : null,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: double.infinity,
@@ -290,13 +309,13 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: noRoom ? const Color(0xFF22242A) : accent,
+                color: canSubmit ? accent : const Color(0xFF22242A),
               ),
-              child: Text('Создать запись',
+              child: Text(d.saving ? 'Сохраняю…' : 'Создать запись',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: noRoom ? AdminColors.textFaint : AdminColors.bg,
+                    color: canSubmit ? AdminColors.bg : AdminColors.textFaint,
                   )),
             ),
           ),
@@ -307,11 +326,19 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
 }
 
 class _Group extends StatelessWidget {
-  const _Group({required this.label, required this.accent, required this.options});
+  const _Group({
+    required this.label,
+    required this.accent,
+    required this.options,
+    this.empty,
+  });
 
   final String label;
   final Color accent;
   final List<(String, bool, VoidCallback)> options;
+
+  /// Текст вместо пустого списка вариантов.
+  final String? empty;
 
   @override
   Widget build(BuildContext context) {
@@ -325,19 +352,23 @@ class _Group extends StatelessWidget {
             child: Text(label,
                 style: const TextStyle(fontSize: 12, color: AdminColors.textMuted)),
           ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: <Widget>[
-              for (final (String, bool, VoidCallback) o in options)
-                AdminPill(
-                    label: o.$1,
-                    selected: o.$2,
-                    accent: accent,
-                    compact: true,
-                    onTap: o.$3),
-            ],
-          ),
+          if (options.isEmpty && empty != null)
+            Text(empty!,
+                style: const TextStyle(fontSize: 13, color: AdminColors.textFaint))
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: <Widget>[
+                for (final (String, bool, VoidCallback) o in options)
+                  AdminPill(
+                      label: o.$1,
+                      selected: o.$2,
+                      accent: accent,
+                      compact: true,
+                      onTap: o.$3),
+              ],
+            ),
         ],
       ),
     );

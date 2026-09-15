@@ -1,3 +1,4 @@
+import '../../domain/entity/admin_booking_request_entity.dart';
 import '../../domain/entity/admin_club_entity.dart';
 import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
@@ -94,6 +95,24 @@ class AdminRepositoryMock implements IAdminRepository {
             prepay: 3000, note: 'Класс из 4 человек, к третьему часу останутся двое.',
             hourVr: <int>[4, 2, 2]),
       ]);
+
+  // Демо-режим: входа нет, доступ есть всегда.
+  @override
+  Future<bool> hasAccess() async => true;
+
+  // Демо-режим: бронь живёт только в состоянии AdminBloc, «сервер» лишь выдаёт id.
+  @override
+  Future<String> createBooking(AdminBookingRequest request) async =>
+      'mock-order-${DateTime.now().millisecondsSinceEpoch}';
+
+  @override
+  Future<void> updateOrderDetails({
+    required String orderId,
+    required String clientName,
+    required String phone,
+    required String note,
+    required int prepay,
+  }) async {}
 
   // Демо-режим: правки живут только в состоянии AdminBloc, на «сервер» не уходят.
   @override

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/state/admin_bloc.dart';
 import '../admin_theme.dart';
+import '../components/admin_atoms.dart';
 import '../components/admin_header.dart';
 import '../components/admin_tab_bar.dart';
 import '../components/availability_tab.dart';
@@ -12,7 +13,8 @@ import '../components/packages_tab.dart';
 import '../components/prices_tab.dart';
 import '../components/records_tab.dart';
 
-/// Экран админки (панель персонала). Доступ — по `?admin=1`.
+/// Экран админки (панель персонала). Доступ — по `?admin=1` или из
+/// приложения «VR Админка».
 class AdminScreen extends StatelessWidget {
   /// Создаёт экран.
   const AdminScreen({this.onLogout, super.key});
@@ -36,10 +38,17 @@ class AdminScreen extends StatelessWidget {
         child: SafeArea(
           child: BlocBuilder<AdminBloc, AdminState>(
             builder: (BuildContext context, AdminState state) {
+              final AdminBloc bloc = context.read<AdminBloc>();
+              if (state.status == AdminStatus.failure) {
+                return _LoadFailure(
+                  message: state.saveError ?? 'Не удалось загрузить данные.',
+                  onRetry: () => bloc.add(const AdminStarted()),
+                  onLogout: onLogout,
+                );
+              }
               if (state.status == AdminStatus.loading || state.clubs.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final AdminBloc bloc = context.read<AdminBloc>();
               final Color accent = AdminColors.accentFor(state.accentSlug);
               // На телефоне поля по 20 px с каждой стороны заметно съедают
               // ширину таблиц и сетки занятости.
@@ -54,7 +63,11 @@ class AdminScreen extends StatelessWidget {
                       Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 1400),
-                          child: Padding(
+                          // На всю ширину: без этого шапка сжималась по
+                          // содержимому, вставала по центру и не совпадала
+                          // с вкладками под ней.
+                          child: Container(
+                            width: double.infinity,
                             padding: EdgeInsets.symmetric(horizontal: pad),
                             child: AdminHeader(
                               clubs: state.clubs,
@@ -92,32 +105,18 @@ class AdminScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 22),
                                     if (state.saveError != null) ...<Widget>[
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: AdminColors.dangerBg,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                              color: AdminColors.dangerBorder),
-                                        ),
-                                        child: Text(state.saveError!,
-                                            style: const TextStyle(
-                                                fontSize: 13,
-                                                color: AdminColors.danger)),
-                                      ),
+                                      AdminErrorBox(state.saveError!),
                                       const SizedBox(height: 14),
                                     ],
                                     switch (state.tab) {
+                                      AdminTab.records =>
+                                        RecordsTab(state: state, accent: accent),
                                       AdminTab.prices =>
                                         PricesTab(state: state, accent: accent),
                                       AdminTab.packages =>
                                         PackagesTab(state: state, accent: accent),
                                       AdminTab.availability =>
                                         AvailabilityTab(state: state, accent: accent),
-                                      AdminTab.records =>
-                                        RecordsTab(state: state, accent: accent),
                                     },
                                   ],
                                 ),
@@ -135,6 +134,51 @@ class AdminScreen extends StatelessWidget {
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Стартовые данные не загрузились — объясняем и даём повторить.
+class _LoadFailure extends StatelessWidget {
+  const _LoadFailure({
+    required this.message,
+    required this.onRetry,
+    this.onLogout,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback? onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Text('Админка не загрузилась',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              AdminErrorBox(message),
+              const SizedBox(height: 18),
+              AdminPrimaryButton(
+                label: 'Повторить',
+                accent: const Color(0xFFA9F04A),
+                onTap: onRetry,
+              ),
+              if (onLogout != null) ...<Widget>[
+                const SizedBox(height: 10),
+                AdminGhostButton(label: 'Выйти', onTap: onLogout!),
+              ],
+            ],
           ),
         ),
       ),

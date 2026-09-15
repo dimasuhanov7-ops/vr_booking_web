@@ -30,6 +30,9 @@ class AvailabilityTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AdminBloc bloc = context.read<AdminBloc>();
+    final DateTime day = pricing.dateOf(state.availDayIndex);
+    final String dayLabel =
+        '${AdminFormat.dowShort(day)}, ${AdminFormat.dayMonthLong(day)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,14 +65,29 @@ class AvailabilityTab extends StatelessWidget {
                       'Приём заявок',
                       subtitle: state.intakeOpen
                           ? 'Виджет принимает брони в обычном режиме.'
-                          : 'Виджет открывается, но вместо сетки показывает «запись приостановлена».',
+                          : 'Пауза: виджет открывается, но вместо сетки показывает «запись приостановлена».',
                     ),
                   ),
                   const SizedBox(width: 14),
                   AdminToggle(
                     value: state.intakeOpen,
                     accent: accent,
-                    onTap: () => bloc.add(const AdminIntakeToggled()),
+                    onTap: () async {
+                      // Включить обратно — без вопросов, поставить на паузу — с
+                      // подтверждением: клиенты сразу перестанут записываться.
+                      if (state.intakeOpen) {
+                        final bool ok = await confirmAdminAction(
+                          context,
+                          title: 'Приостановить онлайн-запись?',
+                          message: 'Клиенты ${state.club.name} не смогут записаться '
+                              'через сайт и ВК, пока вы не включите приём снова.',
+                          confirmLabel: 'Приостановить',
+                          danger: false,
+                        );
+                        if (!ok) return;
+                      }
+                      bloc.add(const AdminIntakeToggled());
+                    },
                   ),
                 ],
               ),
@@ -81,7 +99,20 @@ class AvailabilityTab extends StatelessWidget {
                     hall: h,
                     closed: state.closedHallIds.contains(h.id),
                     accent: accent,
-                    onToggle: () => bloc.add(AdminHallClosureToggled(h.id)),
+                    onToggle: () async {
+                      if (!state.closedHallIds.contains(h.id)) {
+                        final bool ok = await confirmAdminAction(
+                          context,
+                          title: 'Закрыть «${h.name}»?',
+                          message: 'Зал пропадёт из виджета на все дни, пока вы его '
+                              'не откроете. Уже созданные брони останутся.',
+                          confirmLabel: 'Закрыть зал',
+                          danger: false,
+                        );
+                        if (!ok) return;
+                      }
+                      bloc.add(AdminHallClosureToggled(h.id));
+                    },
                   ),
                 ),
             ],
@@ -110,7 +141,17 @@ class AvailabilityTab extends StatelessWidget {
                     label: 'Закрыть весь день',
                     tone: AdminButtonTone.warn,
                     filled: true,
-                    onTap: () => bloc.add(const AdminDayClosureChanged(closeAll: true)),
+                    onTap: () async {
+                      final bool ok = await confirmAdminAction(
+                        context,
+                        title: 'Закрыть весь день?',
+                        message: 'На $dayLabel клиенты не смогут записаться. '
+                            'Уже созданные брони останутся — их нужно отменить вручную.',
+                        confirmLabel: 'Закрыть день',
+                        danger: false,
+                      );
+                      if (ok) bloc.add(const AdminDayClosureChanged(closeAll: true));
+                    },
                   ),
                   AdminGhostButton(
                     label: 'Открыть весь день',
@@ -179,7 +220,7 @@ class _HallRow extends StatelessWidget {
             onTap: onToggle,
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
               decoration: BoxDecoration(
                 color: closed ? accent.withValues(alpha: 0.14) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
@@ -217,8 +258,11 @@ class _DayStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color tint = AdminColors.tintFor(state.accentSlug);
+    // Высота — от масштаба шрифта: при крупном системном шрифте три строки
+    // в фиксированные 62 px не помещались.
+    final double height = MediaQuery.textScalerOf(context).scale(46) + 20;
     return SizedBox(
-      height: 62,
+      height: height,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: AdminState.horizonDays,
@@ -230,7 +274,7 @@ class _DayStrip extends StatelessWidget {
             onTap: () => onPick(i),
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: 54,
+              width: 56,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: on ? accent.withValues(alpha: 0.16) : Colors.transparent,
@@ -243,10 +287,12 @@ class _DayStrip extends StatelessWidget {
                   Text(AdminFormat.dowShort(d).toUpperCase(),
                       style: TextStyle(
                           fontSize: 11,
+                          height: 1.1,
                           color: on ? tint : AdminColors.textMid)),
                   Text('${d.day}',
                       style: TextStyle(
                         fontSize: 17,
+                        height: 1.15,
                         fontWeight: FontWeight.w700,
                         fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
                         color: on ? tint : AdminColors.textSoft,
@@ -254,6 +300,7 @@ class _DayStrip extends StatelessWidget {
                   Text(AdminFormat.monShort(d),
                       style: TextStyle(
                           fontSize: 10,
+                          height: 1.1,
                           color: on ? tint : AdminColors.textFaint)),
                 ],
               ),
@@ -279,16 +326,22 @@ class _SlotGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<int> starts = state.slotStarts;
+    // Высота ячейки — по содержимому, а не пропорцией к ширине: на узком
+    // экране пропорция давала слишком низкую ячейку, и подпись «открыт»
+    // вылезала за край.
+    final double extent = MediaQuery.textScalerOf(context).scale(38) + 24;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints c) {
         final int cols = (c.maxWidth / 104).floor().clamp(2, 8);
-        return GridView.count(
-          crossAxisCount: cols,
+        return GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 1.9,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            mainAxisExtent: extent,
+          ),
           children: <Widget>[
             for (final int m in starts)
               _SlotCell(
@@ -320,7 +373,7 @@ class _SlotCell extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: closed ? AdminColors.warnBgDeep : AdminColors.tile,
           borderRadius: BorderRadius.circular(12),
@@ -334,15 +387,17 @@ class _SlotCell extends StatelessWidget {
               AdminFormat.hhmm(minutes),
               style: TextStyle(
                 fontSize: 15,
+                height: 1.2,
                 fontWeight: FontWeight.w700,
                 fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
                 color: closed ? AdminColors.warn : AdminColors.textSoft,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 3),
             Text(closed ? 'закрыт' : 'открыт',
                 style: TextStyle(
                     fontSize: 11,
+                    height: 1.2,
                     color: closed ? AdminColors.warn : AdminColors.textDim)),
           ],
         ),

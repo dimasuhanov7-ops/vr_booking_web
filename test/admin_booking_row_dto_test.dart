@@ -2,20 +2,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vr_booking_web/features/admin/data/dto/booking_row_dto.dart';
 import 'package:vr_booking_web/features/admin/domain/entity/booking_row_entity.dart';
 
-/// Смещение Москвы — как в [AdminRepository].
+/// Смещение таймзоны клуба в тестах (+3): времена ниже подобраны под него.
 const Duration _tz = Duration(hours: 3);
 
 /// «Сегодня» в таймзоне клуба для тестов.
 final DateTime _today = DateTime(2026, 9, 10);
 
 /// Позиция брони в формате PostgREST (время — UTC, клуб на +3).
-Map<String, dynamic> _item(String startsAt, String endsAt, {bool ps5 = false}) =>
+Map<String, dynamic> _item(
+  String startsAt,
+  String endsAt, {
+  bool ps5 = false,
+  String room = 'room-1',
+}) =>
     <String, dynamic>{
       'starts_at': startsAt,
       'ends_at': endsAt,
       'booking_stations': <String, dynamic>{
         'type': ps5 ? 'ps5' : 'vr_headset',
-        'room_id': 'room-1',
+        'room_id': room,
       },
     };
 
@@ -29,11 +34,13 @@ Map<String, dynamic> _order(List<Map<String, dynamic>> items) => <String, dynami
       'booking_order_items': items,
     };
 
+List<BookingRowEntity> _rows(Map<String, dynamic> order) =>
+    BookingRowDto.fromOrderJson(order, today: _today, tz: _tz);
+
 BookingRowEntity _parse(Map<String, dynamic> order) {
-  final BookingRowEntity? row =
-      BookingRowDto.fromOrderJson(order, today: _today, tz: _tz);
-  expect(row, isNotNull, reason: 'заказ с позициями должен разбираться');
-  return row!;
+  final List<BookingRowEntity> rows = _rows(order);
+  expect(rows, hasLength(1), reason: 'бронь в одном зале — одна запись');
+  return rows.single;
 }
 
 void main() {
@@ -44,6 +51,8 @@ void main() {
         _item('2026-09-10T17:00:00Z', '2026-09-10T19:00:00Z'),
     ]));
 
+    expect(row.id, 'order-1');
+    expect(row.orderId, 'order-1');
     expect(row.durationMinutes, 120);
     expect(row.startMinutes, 20 * 60);
     expect(row.dayIndex, 0);
@@ -104,6 +113,28 @@ void main() {
     expect(row.consolesAt(1), 0);
   });
 
+  test('бронь на два зала — запись на каждый зал с общим заказом', () {
+    // «Весь клуб»: 2 шлема на арене + 2 шлема и PS5 в малом зале.
+    final List<BookingRowEntity> rows = _rows(_order(<Map<String, dynamic>>[
+      for (int i = 0; i < 2; i++)
+        _item('2026-09-10T17:00:00Z', '2026-09-10T18:00:00Z', room: 'big'),
+      for (int i = 0; i < 2; i++)
+        _item('2026-09-10T17:00:00Z', '2026-09-10T18:00:00Z', room: 'small'),
+      _item('2026-09-10T17:00:00Z', '2026-09-10T18:00:00Z', room: 'small', ps5: true),
+    ]));
+
+    expect(rows, hasLength(2));
+    expect(rows.map((BookingRowEntity r) => r.id),
+        <String>['order-1#big', 'order-1#small']);
+    expect(rows.every((BookingRowEntity r) => r.orderId == 'order-1'), isTrue);
+    expect(rows[0].hallId, 'big');
+    expect(rows[0].headsets, 2);
+    expect(rows[0].consoles, 0);
+    expect(rows[1].hallId, 'small');
+    expect(rows[1].headsets, 2);
+    expect(rows[1].consoles, 1);
+  });
+
   test('источник staff помечается как «админка», cancelled — как отменённая', () {
     final Map<String, dynamic> order = _order(<Map<String, dynamic>>[
       _item('2026-09-10T17:00:00Z', '2026-09-10T18:00:00Z'),
@@ -117,10 +148,6 @@ void main() {
   });
 
   test('заказ без позиций пропускается', () {
-    expect(
-      BookingRowDto.fromOrderJson(_order(<Map<String, dynamic>>[]),
-          today: _today, tz: _tz),
-      isNull,
-    );
+    expect(_rows(_order(<Map<String, dynamic>>[])), isEmpty);
   });
 }

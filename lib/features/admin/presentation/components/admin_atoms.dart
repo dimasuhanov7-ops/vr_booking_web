@@ -489,6 +489,75 @@ enum AdminButtonTone {
   warn,
 }
 
+/// Красная плашка с ошибкой (сохранения, загрузки).
+class AdminErrorBox extends StatelessWidget {
+  /// Создаёт плашку.
+  const AdminErrorBox(this.message, {super.key});
+
+  /// Текст ошибки.
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AdminColors.dangerBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AdminColors.dangerBorder),
+      ),
+      child: Text(message,
+          style: const TextStyle(fontSize: 13, height: 1.35, color: AdminColors.danger)),
+    );
+  }
+}
+
+/// Подтверждение действия, которое заметят клиенты или которое не вернуть:
+/// удаление пакета, отмена брони, закрытие зала или дня.
+///
+/// Раньше такие кнопки срабатывали с одного касания — на телефоне это
+/// случайная отмена чужой брони пальцем при прокрутке.
+Future<bool> confirmAdminAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  bool danger = true,
+}) async {
+  final bool? ok = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF0F1115),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AdminColors.border),
+      ),
+      title: Text(title,
+          style: const TextStyle(
+              fontSize: 18, fontWeight: FontWeight.w700, color: AdminColors.text)),
+      content: Text(message,
+          style: const TextStyle(fontSize: 14, height: 1.4, color: AdminColors.textMuted)),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Не сейчас',
+              style: TextStyle(color: AdminColors.textSoft)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(confirmLabel,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: danger ? AdminColors.danger : AdminColors.warn,
+              )),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
 Color _tint(Color accent) => accent == BookingColors.emeraldAccent
     ? BookingColors.emeraldTint
     : BookingColors.limeTint;

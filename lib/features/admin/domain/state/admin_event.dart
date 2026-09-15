@@ -248,45 +248,29 @@ class AdminRowClosed extends AdminEvent {
   const AdminRowClosed();
 }
 
-/// Правка поля открытой брони (оверлей, на сервер не уходит).
+/// Правка контактов, комментария или предоплаты открытой брони.
+///
+/// Сохраняется в БД после паузы в наборе. Время и состав брони здесь не
+/// меняются: для этого пришлось бы заново подбирать станции — такую бронь
+/// отменяют и создают новую.
 class AdminRowEdited extends AdminEvent {
   /// Создаёт событие.
   const AdminRowEdited({
     required this.rowId,
     this.clientName,
     this.phone,
-    this.startMinutes,
-    this.durationMinutes,
-    this.headsets,
-    this.consoles,
     this.prepay,
     this.note,
-    this.clearHourly = false,
   });
 
   /// Идентификатор записи.
   final String rowId;
-
-  /// Сбросить разбивку по часам (правим состав на весь сеанс).
-  final bool clearHourly;
 
   /// Имя.
   final String? clientName;
 
   /// Телефон.
   final String? phone;
-
-  /// Начало, минут.
-  final int? startMinutes;
-
-  /// Длительность, минут.
-  final int? durationMinutes;
-
-  /// VR-шлемов.
-  final int? headsets;
-
-  /// PS5.
-  final int? consoles;
 
   /// Предоплата, ₽.
   final int? prepay;
@@ -295,30 +279,20 @@ class AdminRowEdited extends AdminEvent {
   final String? note;
 
   @override
-  List<Object?> get props => <Object?>[
-        rowId,
-        clearHourly,
-        clientName,
-        phone,
-        startMinutes,
-        durationMinutes,
-        headsets,
-        consoles,
-        prepay,
-        note,
-      ];
+  List<Object?> get props => <Object?>[rowId, clientName, phone, prepay, note];
 }
 
-/// Сбросить правки брони к исходным значениям.
-class AdminRowEditReset extends AdminEvent {
+/// Перечитать брони и доступность с сервера.
+class AdminRefreshRequested extends AdminEvent {
   /// Создаёт событие.
-  const AdminRowEditReset(this.rowId);
+  const AdminRefreshRequested();
+}
 
-  /// Идентификатор записи.
-  final String rowId;
+/// Служебное: отложенное сохранение после паузы в наборе.
+class _AdminDeferredSave extends AdminEvent {
+  const _AdminDeferredSave(this.action);
 
-  @override
-  List<Object?> get props => <Object?>[rowId];
+  final Future<void> Function() action;
 }
 
 /// Открыть drawer «Новая запись».

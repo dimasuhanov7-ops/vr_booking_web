@@ -153,8 +153,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Аккаунты создаёт администратор в Supabase. '
-                      'Забыли пароль — обратитесь к нему.',
+                      'Войдите той же почтой и паролем, что в приложении-менеджере. '
+                      'Доступ к броням выдаёт администратор.',
                       style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.textFaint),
                     ),
                   ],
