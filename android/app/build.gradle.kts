@@ -38,6 +38,31 @@ android {
         versionName = flutter.versionName
     }
 
+    // Два приложения из одного кода:
+    // client — «Бронирование VR» для клиентов (публикуется в RuStore);
+    // staff  — «VR Админка» для персонала, ставится на телефоны сотрудников
+    //          вручную. Свой applicationId, поэтому оба живут на одном
+    //          телефоне рядом. Временное решение до переноса онлайн-броней
+    //          в приложение-менеджер.
+    // Название приложения задаётся во флейворе через resValue — в новых AGP
+    // эта возможность по умолчанию выключена.
+    buildFeatures {
+        resValues = true
+    }
+
+    flavorDimensions += "app"
+    productFlavors {
+        create("client") {
+            dimension = "app"
+            resValue("string", "app_name", "Бронирование VR")
+        }
+        create("staff") {
+            dimension = "app"
+            applicationIdSuffix = ".staff"
+            resValue("string", "app_name", "VR Админка")
+        }
+    }
+
     signingConfigs {
         if (hasReleaseKey) {
             create("release") {

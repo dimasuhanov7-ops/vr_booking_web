@@ -8,7 +8,13 @@ import 'app/embed/launch_params.dart';
 import 'di/injection.dart';
 
 /// Точка входа публичного виджета онлайн-бронирования VR-клубов.
-Future<void> main() async {
+///
+/// Раздел (виджет или админка) и предвыбор берутся из адресной строки.
+/// Отдельное приложение для персонала запускается из `main_staff.dart`.
+Future<void> main() => runBookingApp(LaunchParams.fromUri());
+
+/// Общий запуск для всех точек входа.
+Future<void> runBookingApp(LaunchParams params) async {
   WidgetsFlutterBinding.ensureInitialized();
   // Дерево доступности во Flutter Web по умолчанию выключено и включается
   // только когда посетитель сам нажмёт скрытую кнопку «Enable accessibility».
@@ -18,7 +24,6 @@ Future<void> main() async {
   _styleSystemBars();
   _installErrorScreen();
   await initializeDateFormatting('ru');
-  final LaunchParams params = LaunchParams.fromUri();
   await Injection.instance.init(adminMode: params.adminMode);
   runApp(BookingApp(params: params));
 }

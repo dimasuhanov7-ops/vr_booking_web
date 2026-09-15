@@ -1,11 +1,12 @@
-"""Генерация иконок Android-приложения «Бронирование VR».
+"""Генерация иконок Android-приложений «Бронирование VR» и «VR Админка».
 
 Рисуем программно, а не картинкой в репозитории: иконку легко пересобрать при
 смене акцента, и не нужно хранить пять почти одинаковых PNG вручную.
 
 Мотив — VR-визор из плана зала виджета (см. hall_plan.dart), на фирменном
-тёмном фоне. Лаймовый акцент Effect VR: приложение общее для обоих клубов,
-и лайм читается на тёмном лучше изумруда.
+тёмном фоне. Клиентское приложение — лаймовый акцент Effect VR: оно общее для
+обоих клубов, и лайм читается на тёмном лучше изумруда. Приложение персонала —
+тот же визор янтарным, чтобы на телефоне сотрудника их нельзя было перепутать.
 
 Запуск:  python tool/make_icons.py
 """
@@ -18,7 +19,15 @@ from PIL import Image, ImageDraw, ImageFilter
 # Токены темы (lib/app/theme/app_theme.dart).
 BG = (8, 9, 10)            # BookingColors.bg  #08090A
 ACCENT = (169, 240, 74)    # limeAccent        #A9F04A
-GLOW = (169, 240, 74, 38)  # мягкое свечение под визором
+STAFF_ACCENT = (255, 176, 46)  # янтарь — служебное приложение
+
+# Вариант -> (акцент, source set Gradle-флейвора).
+# main — ресурсы по умолчанию (client их не переопределяет),
+# staff — android/app/src/staff/res перекрывает main для флейвора staff.
+VARIANTS = {
+    "client": (ACCENT, "main"),
+    "staff": (STAFF_ACCENT, "staff"),
+}
 
 # Android mipmap: каталог -> сторона в пикселях.
 MIPMAPS = {
@@ -29,7 +38,7 @@ MIPMAPS = {
     "mipmap-xxxhdpi": 192,
 }
 
-# Иконка для витрины RuStore.
+# Иконка для витрины RuStore (только клиентское приложение).
 STORE_SIZE = 512
 
 # Adaptive icon (Android 8+): канва 108dp, а видимой гарантированно остаётся
@@ -44,12 +53,18 @@ FOREGROUNDS = {
 }
 SAFE_ZONE = 0.62
 
-RES_DIR = os.path.join("android", "app", "src", "main", "res")
+SRC_DIR = os.path.join("android", "app", "src")
 STORE_DIR = os.path.join("android", "store")
 
 
-def draw_icon(size: int, *, opaque: bool = True, scale: float = 0.60) -> Image.Image:
-    """Рисует иконку стороной [size] с запасом на сглаживание.
+def draw_icon(
+    size: int,
+    accent: tuple[int, int, int],
+    *,
+    opaque: bool = True,
+    scale: float = 0.60,
+) -> Image.Image:
+    """Рисует иконку стороной [size] цветом [accent] с запасом на сглаживание.
 
     [opaque] — с фирменным фоном (обычная иконка) или на прозрачном фоне
     (передний слой adaptive icon, фон там задаётся отдельно в XML).
@@ -76,7 +91,7 @@ def draw_icon(size: int, *, opaque: bool = True, scale: float = 0.60) -> Image.I
         hd.rounded_rectangle(
             [x0 - pad, y0 - pad, x1 + pad, y1 + pad],
             radius=int((vh + pad * 2) * 0.5),
-            fill=GLOW,
+            fill=accent + (38,),
         )
         halo = halo.filter(ImageFilter.GaussianBlur(s * 0.03))
         img = Image.alpha_composite(img, halo)
@@ -94,7 +109,7 @@ def draw_icon(size: int, *, opaque: bool = True, scale: float = 0.60) -> Image.I
     d.rounded_rectangle(
         [x0, y0, x1, y1],
         radius=int(vh * 0.48),
-        outline=ACCENT + (255,),
+        outline=accent + (255,),
         width=stroke,
     )
 
@@ -105,13 +120,13 @@ def draw_icon(size: int, *, opaque: bool = True, scale: float = 0.60) -> Image.I
         d.rounded_rectangle(
             [cx, ey, cx + ew, ey + eh],
             radius=int(eh * 0.5),
-            fill=ACCENT + (255,),
+            fill=accent + (255,),
         )
 
     return img.resize((size, size), Image.LANCZOS)
 
 
-def draw_foreground(size: int) -> Image.Image:
+def draw_foreground(size: int, accent: tuple[int, int, int]) -> Image.Image:
     """Передний слой adaptive icon: визор на прозрачном фоне.
 
     Рисуем сразу прозрачным, а не вырезаем фон из готовой иконки: попытка
@@ -121,26 +136,31 @@ def draw_foreground(size: int) -> Image.Image:
     Визор занимает [SAFE_ZONE] стороны — система обрежет канву 108dp своей
     маской до ~72dp, и всё, что шире, срежется.
     """
-    return draw_icon(size, opaque=False, scale=SAFE_ZONE)
+    return draw_icon(size, accent, opaque=False, scale=SAFE_ZONE)
 
 
 def main() -> None:
-    for folder, px in MIPMAPS.items():
-        path = os.path.join(RES_DIR, folder)
-        os.makedirs(path, exist_ok=True)
-        draw_icon(px).save(os.path.join(path, "ic_launcher.png"))
-        print(f"{folder}/ic_launcher.png  {px}x{px}")
+    for variant, (accent, source_set) in VARIANTS.items():
+        res_dir = os.path.join(SRC_DIR, source_set, "res")
 
-    for folder, px in FOREGROUNDS.items():
-        path = os.path.join(RES_DIR, folder)
-        os.makedirs(path, exist_ok=True)
-        draw_foreground(px).save(os.path.join(path, "ic_launcher_foreground.png"))
-        print(f"{folder}/ic_launcher_foreground.png  {px}x{px}")
+        for folder, px in MIPMAPS.items():
+            path = os.path.join(res_dir, folder)
+            os.makedirs(path, exist_ok=True)
+            draw_icon(px, accent).save(os.path.join(path, "ic_launcher.png"))
+            print(f"{variant}: {folder}/ic_launcher.png  {px}x{px}")
+
+        for folder, px in FOREGROUNDS.items():
+            path = os.path.join(res_dir, folder)
+            os.makedirs(path, exist_ok=True)
+            draw_foreground(px, accent).save(
+                os.path.join(path, "ic_launcher_foreground.png")
+            )
+            print(f"{variant}: {folder}/ic_launcher_foreground.png  {px}x{px}")
 
     os.makedirs(STORE_DIR, exist_ok=True)
     store = os.path.join(STORE_DIR, "icon-512.png")
     # Витрина не принимает прозрачность — кладём на сплошной фон.
-    draw_icon(STORE_SIZE).convert("RGB").save(store)
+    draw_icon(STORE_SIZE, ACCENT).convert("RGB").save(store)
     print(f"{store}  {STORE_SIZE}x{STORE_SIZE}")
 
 
