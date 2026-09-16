@@ -13,7 +13,7 @@ API_BASE="${BOOKING_API_BASE:-https://cpjmirlujtfuzvdnysyx.functions.supabase.co
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-"$FLUTTER" build web --release --no-tree-shake-icons \
+"$FLUTTER" build web --release \
   --dart-define=BOOKING_BACKEND=api \
   --dart-define=BOOKING_API_BASE="$API_BASE"
 

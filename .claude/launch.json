@@ -13,6 +13,12 @@
         "--dart-define=USE_MOCK=true"
       ],
       "port": 5599
+    },
+    {
+      "name": "web-release",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8099", "--directory", "build/web"],
+      "port": 8099
     }
   ]
 }

@@ -32,16 +32,17 @@ flutter:
   # android/app/build.gradle.kts). Без --flavor собирается клиентский.
   default-flavor: client
   uses-material-design: true
+  # Inter, урезанный до латиницы, кириллицы и типографики (tool/make_font.py).
+  # В Archivo нет кириллицы: русский текст рисовался запасным шрифтом, который
+  # CanvasKit тянет с fonts.gstatic.com — из РФ это долго и не всегда доступно.
   fonts:
-    - family: Archivo
+    - family: Inter
       fonts:
-        - asset: assets/fonts/Archivo-400.ttf
+        - asset: assets/fonts/Inter-400.ttf
           weight: 400
-        - asset: assets/fonts/Archivo-500.ttf
-          weight: 500
-        - asset: assets/fonts/Archivo-600.ttf
+        - asset: assets/fonts/Inter-600.ttf
           weight: 600
-        - asset: assets/fonts/Archivo-700.ttf
+        - asset: assets/fonts/Inter-700.ttf
           weight: 700
-        - asset: assets/fonts/Archivo-800.ttf
+        - asset: assets/fonts/Inter-800.ttf
           weight: 800

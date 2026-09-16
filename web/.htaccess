@@ -38,8 +38,14 @@
 </IfModule>
 
 # --- Сжатие ---
+# Главное здесь — .wasm и шрифты: несжатый canvaskit.wasm это 7 МБ вместо 2,9 МБ,
+# то есть несколько лишних секунд на мобильном интернете.
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+  AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript application/json image/svg+xml application/wasm font/ttf font/otf application/manifest+json
+</IfModule>
+# Brotli жмёт ещё примерно на 20 % — включаем, если модуль есть (LiteSpeed умеет).
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/css text/plain application/javascript application/json image/svg+xml application/wasm font/ttf font/otf application/manifest+json
 </IfModule>
 
 AddType application/wasm .wasm

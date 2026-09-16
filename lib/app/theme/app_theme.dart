@@ -91,7 +91,7 @@ abstract final class AppTheme {
     return base.copyWith(
       scaffoldBackgroundColor: BookingColors.bg,
       textTheme: base.textTheme.apply(
-        fontFamily: 'Archivo',
+        fontFamily: 'Inter',
         bodyColor: BookingColors.text,
         displayColor: BookingColors.text,
       ),

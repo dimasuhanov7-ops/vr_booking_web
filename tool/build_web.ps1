@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
 try {
-  & $Flutter build web --release --no-tree-shake-icons `
+  & $Flutter build web --release `
     --dart-define=BOOKING_BACKEND=api `
     --dart-define=BOOKING_API_BASE=$ApiBase
   if ($LASTEXITCODE -ne 0) { throw "flutter build web failed ($LASTEXITCODE)" }
