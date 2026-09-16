@@ -22,12 +22,17 @@ enum DayKind {
 }
 
 /// Тариф: цена за час для типа станции в будни/выходные.
+///
+/// Цен на один тип станции может быть несколько — ступенями по количеству:
+/// «до 6 шлемов 800 ₽, от 7 — 700 ₽». Ступень выбирается по числу станций
+/// этого типа в сеансе и применяется ко всем сразу (см. [minQty]).
 class PriceRateEntity extends Equatable {
   /// Создаёт тариф.
   const PriceRateEntity({
     required this.stationType,
     required this.dayKind,
     required this.pricePerHour,
+    this.minQty = 1,
   });
 
   /// Тип станции.
@@ -39,6 +44,10 @@ class PriceRateEntity extends Equatable {
   /// Цена за час, ₽.
   final num pricePerHour;
 
+  /// С какого количества станций действует цена (базовая строка — 1).
+  final int minQty;
+
   @override
-  List<Object?> get props => <Object?>[stationType, dayKind, pricePerHour];
+  List<Object?> get props =>
+      <Object?>[stationType, dayKind, pricePerHour, minQty];
 }

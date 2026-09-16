@@ -29,6 +29,15 @@ void main() {
       final TimeSlotEntity first = bloc.state.slots.first;
       bloc.add(BookingSlotSelected(first));
       await Future<void>.delayed(const Duration(milliseconds: 700));
+      // Пакеты показываются только на выбранную длительность: все пакеты
+      // Effect VR двухчасовые, поэтому при сеансе на час карточек нет.
+      expect(bloc.state.hallPackages, isEmpty);
+      expect(bloc.state.packageDurations, <int>[120]);
+      bloc.add(const BookingDurationSelected(120));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      bloc.add(BookingSlotSelected(bloc.state.slots.first));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(bloc.state.hallPackages.length, 3);
       final PackageEntity company =
           bloc.state.hallPackages.firstWhere((PackageEntity p) => p.name == 'Компания');
       bloc.add(BookingPackageSelected(company));

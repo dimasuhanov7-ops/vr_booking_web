@@ -875,7 +875,8 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       club: club,
       stations: picked,
       startsAtUtc: slot.startsAt,
-      minutesOf: (StationEntity st) => 60 * s.stationHours(st.id),
+      hourCount: s.hourCount,
+      isPickedAt: (StationEntity st, int h) => s.pickedAt(h).contains(st.id),
       rates: state.prices,
       showRoomInLabel: state.hall?.isCombo ?? false,
     );

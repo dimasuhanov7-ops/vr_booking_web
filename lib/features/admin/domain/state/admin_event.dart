@@ -39,6 +39,18 @@ class AdminTabChanged extends AdminEvent {
 }
 
 /// Правка тарифа зала.
+/// Изменён порог ступени для шлемов: «от N штук дешевле». 0 — убрать ступень.
+class AdminVrTierChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminVrTierChanged(this.fromQty);
+
+  /// С какого числа шлемов действует вторая цена (0 — ступени нет).
+  final int fromQty;
+
+  @override
+  List<Object?> get props => <Object?>[fromQty];
+}
+
 class AdminPriceChanged extends AdminEvent {
   /// Создаёт событие.
   const AdminPriceChanged({

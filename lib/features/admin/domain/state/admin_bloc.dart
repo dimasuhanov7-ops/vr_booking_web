@@ -40,6 +40,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminRefreshRequested>(_onRefreshRequested);
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
+    on<AdminVrTierChanged>(_onVrTierChanged);
     on<AdminPriceChanged>(_onPriceChanged);
     on<AdminPackageFieldChanged>(_onPackageFieldChanged);
     on<AdminPackageToggled>(_onPackageToggled);
@@ -288,6 +289,15 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       next[h.id] = state.priceOf(h.id).withField(event.field, event.value);
     }
     emit(state.copyWith(prices: next));
+
+    // Цены ступени лежат отдельными строками тарифа и сохраняются вместе с
+    // порогом — одной операцией, иначе в базе окажется ступень без цены.
+    final bool tier = event.field == PriceField.vrTierWeekday ||
+        event.field == PriceField.vrTierWeekend;
+    if (tier) {
+      _saveTierLater(clubId);
+      return;
+    }
     _saveLater(
       'price-$clubId-${event.field.name}',
       () => _repository.saveClubPrice(
@@ -295,6 +305,33 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         field: event.field,
         value: event.value,
       ),
+    );
+  }
+
+  void _onVrTierChanged(AdminVrTierChanged event, Emitter<AdminState> emit) {
+    final String clubId = state.clubId;
+    final Map<String, HallPriceEntity> next =
+        Map<String, HallPriceEntity>.of(state.prices);
+    for (final AdminHallEntity h in state.club.halls) {
+      next[h.id] = state.priceOf(h.id).withTier(event.fromQty);
+    }
+    emit(state.copyWith(prices: next));
+    _saveTierLater(clubId);
+  }
+
+  /// Отложенно сохраняет ступень шлемов текущего состояния.
+  void _saveTierLater(String clubId) {
+    final HallPriceEntity price = state.priceOf(state.club.halls.first.id);
+    _saveLater(
+      'price-$clubId-tier',
+      () => price.hasVrTier
+          ? _repository.saveVrTier(
+              clubId: clubId,
+              fromQty: price.vrTierFrom,
+              weekday: price.vrTierWeekday,
+              weekend: price.vrTierWeekend,
+            )
+          : _repository.clearVrTier(clubId),
     );
   }
 

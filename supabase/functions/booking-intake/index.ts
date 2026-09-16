@@ -158,7 +158,7 @@ async function handle(req: Request): Promise<Response> {
       if (!clubId) return json({ error: "club_id required" }, 400);
       const { data, error } = await db
         .from("booking_prices")
-        .select("station_type,day_kind,price_per_hour")
+        .select("station_type,day_kind,price_per_hour,min_qty")
         .eq("club_id", clubId);
       if (error) return json({ error: "DB", detail: error.message }, 500);
       return json(data);

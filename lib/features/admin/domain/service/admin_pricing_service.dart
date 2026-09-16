@@ -31,7 +31,7 @@ class AdminPricingService {
     required HallPriceEntity price,
     required bool weekend,
   }) {
-    final num raw = (price.vrRate(weekend: weekend) * headsets +
+    final num raw = (price.vrRate(weekend: weekend, qty: headsets) * headsets +
             price.ps5Rate(weekend: weekend) * consoles) *
         minutes /
         60;
@@ -94,10 +94,11 @@ class AdminPricingService {
     required PackageEntity pkg,
     required HallPriceEntity price,
   }) {
-    final num raw =
-        (price.vrWeekday * pkg.headsets + price.ps5Weekday * pkg.consoles) *
-            pkg.minutes /
-            60;
+    final num raw = (price.vrRate(weekend: false, qty: pkg.headsets) *
+                pkg.headsets +
+            price.ps5Weekday * pkg.consoles) *
+        pkg.minutes /
+        60;
     return raw.round();
   }
 }

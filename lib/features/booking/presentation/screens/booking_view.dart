@@ -459,11 +459,26 @@ class _FormBody extends StatelessWidget {
   bool get _weekend => _dayKind == DayKind.weekend;
 
   num _ratePerHour(StationType type) {
+    num rate = 0;
+    int tier = 0;
     for (final PriceRateEntity r in state.prices) {
-      if (r.stationType == type && r.dayKind == _dayKind) return r.pricePerHour;
+      if (r.stationType != type || r.dayKind != _dayKind) continue;
+      // Базовая цена — ступень с минимальным количеством.
+      if (rate == 0 || r.minQty < tier) {
+        rate = r.pricePerHour;
+        tier = r.minQty;
+      }
     }
-    return 0;
+    return rate;
   }
+
+  /// Ступени тарифа для типа станции по возрастанию количества.
+  List<PriceRateEntity> _tiers(StationType type) => state.prices
+      .where((PriceRateEntity r) =>
+          r.stationType == type && r.dayKind == _dayKind)
+      .toList()
+    ..sort((PriceRateEntity a, PriceRateEntity b) =>
+        a.minQty.compareTo(b.minQty));
 
   List<Widget> _dateBlock(BookingBloc bloc) => <Widget>[
         FieldCard(
@@ -483,15 +498,23 @@ class _FormBody extends StatelessWidget {
     final String durLabel = BookingFormat.duration(state.durationMinutes);
     final double hrs = state.durationMinutes / 60;
     final bool showPs = state.hall == null || state.hall!.consoles > 0;
+    // Тариф может идти ступенями: «до 6 шлемов одна цена, от 7 — другая».
+    // Показываем все ступени: иначе клиент не поймёт, почему итог ниже.
+    final List<PriceRateEntity> vrTiers = _tiers(StationType.vrHeadset);
+    final List<PriceRateEntity> psTiers = showPs ? _tiers(StationType.ps5) : <PriceRateEntity>[];
+    final bool tiered = vrTiers.length > 1 || psTiers.length > 1;
     final List<({String label, String price})> rateLines = <({String label, String price})>[
-      (
-        label: '1 VR-шлем · $durLabel',
-        price: BookingFormat.money((_ratePerHour(StationType.vrHeadset) * hrs).round()),
-      ),
-      if (showPs)
+      for (final PriceRateEntity r in vrTiers)
         (
-          label: '1 PS5 · $durLabel',
-          price: BookingFormat.money((_ratePerHour(StationType.ps5) * hrs).round()),
+          label: r.minQty > 1
+              ? 'от ${r.minQty} шлемов · $durLabel'
+              : '1 VR-шлем · $durLabel',
+          price: BookingFormat.money((r.pricePerHour * hrs).round()),
+        ),
+      for (final PriceRateEntity r in psTiers)
+        (
+          label: r.minQty > 1 ? 'от ${r.minQty} PS5 · $durLabel' : '1 PS5 · $durLabel',
+          price: BookingFormat.money((r.pricePerHour * hrs).round()),
         ),
     ];
 
@@ -532,6 +555,7 @@ class _FormBody extends StatelessWidget {
             Text(
               'Цена за одно место. Итог за компанию считается по числу выбранных '
               'шлемов и PS5 и виден внизу до подтверждения. '
+              '${tiered ? 'Чем больше мест, тем дешевле каждое. ' : ''}'
               '${_weekend ? 'Тариф выходного дня.' : 'Тариф будних дней.'}',
               style: const TextStyle(fontSize: 12, height: 1.4, color: BookingColors.textDim),
             ),
@@ -607,6 +631,13 @@ class _FormBody extends StatelessWidget {
           onSelected: (PackageEntity? p) => bloc.add(BookingPackageSelected(p)),
         ),
         const SizedBox(height: 16),
+      ]
+      // Пакеты показываем только на их длительность, но молча прятать их
+      // нельзя: клиент не догадается, что на 2 часа есть предложение.
+      else if (state.packageDurations.isNotEmpty) ...<Widget>[
+        _Hint('Пакеты есть на ${_durationList(state.packageDurations)} — '
+            'переключите длительность сеанса.'),
+        const SizedBox(height: 12),
       ],
       if (state.multiHour)
         SessionHours(state: state, club: club, accent: accent)
@@ -797,6 +828,14 @@ class _FormBody extends StatelessWidget {
           onTap: () => bloc.add(const BookingDurationSelected(60)),
         ),
     ];
+  }
+
+  /// «2 ч», «2 ч и 3 ч» — длительности, на которые есть пакеты.
+  static String _durationList(List<int> minutes) {
+    final List<String> parts =
+        minutes.map(BookingFormat.duration).toList(growable: false);
+    if (parts.length == 1) return parts.first;
+    return '${parts.sublist(0, parts.length - 1).join(', ')} и ${parts.last}';
   }
 
   /// Состав клубов для карточек шага 1 — целиком из данных, без хардкода:

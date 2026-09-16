@@ -299,14 +299,32 @@ class BookingState extends Equatable {
   /// Всего станций в варианте зала.
   int get hallCapacity => hall?.capacity ?? 0;
 
-  /// Пакеты, доступные для выбранного зала (по комнате пакета).
-  List<PackageEntity> get hallPackages {
+  /// Пакеты выбранного зала (по комнате пакета) — любой длительности.
+  List<PackageEntity> get roomPackages {
     final HallOptionEntity? h = hall;
     if (h == null || h.isCombo) return const <PackageEntity>[];
     final String? roomId = h.roomIds.length == 1 ? h.roomIds.first : null;
     return packages
         .where((PackageEntity p) => p.roomId == null || p.roomId == roomId)
         .toList(growable: false);
+  }
+
+  /// Пакеты, которые можно взять на выбранную длительность сеанса.
+  ///
+  /// Пакет — цена за состав на свои часы, поэтому пакет на 2 часа не имеет
+  /// смысла при сеансе на 1 час: раньше такие карточки показывались всегда и
+  /// втихую переключали длительность.
+  List<PackageEntity> get hallPackages => roomPackages
+      .where((PackageEntity p) => p.minutes == durationMinutes)
+      .toList(growable: false);
+
+  /// Длительности (минуты), на которые в этом зале есть пакеты, по возрастанию.
+  /// Нужны для подсказки «пакеты есть на 2 и 3 часа».
+  List<int> get packageDurations {
+    final Set<int> out = <int>{
+      for (final PackageEntity p in roomPackages) p.minutes,
+    }..remove(durationMinutes);
+    return out.toList()..sort();
   }
 
   /// Выбранный пакет как сущность.
@@ -343,12 +361,8 @@ class BookingState extends Equatable {
 
     final DateTime wall = ClubClock(c).toWall(s.startsAt);
     final int startWall = wall.hour * 60 + wall.minute;
-    final int step = p.minutes + c.slotGapMinutes;
     if (startWall + p.minutes > c.closeTime.inMinutes) {
       return (ok: false, reason: 'не влезает до закрытия — выберите время раньше');
-    }
-    if ((startWall - c.openTime.inMinutes) % step != 0) {
-      return (ok: false, reason: 'для пакета на ${p.minutes ~/ 60} ч выберите слот раньше');
     }
     return (ok: true, reason: '');
   }

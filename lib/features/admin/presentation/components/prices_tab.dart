@@ -40,9 +40,11 @@ class PricesTab extends StatelessWidget {
           clubName: state.club.name,
           halls: halls,
           price: price,
+          accent: accent,
           onChanged: (PriceField f, int v) => bloc.add(
             AdminPriceChanged(hallId: hallId, field: f, value: v),
           ),
+          onTierFrom: (int v) => bloc.add(AdminVrTierChanged(v)),
         ),
         const SizedBox(height: 14),
         _DurationPreview(price: price),
@@ -57,14 +59,18 @@ class _ClubPriceCard extends StatelessWidget {
     required this.clubName,
     required this.halls,
     required this.price,
+    required this.accent,
     required this.onChanged,
+    required this.onTierFrom,
   });
 
   final String clubId;
   final String clubName;
   final List<AdminHallEntity> halls;
   final HallPriceEntity price;
+  final Color accent;
   final void Function(PriceField, int) onChanged;
+  final ValueChanged<int> onTierFrom;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +135,16 @@ class _ClubPriceCard extends StatelessWidget {
                 ],
               ),
             ),
+          const SizedBox(height: 16),
+          _VrTier(
+            clubId: clubId,
+            price: price,
+            maxHeadsets: halls.fold<int>(
+                0, (int a, AdminHallEntity h) => h.headsets > a ? h.headsets : a),
+            accent: accent,
+            onChanged: onChanged,
+            onFrom: onTierFrom,
+          ),
           const SizedBox(height: 12),
           const Text(
             'Выходные — суббота и воскресенье. Рубли за час. '
@@ -143,6 +159,174 @@ class _ClubPriceCard extends StatelessWidget {
   static String _hallLabel(AdminHallEntity h) =>
       '${h.name} — ${AdminFormat.helmets(h.headsets)}'
       '${h.consoles > 0 ? ' и ${h.consoles} PS5' : ''}';
+}
+
+/// Ступень цены для шлемов: «от N штук — другая цена за место».
+///
+/// Цена ступени применяется ко всем шлемам сеанса сразу (решение заказчика):
+/// 8 шлемов считаются по цене ступени, а не «6 по первой и 2 по второй».
+class _VrTier extends StatelessWidget {
+  const _VrTier({
+    required this.clubId,
+    required this.price,
+    required this.maxHeadsets,
+    required this.accent,
+    required this.onChanged,
+    required this.onFrom,
+  });
+
+  final String clubId;
+  final HallPriceEntity price;
+  final int maxHeadsets;
+  final Color accent;
+  final void Function(PriceField, int) onChanged;
+  final ValueChanged<int> onFrom;
+
+  /// Порог по умолчанию — чуть больше половины зала.
+  int get _suggested => maxHeadsets > 2 ? (maxHeadsets ~/ 2) + 1 : 2;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool on = price.hasVrTier;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Divider(height: 1, color: AdminColors.border),
+        const SizedBox(height: 12),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Дешевле за количество',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(
+                    on
+                        ? 'от ${price.vrTierFrom} шлемов цена ниже — за все шлемы'
+                        : 'сейчас одна цена при любом количестве',
+                    style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: on,
+              activeThumbColor: accent,
+              onChanged: (bool v) => onFrom(v ? _suggested : 0),
+            ),
+          ],
+        ),
+        if (on) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text('Порог',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+              _Step(
+                label: 'от ${price.vrTierFrom}',
+                onMinus: price.vrTierFrom > 2
+                    ? () => onFrom(price.vrTierFrom - 1)
+                    : null,
+                onPlus: price.vrTierFrom < maxHeadsets
+                    ? () => onFrom(price.vrTierFrom + 1)
+                    : null,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('VR-шлем от ${price.vrTierFrom} шт.',
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      const Text('за 1 час, одна станция',
+                          style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
+                    ],
+                  ),
+                ),
+                _PriceInput(
+                  key: ValueKey<String>('$clubId-tier-weekday-${price.vrTierFrom}'),
+                  value: price.vrTierWeekday,
+                  onChanged: (int v) => onChanged(PriceField.vrTierWeekday, v),
+                ),
+                const SizedBox(width: 10),
+                _PriceInput(
+                  key: ValueKey<String>('$clubId-tier-weekend-${price.vrTierFrom}'),
+                  value: price.vrTierWeekend,
+                  onChanged: (int v) => onChanged(PriceField.vrTierWeekend, v),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Кнопки «−» и «+» вокруг значения порога.
+class _Step extends StatelessWidget {
+  const _Step({required this.label, this.onMinus, this.onPlus});
+
+  final String label;
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _StepButton(icon: Icons.remove_rounded, onTap: onMinus),
+        SizedBox(
+          width: 74,
+          child: Text(
+            '$label шт.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+        ),
+        _StepButton(icon: Icons.add_rounded, onTap: onPlus),
+      ],
+    );
+  }
+}
+
+class _StepButton extends StatelessWidget {
+  const _StepButton({required this.icon, this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool on = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AdminColors.border),
+        ),
+        child: Icon(icon,
+            size: 18,
+            color: on ? AdminColors.text : AdminColors.textFaint),
+      ),
+    );
+  }
 }
 
 class _PriceRow {

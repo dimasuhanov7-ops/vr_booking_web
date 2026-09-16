@@ -16,9 +16,12 @@ class SlotGeneratorService {
 
   /// Генерирует старты сеансов на дату [day].
   ///
-  /// Первый старт — в момент открытия клуба, дальше с шагом
-  /// `длительность + club.slotGapMinutes`, пока сеанс целиком помещается до
-  /// закрытия. Слоты, до начала которых меньше [bookingLead], отбрасываются.
+  /// Первый старт — в момент открытия клуба, дальше с часовым шагом
+  /// (`60 + club.slotGapMinutes`) независимо от длительности сеанса, пока тот
+  /// целиком помещается до закрытия. Сетка стартов одна и та же для часа и для
+  /// четырёх: сеанс на 2 часа можно начать в 12:10, а не только в 11:00 и 13:10.
+  /// Занятость проверяется отдельно — на весь сеанс, а не на один час.
+  /// Слоты, до начала которых меньше [bookingLead], отбрасываются.
   /// [now] — для тестов, по умолчанию текущее время.
   List<TimeSlotEntity> generateSlots({
     required ClubEntity club,
@@ -29,7 +32,7 @@ class SlotGeneratorService {
     final ClubClock clock = ClubClock(club);
     final DateTime cutoff = (now ?? DateTime.now()).toUtc().add(bookingLead);
     final Duration session = Duration(minutes: durationMinutes);
-    final Duration step = Duration(minutes: durationMinutes + club.slotGapMinutes);
+    final Duration step = Duration(minutes: 60 + club.slotGapMinutes);
 
     final List<TimeSlotEntity> slots = <TimeSlotEntity>[];
     Duration cursor = club.openTime;

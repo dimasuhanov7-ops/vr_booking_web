@@ -123,6 +123,17 @@ class AdminRepositoryMock implements IAdminRepository {
   }) async {}
 
   @override
+  Future<void> saveVrTier({
+    required String clubId,
+    required int fromQty,
+    required int weekday,
+    required int weekend,
+  }) async {}
+
+  @override
+  Future<void> clearVrTier(String clubId) async {}
+
+  @override
   Future<String> createPackage(PackageEntity draft) async =>
       'p${DateTime.now().millisecondsSinceEpoch}';
 

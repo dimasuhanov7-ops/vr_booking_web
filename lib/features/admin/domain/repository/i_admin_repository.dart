@@ -55,6 +55,18 @@ abstract interface class IAdminRepository {
     required int value,
   });
 
+  /// Задать ступень цены для шлемов: «от [fromQty] штук — другая цена за час».
+  /// Цена ступени применяется ко всем шлемам сеанса сразу.
+  Future<void> saveVrTier({
+    required String clubId,
+    required int fromQty,
+    required int weekday,
+    required int weekend,
+  });
+
+  /// Убрать ступень: остаётся одна цена независимо от количества.
+  Future<void> clearVrTier(String clubId);
+
   /// Создать пакет. Возвращает присвоенный сервером id.
   Future<String> createPackage(PackageEntity draft);
 
