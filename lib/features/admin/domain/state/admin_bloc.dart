@@ -165,6 +165,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       intakeOpen: !avail.pausedClubIds.contains(clubId),
       closedHallIds: closed.halls,
       closedSlotKeys: closed.slots,
+      closures: avail.closures,
       pausedClubIds: avail.pausedClubIds,
       refreshedAt: DateTime.now(),
     ));
@@ -202,6 +203,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         intakeOpen: !avail.pausedClubIds.contains(state.clubId),
         closedHallIds: closed.halls,
         closedSlotKeys: closed.slots,
+      closures: avail.closures,
         pausedClubIds: avail.pausedClubIds,
         // Открытую карточку закрываем, только если брони больше нет.
         clearOpenRow:

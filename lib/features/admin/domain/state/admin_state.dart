@@ -277,6 +277,7 @@ class AdminState extends Equatable {
     this.intakeOpen = true,
     this.closedHallIds = const <String>{},
     this.closedSlotKeys = const <String>{},
+    this.closures = const <ClosureEntity>[],
     this.pausedClubIds = const <String>{},
     this.filterDay = 0,
     this.filterHallId = '',
@@ -332,6 +333,10 @@ class AdminState extends Equatable {
 
   /// Закрытые слоты (`clubId-dayIndex-minutes`).
   final Set<String> closedSlotKeys;
+
+  /// Все закрытия из «Доступности» — нужны и на вкладке «Записи», чтобы
+  /// сотрудник видел закрытое время там же, где брони.
+  final List<ClosureEntity> closures;
 
   /// Клубы с приостановленным приёмом онлайн-броней. Нужен, чтобы при смене
   /// клуба показать его собственный статус, а не статус предыдущего.
@@ -461,6 +466,45 @@ class AdminState extends Equatable {
   int get occupancyDayIndex => filterDay < 0 ? 0 : filterDay;
 
   /// Записи выбранного клуба на день сетки занятости (живые).
+  /// Закрытия текущего клуба, влияющие на день [dayIndex], по возрастанию времени.
+  ///
+  /// Сюда попадают и бессрочно закрытые залы: на вкладке «Записи» сотруднику
+  /// нужно видеть, что зал вообще не работает, а не только окна на дату.
+  List<ClosureEntity> closuresOn(int dayIndex) {
+    final DateTime date = _todayDate().add(Duration(days: dayIndex));
+    final List<ClosureEntity> out = closures.where((ClosureEntity c) {
+      if (c.clubId != clubId) return false;
+      final DateTime? d = c.day;
+      if (d == null) return c.isWholeHall;
+      return DateTime(d.year, d.month, d.day) == date;
+    }).toList();
+    out.sort((ClosureEntity a, ClosureEntity b) =>
+        (a.fromMinutes ?? -1).compareTo(b.fromMinutes ?? -1));
+    return out;
+  }
+
+  /// Закрыт ли сеанс [minutes]…[minutes] + [session] в зале [hallId].
+  bool isClosedHour({
+    required String hallId,
+    required int dayIndex,
+    required int minutes,
+    int session = 60,
+  }) {
+    for (final ClosureEntity c in closuresOn(dayIndex)) {
+      if (c.hallId != null && c.hallId != hallId) continue;
+      if (c.isWholeHall) return true;
+      final int from = c.fromMinutes ?? 0;
+      final int to = c.toMinutes ?? 1440;
+      if (minutes < to && minutes + session > from) return true;
+    }
+    return false;
+  }
+
+  static DateTime _todayDate() {
+    final DateTime n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
   List<BookingRowEntity> occupancyRows(String hallId) => rows
       .where((BookingRowEntity r) =>
           r.clubId == clubId &&
@@ -550,6 +594,7 @@ class AdminState extends Equatable {
     bool? intakeOpen,
     Set<String>? closedHallIds,
     Set<String>? closedSlotKeys,
+    List<ClosureEntity>? closures,
     Set<String>? pausedClubIds,
     int? filterDay,
     String? filterHallId,
@@ -577,6 +622,7 @@ class AdminState extends Equatable {
       intakeOpen: intakeOpen ?? this.intakeOpen,
       closedHallIds: closedHallIds ?? this.closedHallIds,
       closedSlotKeys: closedSlotKeys ?? this.closedSlotKeys,
+      closures: closures ?? this.closures,
       pausedClubIds: pausedClubIds ?? this.pausedClubIds,
       filterDay: filterDay ?? this.filterDay,
       filterHallId: filterHallId ?? this.filterHallId,
@@ -605,6 +651,7 @@ class AdminState extends Equatable {
         intakeOpen,
         closedHallIds,
         closedSlotKeys,
+        closures,
         pausedClubIds,
         filterDay,
         filterHallId,

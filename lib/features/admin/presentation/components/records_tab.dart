@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entity/admin_club_entity.dart';
+import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/service/admin_pricing_service.dart';
 import '../../domain/state/admin_bloc.dart';
@@ -121,6 +122,7 @@ class RecordsTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
+        _ClosedOnDay(state: state),
         _DayList(state: state, orders: orders),
         const SizedBox(height: 14),
         OccupancyGrid(state: state, accent: accent, pricing: pricing),
@@ -159,6 +161,85 @@ class _RefreshButton extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+/// Закрытое время дня — то, что задано во вкладке «Доступность».
+///
+/// Без этого сотрудник видел пустую сетку и думал, что время свободно,
+/// хотя запись туда закрыта.
+class _ClosedOnDay extends StatelessWidget {
+  const _ClosedOnDay({required this.state});
+
+  final AdminState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<ClosureEntity> closures = state.closuresOn(state.occupancyDayIndex);
+    if (closures.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: AdminCard(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.block_rounded, size: 16, color: AdminColors.warn),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Закрыто на этот день',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+                Text('меняется во вкладке «Доступность»',
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontSize: 11, color: AdminColors.textFaint)),
+              ],
+            ),
+            for (final ClosureEntity c in closures)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(_where(c),
+                          style: const TextStyle(fontSize: 13, color: AdminColors.textSoft)),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(_when(c),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AdminColors.warn,
+                        )),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Зал закрытия или «Весь клуб».
+  String _where(ClosureEntity c) {
+    final String? hallId = c.hallId;
+    if (hallId == null) return 'Весь клуб';
+    for (final AdminHallEntity h in state.clubHalls) {
+      if (h.id == hallId) return h.name;
+    }
+    return 'Зал';
+  }
+
+  /// «весь день», «закрыт совсем» или окно «14:00–18:00».
+  String _when(ClosureEntity c) {
+    if (c.isWholeHall) return 'закрыт совсем';
+    final int? from = c.fromMinutes;
+    if (from == null) return 'весь день';
+    return '${AdminFormat.hhmm(from)}–${AdminFormat.hhmm(c.toMinutes ?? 1440)}';
   }
 }
 

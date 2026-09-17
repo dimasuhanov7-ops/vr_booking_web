@@ -139,6 +139,17 @@ class _HallOccupancyState extends State<_HallOccupancy> {
 
     final List<BookingRowEntity> bookings = state.occupancyRows(hall.id);
 
+    // Закрытое время из «Доступности» — те же часы, что и в сетке.
+    final List<bool> closedSlots = <bool>[
+      for (final int t in slots)
+        state.isClosedHour(
+          hallId: hall.id,
+          dayIndex: state.occupancyDayIndex,
+          minutes: t,
+          session: session,
+        ),
+    ];
+
     final List<List<_Cell>> grid = List<List<_Cell>>.generate(
       units.length,
       (_) => List<_Cell>.filled(slots.length, null),
@@ -261,8 +272,9 @@ class _HallOccupancyState extends State<_HallOccupancy> {
                     children: <Widget>[
                       _timeRow(slots),
                       for (int ui = 0; ui < units.length; ui++)
-                        _unitRow(ui, units[ui], slots.length, grid[ui], bloc),
-                      _freeRow(slots.length, units.length, grid),
+                        _unitRow(ui, units[ui], slots.length, grid[ui], bloc,
+                            closedSlots),
+                      _freeRow(slots.length, units.length, grid, closedSlots),
                     ],
                   ),
                   for (final _Head h in heads) _nameLabel(h),
@@ -308,6 +320,7 @@ class _HallOccupancyState extends State<_HallOccupancy> {
     int slotCount,
     List<_Cell> row,
     AdminBloc bloc,
+    List<bool> closedSlots,
   ) =>
       Row(children: <Widget>[
         SizedBox(
@@ -323,6 +336,7 @@ class _HallOccupancyState extends State<_HallOccupancy> {
         for (int si = 0; si < slotCount; si++)
           _box(_OccCell(
             data: row[si],
+            closed: closedSlots[si],
             ps5: unit.ps5,
             hoverId: _hoverId,
             onHover: _hover,
@@ -330,7 +344,12 @@ class _HallOccupancyState extends State<_HallOccupancy> {
           )),
       ]);
 
-  Widget _freeRow(int slotCount, int unitCount, List<List<_Cell>> grid) =>
+  Widget _freeRow(
+    int slotCount,
+    int unitCount,
+    List<List<_Cell>> grid,
+    List<bool> closedSlots,
+  ) =>
       Row(children: <Widget>[
         const SizedBox(
           width: OccupancyGrid.labelW,
@@ -339,6 +358,12 @@ class _HallOccupancyState extends State<_HallOccupancy> {
         ),
         for (int si = 0; si < slotCount; si++)
           Builder(builder: (BuildContext context) {
+            // В закрытый час свободных мест нет — показываем прочерк, иначе
+            // сетка обещала бы места, которые продать нельзя.
+            if (closedSlots[si]) {
+              return _box(const Text('—',
+                  style: TextStyle(fontSize: 12, color: AdminColors.textFaint)));
+            }
             int free = 0;
             for (int ui = 0; ui < unitCount; ui++) {
               if (grid[ui][si] == null) free++;
@@ -402,6 +427,7 @@ const Curve _hoverCurve = Curves.easeOutCubic;
 class _OccCell extends StatelessWidget {
   const _OccCell({
     required this.data,
+    required this.closed,
     required this.ps5,
     required this.hoverId,
     required this.onHover,
@@ -409,6 +435,10 @@ class _OccCell extends StatelessWidget {
   });
 
   final _Cell data;
+
+  /// Час закрыт в «Доступности».
+  final bool closed;
+
   final bool ps5;
   final String? hoverId;
   final ValueChanged<String?> onHover;
@@ -421,10 +451,13 @@ class _OccCell extends StatelessWidget {
       return DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(ps5 ? 12 : 6),
-          border: Border.all(color: const Color(0xFF1F2127)),
-          color: const Color(0xFF0B0D10),
+          border: Border.all(
+              color: closed ? const Color(0xFF2B2D34) : const Color(0xFF1F2127)),
+          color: closed ? const Color(0xFF15161A) : const Color(0xFF0B0D10),
         ),
-        child: const SizedBox.expand(),
+        child: closed
+            ? const CustomPaint(painter: _ClosedHatch(), child: SizedBox.expand())
+            : const SizedBox.expand(),
       );
     }
     final ({Color bg, Color border, Color text}) h = AdminColors.hue(d.hue);
@@ -462,6 +495,22 @@ class _OccCell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Косая черта в закрытой ячейке: «здесь нельзя записать».
+class _ClosedHatch extends CustomPainter {
+  const _ClosedHatch();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint p = Paint()
+      ..color = const Color(0xFF3A3C44)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(3, size.height - 3), Offset(size.width - 3, 3), p);
+  }
+
+  @override
+  bool shouldRepaint(_ClosedHatch oldDelegate) => false;
 }
 
 class _GlobalLegend extends StatelessWidget {
@@ -522,6 +571,19 @@ class _GlobalLegend extends StatelessWidget {
             ),
           ),
           'свободно',
+        ),
+        item(
+          Container(
+            width: 22,
+            height: 12,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: const Color(0xFF15161A),
+              border: Border.all(color: const Color(0xFF2B2D34)),
+            ),
+            child: const CustomPaint(painter: _ClosedHatch()),
+          ),
+          'закрыто в «Доступности»',
         ),
       ],
     );
