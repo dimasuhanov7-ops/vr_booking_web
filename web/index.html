@@ -25,7 +25,7 @@
   -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com;
+    script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com;
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob:;
     font-src 'self' data: https://fonts.gstatic.com;
@@ -77,6 +77,10 @@
       0% { transform: translateX(-100%); }
       100% { transform: translateX(250%); }
     }
+    #boot .err {
+      margin: 14px 0 0; font-size: 13px; line-height: 1.45; color: #FFD48A;
+      text-align: left; word-break: break-word;
+    }
     @media (prefers-reduced-motion: reduce) {
       #boot .bar i { animation: none; width: 100%; opacity: .5; }
     }
@@ -87,53 +91,12 @@
     <div class="card">
       Загружаем бронирование…
       <div class="bar"><i></i></div>
+      <p class="err" hidden></p>
     </div>
   </div>
-  <script>
-    // Первый кадр Flutter — убираем заставку.
-    window.addEventListener('flutter-first-frame', function () {
-      var b = document.getElementById('boot');
-      if (!b) return;
-      b.classList.add('hide');
-      setTimeout(function () { b.remove(); }, 300);
-    });
-  </script>
-  <script>
-    // Мост «виджет -> родительская страница» для встраивания через <iframe>
-    // (сайт клуба, VK Mini Apps). Контракт сообщений — docs/EMBED.md.
-    (function () {
-      function send(msg) {
-        try {
-          if (window.parent !== window) window.parent.postMessage(msg, '*');
-        } catch (e) {}
-      }
-      // Пока грузится Flutter — примерная высота, чтобы iframe не был нулевым.
-      // Дальше точную высоту шлёт сам виджет (measure по контенту).
-      window.addEventListener('load', function () {
-        send({ type: 'vr-booking:height', height: 680 });
-      });
-      window.__vrBooking = { send: send };
-    })();
-  </script>
-  <script>
-    // CanvasKit — самый тяжёлый файл (2–3 МБ). Штатно движок берётся за него
-    // только после main.dart.js; подсказка браузеру качает их параллельно.
-    // Вариант chromium меньше и грузится в браузерах на Chromium, поэтому
-    // выбираем тот же файл, что возьмёт сам движок.
-    (function () {
-      // Тот же признак, что и у движка: браузеры на Chromium берут вариант
-      // chromium. Ошибиться нельзя — это лишние мегабайты мимо кэша.
-      var chromium = /Chrome\/|Chromium\/|CriOS\/|Edg\//.test(navigator.userAgent);
-      var href = chromium ? 'canvaskit/chromium/canvaskit.wasm' : 'canvaskit/canvaskit.wasm';
-      var l = document.createElement('link');
-      l.rel = 'preload';
-      l.as = 'fetch';
-      l.type = 'application/wasm';
-      l.crossOrigin = 'anonymous';
-      l.href = href;
-      document.head.appendChild(l);
-    })();
-  </script>
+  <!-- Заставка, мост к родительской странице и видимые ошибки старта.
+       Отдельным файлом, а не встроенным <script>: см. комментарий в boot.js. -->
+  <script src="boot.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
