@@ -79,7 +79,10 @@
         else if (tag === 'link' && t.rel === 'preload') report('не загрузился ' + t.href);
         return;
       }
-      report(e.message || 'ошибка скрипта');
+      // Имя файла важно: «Invalid or unexpected token» в main.dart.js почти
+      // всегда значит, что сервер отдал сжатые байты без Content-Encoding.
+      var where = e.filename ? ' в ' + e.filename.split('/').pop() : '';
+      report((e.message || 'ошибка скрипта') + where);
     },
     true
   );
