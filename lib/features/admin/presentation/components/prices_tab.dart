@@ -76,7 +76,7 @@ class _ClubPriceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool hasPs5 = halls.any((AdminHallEntity h) => h.consoles > 0);
     final List<_PriceRow> rows = <_PriceRow>[
-      _PriceRow('VR-шлем', 'за 1 час, одна станция', PriceField.vrWeekday,
+      _PriceRow('VR-шлем', 'за 1 час, один шлем', PriceField.vrWeekday,
           PriceField.vrWeekend),
       if (hasPs5)
         _PriceRow('PS5', 'за 1 час, одна приставка', PriceField.ps5Weekday,
@@ -276,7 +276,7 @@ class _VrTiers extends StatelessWidget {
                   children: <Widget>[
                     Text('VR-шлем от ${t.from} шт.',
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    const Text('за 1 час, одна станция',
+                    const Text('за 1 час, один шлем',
                         style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
                   ],
                 ),
@@ -450,7 +450,7 @@ class _DurationPreview extends StatelessWidget {
           const AdminCardTitle(
             'Расчёт длительности',
             subtitle:
-                'Цена указана за 1 час на одну станцию. Так виджет посчитает остальные сеансы:',
+                'Цена указана за 1 час на одно устройство. Так виджет посчитает остальные сеансы:',
           ),
           const SizedBox(height: 16),
           Wrap(

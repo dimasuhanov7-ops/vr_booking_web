@@ -55,10 +55,10 @@ class _SessionHoursState extends State<SessionHours> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const SectionLabel('Станции по часам'),
+        const SectionLabel('Места по часам'),
         const SizedBox(height: 6),
         Text(
-          'Для каждого часа выберите свой состав — можно освободить часть станций.',
+          'Для каждого часа выберите свой состав — можно освободить часть мест.',
           style: const TextStyle(fontSize: 13, color: BookingColors.textMuted),
         ),
         const SizedBox(height: 12),

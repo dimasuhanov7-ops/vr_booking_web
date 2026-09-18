@@ -204,9 +204,9 @@ class BookingView extends StatelessWidget {
   static String _barLine(BookingState s) {
     if (s.club == null) return 'Выберите клуб';
     if (s.slot == null) return '${s.club!.name} · ${s.hall?.name ?? ''}';
-    if (s.pickedIds.isEmpty) return 'Отметьте станции на плане';
+    if (s.pickedIds.isEmpty) return 'Отметьте места на плане';
     final int n = s.pickedIds.length;
-    return '$n ${BookingFormat.plural(n, 'станция', 'станции', 'станций')} · '
+    return '$n ${BookingFormat.plural(n, 'место', 'места', 'мест')} · '
         '${BookingFormat.range(s.club!, s.slot!.startsAt, s.slot!.endsAt)}';
   }
 
@@ -717,7 +717,7 @@ class _FormBody extends StatelessWidget {
         title: const Text('Отменить бронь?', style: TextStyle(fontSize: 16)),
         content: Text(
           '${b.title}\n${b.meta}\n\n'
-          'Станции освободятся, и время смогут занять другие.',
+          'Места освободятся, и время смогут занять другие.',
           style: const TextStyle(fontSize: 13, height: 1.45),
         ),
         actions: <Widget>[
@@ -766,19 +766,19 @@ class _FormBody extends StatelessWidget {
         ? 'Взять ${alt.label}'
         : kept == 0
             ? 'Выбрать другое время'
-            : 'Продолжить без неё';
+            : 'Продолжить без него';
     final String text = alt != null
         ? (kept == 0
-            ? 'Свободна ${alt.label} в этом же зале.'
-            : 'Остальные $kept ${BookingFormat.plural(kept, 'станцию', 'станции', 'станций')} держим за вами — свободна ${alt.label} в этом же зале.')
+            ? 'Свободно место ${alt.label} в этом же зале.'
+            : 'Остальные $kept ${BookingFormat.plural(kept, 'место', 'места', 'мест')} держим за вами — свободно место ${alt.label} в этом же зале.')
         : (kept == 0
-            ? 'Свободных станций в этом зале на это время больше нет.'
-            : 'Остальные $kept ${BookingFormat.plural(kept, 'станцию', 'станции', 'станций')} держим за вами, свободных в этом зале больше нет.');
+            ? 'Свободных мест в этом зале на это время больше нет.'
+            : 'Остальные $kept ${BookingFormat.plural(kept, 'место', 'места', 'мест')} держим за вами, свободных в этом зале больше нет.');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: ConflictBanner(
-        title: 'Одну станцию забрали, пока вы оформляли',
+        title: 'Одно место заняли, пока вы оформляли',
         text: text,
         keepLabel: keepLabel,
         onKeep: () => bloc.add(const BookingConflictResolved()),

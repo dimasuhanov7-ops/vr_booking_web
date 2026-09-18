@@ -346,7 +346,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         if (h.id == p.hallId) hall = h;
       }
     }
-    if (p.headsets + p.consoles < 1) return 'Нужна хотя бы одна станция.';
+    if (p.headsets + p.consoles < 1) return 'Нужно хотя бы одно устройство.';
     if (!AdminState.durations.contains(p.minutes)) {
       return 'Длительность — целыми часами, от 1 до 5.';
     }
@@ -422,7 +422,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         (PackageEntity p) => p.name.trim().toLowerCase() == name.toLowerCase())) {
       error = 'Пакет «$name» уже есть — выберите другое название.';
     } else if (d.headsets + d.consoles < 1) {
-      error = 'Укажите хотя бы одну станцию — шлем или PS5.';
+      error = 'Укажите хотя бы одно устройство — шлем или PS5.';
     } else if (d.headsets > hall.headsets) {
       error = 'В «${hall.name}» только ${_plural(hall.headsets, 'шлем', 'шлема', 'шлемов')}.';
     } else if (d.consoles > hall.consoles) {

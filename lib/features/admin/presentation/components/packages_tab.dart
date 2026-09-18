@@ -157,7 +157,7 @@ class _PackCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 2),
             Text(
-              '${hall.name} · ${composition.isEmpty ? 'без станций' : composition} · ${pack.minutes ~/ 60} ч'
+              '${hall.name} · ${composition.isEmpty ? 'без устройств' : composition} · ${pack.minutes ~/ 60} ч'
               '${pack.isEnabled ? '' : ' · выключен'}',
               style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
             ),

@@ -28,7 +28,8 @@ class DiscountNotFoundFailure extends BookingFailure {
 class DiscountMinStationsFailure extends BookingFailure {
   /// Создаёт ошибку с требуемым числом станций.
   const DiscountMinStationsFailure(this.requiredStations)
-      : super('Промокод действует от $requiredStations станций.');
+      : super('Промокод действует от $requiredStations '
+            '${requiredStations == 1 ? 'места' : 'мест'}.');
 
   /// Минимально необходимое число станций.
   final int requiredStations;

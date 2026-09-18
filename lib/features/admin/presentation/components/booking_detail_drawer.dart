@@ -179,7 +179,7 @@ class BookingDetailDrawer extends StatelessWidget {
           const SizedBox(height: 14),
           const Text(
             'Время и состав брони не меняются: отмените её и создайте новую '
-            'запись — станции подберутся заново.',
+            'запись — устройства подберутся заново.',
             style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.textMuted),
           ),
           const SizedBox(height: 18),

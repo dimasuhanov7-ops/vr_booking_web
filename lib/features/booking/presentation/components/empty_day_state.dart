@@ -56,7 +56,7 @@ class EmptyDayState extends StatelessWidget {
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           const Text(
-            'В этом зале не осталось ни одной свободной станции. Ближайшие варианты:',
+            'В этом зале не осталось ни одного свободного места. Ближайшие варианты:',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, height: 1.5, color: BookingColors.textMuted),
           ),
