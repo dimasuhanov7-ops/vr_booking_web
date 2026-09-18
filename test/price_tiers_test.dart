@@ -103,22 +103,53 @@ void main() {
     });
   });
 
+  test('две ступени: от 6 шлемов 700 ₽, от 9 — 600 ₽', () {
+    const List<PriceRateEntity> rates = <PriceRateEntity>[
+      PriceRateEntity(
+          stationType: StationType.vrHeadset, dayKind: DayKind.weekday, pricePerHour: 800),
+      PriceRateEntity(
+          stationType: StationType.vrHeadset,
+          dayKind: DayKind.weekday,
+          pricePerHour: 700,
+          minQty: 6),
+      PriceRateEntity(
+          stationType: StationType.vrHeadset,
+          dayKind: DayKind.weekday,
+          pricePerHour: 600,
+          minQty: 9),
+    ];
+    const PricingService pricing = PricingService();
+    int rate(int qty) => pricing
+        .ratePerHour(
+          rates: rates,
+          type: StationType.vrHeadset,
+          dayKind: DayKind.weekday,
+          qty: qty,
+        )
+        .round();
+    expect(<int>[rate(5), rate(6), rate(8), rate(9), rate(12)],
+        <int>[800, 700, 700, 600, 600]);
+  });
+
   group('ступени в админке', () {
     const HallPriceEntity price = HallPriceEntity(
       hallId: 'hall',
       vrWeekday: 800,
-      vrWeekend: 1000,
+      vrWeekend: 1200,
       ps5Weekday: 300,
       ps5Weekend: 400,
-      vrTierFrom: 7,
-      vrTierWeekday: 700,
-      vrTierWeekend: 900,
+      vrTiers: <VrTierEntity>[
+        VrTierEntity(from: 6, weekday: 700, weekend: 1100),
+        VrTierEntity(from: 9, weekday: 600, weekend: 1000),
+      ],
     );
 
-    test('ставка зависит от количества и типа дня', () {
-      expect(price.vrRate(weekend: false, qty: 6), 800);
-      expect(price.vrRate(weekend: false, qty: 7), 700);
-      expect(price.vrRate(weekend: true, qty: 7), 900);
+    test('ставка — самая высокая подходящая ступень', () {
+      expect(price.vrRate(weekend: false, qty: 5), 800);
+      expect(price.vrRate(weekend: false, qty: 6), 700);
+      expect(price.vrRate(weekend: false, qty: 8), 700);
+      expect(price.vrRate(weekend: false, qty: 9), 600);
+      expect(price.vrRate(weekend: true, qty: 12), 1000);
       expect(price.vrRate(weekend: false), 800, reason: 'по умолчанию один шлем');
     });
 
@@ -126,35 +157,26 @@ void main() {
       const AdminPricingService pricing = AdminPricingService();
       expect(
         pricing.hourlyCost(
-            headsets: 8, consoles: 0, minutes: 60, price: price, weekend: false),
-        5600,
+            headsets: 10, consoles: 0, minutes: 60, price: price, weekend: false),
+        6000,
       );
     });
 
-    test('выключенная ступень не влияет', () {
-      const HallPriceEntity flat = HallPriceEntity(
-        hallId: 'hall',
-        vrWeekday: 800,
-        vrWeekend: 1000,
-        ps5Weekday: 300,
-        ps5Weekend: 400,
-      );
-      expect(flat.hasVrTier, isFalse);
+    test('без ступеней — одна цена при любом количестве', () {
+      final HallPriceEntity flat = price.withTiers(const <VrTierEntity>[]);
+      expect(flat.hasVrTiers, isFalse);
       expect(flat.vrRate(weekend: false, qty: 12), 800);
     });
 
-    test('включение ступени берёт базовые цены, выключение — обнуляет', () {
-      const HallPriceEntity flat = HallPriceEntity(
-        hallId: 'hall',
-        vrWeekday: 800,
-        vrWeekend: 1000,
-        ps5Weekday: 300,
-        ps5Weekend: 400,
-      );
-      final HallPriceEntity on = flat.withTier(7);
-      expect(<int>[on.vrTierFrom, on.vrTierWeekday, on.vrTierWeekend],
-          <int>[7, 800, 1000]);
-      expect(on.withTier(0).hasVrTier, isFalse);
+    test('ступени упорядочиваются, повторы и порог 1 отбрасываются', () {
+      final HallPriceEntity messy = price.withTiers(const <VrTierEntity>[
+        VrTierEntity(from: 9, weekday: 600, weekend: 1000),
+        VrTierEntity(from: 1, weekday: 100, weekend: 100),
+        VrTierEntity(from: 6, weekday: 700, weekend: 1100),
+        VrTierEntity(from: 9, weekday: 550, weekend: 950),
+      ]);
+      expect(messy.vrTiers.map((VrTierEntity t) => t.from), <int>[6, 9]);
+      expect(messy.vrTiers.last.weekday, 550, reason: 'повтор — побеждает последний');
     });
   });
 }

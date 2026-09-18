@@ -44,7 +44,7 @@ class PricesTab extends StatelessWidget {
           onChanged: (PriceField f, int v) => bloc.add(
             AdminPriceChanged(hallId: hallId, field: f, value: v),
           ),
-          onTierFrom: (int v) => bloc.add(AdminVrTierChanged(v)),
+          onTiers: (List<VrTierEntity> t) => bloc.add(AdminVrTiersChanged(t)),
         ),
         const SizedBox(height: 14),
         _DurationPreview(price: price),
@@ -61,7 +61,7 @@ class _ClubPriceCard extends StatelessWidget {
     required this.price,
     required this.accent,
     required this.onChanged,
-    required this.onTierFrom,
+    required this.onTiers,
   });
 
   final String clubId;
@@ -70,7 +70,7 @@ class _ClubPriceCard extends StatelessWidget {
   final HallPriceEntity price;
   final Color accent;
   final void Function(PriceField, int) onChanged;
-  final ValueChanged<int> onTierFrom;
+  final ValueChanged<List<VrTierEntity>> onTiers;
 
   @override
   Widget build(BuildContext context) {
@@ -136,14 +136,12 @@ class _ClubPriceCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 16),
-          _VrTier(
+          _VrTiers(
             clubId: clubId,
             price: price,
             maxHeadsets: halls.fold<int>(
                 0, (int a, AdminHallEntity h) => h.headsets > a ? h.headsets : a),
-            accent: accent,
-            onChanged: onChanged,
-            onFrom: onTierFrom,
+            onChanged: onTiers,
           ),
           const SizedBox(height: 12),
           const Text(
@@ -161,114 +159,144 @@ class _ClubPriceCard extends StatelessWidget {
       '${h.consoles > 0 ? ' и ${h.consoles} PS5' : ''}';
 }
 
-/// Ступень цены для шлемов: «от N штук — другая цена за место».
+/// Ступени цены шлемов: «от N штук — другая цена за место».
 ///
 /// Цена ступени применяется ко всем шлемам сеанса сразу (решение заказчика):
-/// 8 шлемов считаются по цене ступени, а не «6 по первой и 2 по второй».
-class _VrTier extends StatelessWidget {
-  const _VrTier({
+/// 8 шлемов при ступени «от 6» считаются по её цене все восемь. Ступеней может
+/// быть несколько — берётся самая высокая, до которой дотягивает компания.
+class _VrTiers extends StatelessWidget {
+  const _VrTiers({
     required this.clubId,
     required this.price,
     required this.maxHeadsets,
-    required this.accent,
     required this.onChanged,
-    required this.onFrom,
   });
 
   final String clubId;
   final HallPriceEntity price;
   final int maxHeadsets;
-  final Color accent;
-  final void Function(PriceField, int) onChanged;
-  final ValueChanged<int> onFrom;
+  final ValueChanged<List<VrTierEntity>> onChanged;
 
-  /// Порог по умолчанию — чуть больше половины зала.
+  /// Порог первой ступени по умолчанию — чуть больше половины зала.
   int get _suggested => maxHeadsets > 2 ? (maxHeadsets ~/ 2) + 1 : 2;
+
+  List<VrTierEntity> get _tiers => price.vrTiers;
+
+  /// Порог новой ступени — следующий за последним.
+  int get _nextFrom => _tiers.isEmpty ? _suggested : _tiers.last.from + 1;
+
+  void _replace(int i, VrTierEntity t) =>
+      onChanged(<VrTierEntity>[..._tiers]..[i] = t);
+
+  void _remove(int i) => onChanged(<VrTierEntity>[..._tiers]..removeAt(i));
+
+  void _add() {
+    // Цены новой ступени — как у предыдущей (или базовые): поле не должно
+    // уйти в базу с нулём, а поправить цифру быстрее, чем набрать с нуля.
+    final VrTierEntity? last = _tiers.isEmpty ? null : _tiers.last;
+    onChanged(<VrTierEntity>[
+      ..._tiers,
+      VrTierEntity(
+        from: _nextFrom,
+        weekday: last?.weekday ?? price.vrWeekday,
+        weekend: last?.weekend ?? price.vrWeekend,
+      ),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bool on = price.hasVrTier;
+    final List<VrTierEntity> tiers = _tiers;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const Divider(height: 1, color: AdminColors.border),
         const SizedBox(height: 12),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Text('Дешевле за количество',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text(
-                    on
-                        ? 'от ${price.vrTierFrom} шлемов цена ниже — за все шлемы'
-                        : 'сейчас одна цена при любом количестве',
-                    style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: on,
-              activeThumbColor: accent,
-              onChanged: (bool v) => onFrom(v ? _suggested : 0),
-            ),
-          ],
+        const Text('Дешевле за количество',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        Text(
+          tiers.isEmpty
+              ? 'сейчас одна цена при любом количестве шлемов'
+              : 'цена ступени — за все шлемы сеанса; берётся самая высокая подходящая',
+          style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
         ),
-        if (on) ...<Widget>[
-          const SizedBox(height: 10),
+        for (int i = 0; i < tiers.length; i++) _row(i, tiers),
+        const SizedBox(height: 12),
+        if (_nextFrom <= maxHeadsets)
+          AdminGhostButton(label: '+ Добавить ступень', onTap: _add)
+        else
+          Text(
+            'Больше ступеней не поместится: порог уже равен числу шлемов '
+            'в зале ($maxHeadsets).',
+            style: const TextStyle(fontSize: 12, color: AdminColors.textFaint),
+          ),
+      ],
+    );
+  }
+
+  Widget _row(int i, List<VrTierEntity> tiers) {
+    final VrTierEntity t = tiers[i];
+    // Пороги строго по возрастанию: ступень не может обогнать соседей.
+    final int lo = i == 0 ? 2 : tiers[i - 1].from + 1;
+    final int hi = i == tiers.length - 1 ? maxHeadsets : tiers[i + 1].from - 1;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
           Row(
             children: <Widget>[
-              const Expanded(
-                child: Text('Порог',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text('Ступень ${i + 1}',
+                    style: const TextStyle(fontSize: 13, color: AdminColors.textMuted)),
               ),
               _Step(
-                label: 'от ${price.vrTierFrom}',
-                onMinus: price.vrTierFrom > 2
-                    ? () => onFrom(price.vrTierFrom - 1)
+                label: 'от ${t.from}',
+                onMinus: t.from > lo
+                    ? () => _replace(i, t.copyWith(from: t.from - 1))
                     : null,
-                onPlus: price.vrTierFrom < maxHeadsets
-                    ? () => onFrom(price.vrTierFrom + 1)
+                onPlus: t.from < hi
+                    ? () => _replace(i, t.copyWith(from: t.from + 1))
                     : null,
+              ),
+              const SizedBox(width: 8),
+              _StepButton(
+                icon: Icons.delete_outline_rounded,
+                onTap: () => _remove(i),
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('VR-шлем от ${price.vrTierFrom} шт.',
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600)),
-                      const Text('за 1 час, одна станция',
-                          style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
-                    ],
-                  ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('VR-шлем от ${t.from} шт.',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    const Text('за 1 час, одна станция',
+                        style: TextStyle(fontSize: 12, color: AdminColors.textFaint)),
+                  ],
                 ),
-                _PriceInput(
-                  key: ValueKey<String>('$clubId-tier-weekday-${price.vrTierFrom}'),
-                  value: price.vrTierWeekday,
-                  onChanged: (int v) => onChanged(PriceField.vrTierWeekday, v),
-                ),
-                const SizedBox(width: 10),
-                _PriceInput(
-                  key: ValueKey<String>('$clubId-tier-weekend-${price.vrTierFrom}'),
-                  value: price.vrTierWeekend,
-                  onChanged: (int v) => onChanged(PriceField.vrTierWeekend, v),
-                ),
-              ],
-            ),
+              ),
+              // Ключ с порогом: после «−/+» поле перечитывает значение ступени.
+              _PriceInput(
+                key: ValueKey<String>('$clubId-tier-$i-${t.from}-weekday'),
+                value: t.weekday,
+                onChanged: (int v) => _replace(i, t.copyWith(weekday: v)),
+              ),
+              const SizedBox(width: 10),
+              _PriceInput(
+                key: ValueKey<String>('$clubId-tier-$i-${t.from}-weekend'),
+                value: t.weekend,
+                onChanged: (int v) => _replace(i, t.copyWith(weekend: v)),
+              ),
+            ],
           ),
         ],
-      ],
+      ),
     );
   }
 }

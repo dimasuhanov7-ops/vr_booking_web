@@ -55,17 +55,12 @@ abstract interface class IAdminRepository {
     required int value,
   });
 
-  /// Задать ступень цены для шлемов: «от [fromQty] штук — другая цена за час».
-  /// Цена ступени применяется ко всем шлемам сеанса сразу.
-  Future<void> saveVrTier({
+  /// Записать ступени цены шлемов клуба целиком: «от N штук — другая цена».
+  /// Ступени, которых нет в [tiers], удаляются; пустой список — одна цена.
+  Future<void> saveVrTiers({
     required String clubId,
-    required int fromQty,
-    required int weekday,
-    required int weekend,
+    required List<VrTierEntity> tiers,
   });
-
-  /// Убрать ступень: остаётся одна цена независимо от количества.
-  Future<void> clearVrTier(String clubId);
 
   /// Создать пакет. Возвращает присвоенный сервером id.
   Future<String> createPackage(PackageEntity draft);

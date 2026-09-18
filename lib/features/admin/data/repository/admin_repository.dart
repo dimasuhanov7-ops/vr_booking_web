@@ -115,8 +115,10 @@ class AdminRepository implements IAdminRepository {
     for (final dynamic c in clubs) {
       byClub[(c as Map<String, dynamic>)['id'] as String] = <PriceField, int>{};
     }
-    // Ступени шлемов («от 7 штук дешевле») лежат в тех же строках с min_qty > 1.
-    final Map<String, int> tierFrom = <String, int>{};
+    // Ступени шлемов («от 6 штук дешевле») лежат в тех же строках с min_qty > 1:
+    // club_id -> порог -> цены по типу дня.
+    final Map<String, Map<int, ({int? weekday, int? weekend})>> tiers =
+        <String, Map<int, ({int? weekday, int? weekend})>>{};
     for (final dynamic p in prices) {
       final Map<String, dynamic> m = p as Map<String, dynamic>;
       final String clubId = m['club_id'] as String;
@@ -124,29 +126,23 @@ class AdminRepository implements IAdminRepository {
       final bool weekend = m['day_kind'] as String == 'weekend';
       final int qty = (m['min_qty'] as num?)?.toInt() ?? 1;
       final int value = (m['price_per_hour'] as num).round();
-      final Map<PriceField, int> club =
-          byClub.putIfAbsent(clubId, () => <PriceField, int>{});
 
       if (qty > 1) {
-        // Ступень бывает только у шлемов; если их несколько, берём нижнюю —
-        // админка редактирует одну.
+        // Ступени админка ведёт только для шлемов.
         if (type != 'vr_headset') continue;
-        final int? known = tierFrom[clubId];
-        if (known != null && known < qty) continue;
-        if (known != qty) {
-          tierFrom[clubId] = qty;
-          club
-            ..remove(PriceField.vrTierWeekday)
-            ..remove(PriceField.vrTierWeekend);
-        }
-        club[weekend ? PriceField.vrTierWeekend : PriceField.vrTierWeekday] =
-            value;
+        final Map<int, ({int? weekday, int? weekend})> club =
+            tiers.putIfAbsent(clubId, () => <int, ({int? weekday, int? weekend})>{});
+        final ({int? weekday, int? weekend}) cur =
+            club[qty] ?? (weekday: null, weekend: null);
+        club[qty] = weekend
+            ? (weekday: cur.weekday, weekend: value)
+            : (weekday: value, weekend: cur.weekend);
         continue;
       }
 
       final PriceField? f = _priceField(type, m['day_kind'] as String);
       if (f == null) continue;
-      club[f] = value;
+      byClub.putIfAbsent(clubId, () => <PriceField, int>{})[f] = value;
     }
 
     final List<HallPriceEntity> out = <HallPriceEntity>[];
@@ -159,9 +155,18 @@ class AdminRepository implements IAdminRepository {
         vrWeekend: v[PriceField.vrWeekend] ?? 0,
         ps5Weekday: v[PriceField.ps5Weekday] ?? 0,
         ps5Weekend: v[PriceField.ps5Weekend] ?? 0,
-        vrTierFrom: tierFrom[m['club_id']] ?? 0,
-        vrTierWeekday: v[PriceField.vrTierWeekday] ?? 0,
-        vrTierWeekend: v[PriceField.vrTierWeekend] ?? 0,
+        // Если у ступени задан только один тип дня, второй берём из базовой
+        // цены — нулевой цены за шлем быть не должно.
+        vrTiers: <VrTierEntity>[
+          for (final MapEntry<int, ({int? weekday, int? weekend})> t
+              in (tiers[m['club_id']] ?? <int, ({int? weekday, int? weekend})>{})
+                  .entries)
+            VrTierEntity(
+              from: t.key,
+              weekday: t.value.weekday ?? v[PriceField.vrWeekday] ?? 0,
+              weekend: t.value.weekend ?? v[PriceField.vrWeekend] ?? 0,
+            ),
+        ]..sort((VrTierEntity a, VrTierEntity b) => a.from.compareTo(b.from)),
       ));
     }
     return out;
@@ -402,51 +407,50 @@ class AdminRepository implements IAdminRepository {
       });
 
   @override
-  Future<void> saveVrTier({
+  Future<void> saveVrTiers({
     required String clubId,
-    required int fromQty,
-    required int weekday,
-    required int weekend,
+    required List<VrTierEntity> tiers,
   }) =>
       _guard(() async {
-        // Порог мог поменяться — старые ступени убираем, иначе в базе осталось
-        // бы два разных «от скольких дешевле».
-        await _client
-            .from('booking_prices')
-            .delete()
-            .eq('club_id', clubId)
-            .eq('station_type', 'vr_headset')
-            .neq('min_qty', 1)
-            .neq('min_qty', fromQty);
-
         final String now = DateTime.now().toUtc().toIso8601String();
-        await _client.from('booking_prices').upsert(
-          <Map<String, dynamic>>[
-            for (final ({String day, int value}) r in <({String day, int value})>[
-              (day: 'weekday', value: weekday),
-              (day: 'weekend', value: weekend),
-            ])
-              <String, dynamic>{
-                'club_id': clubId,
-                'station_type': 'vr_headset',
-                'day_kind': r.day,
-                'min_qty': fromQty,
-                'price_per_hour': r.value,
-                'updated_at': now,
-              },
-          ],
-          onConflict: 'club_id,station_type,day_kind,min_qty',
-        );
-      });
+        // Сначала записываем новые ступени, потом убираем лишние: в обратном
+        // порядке между запросами цена на миг стала бы без ступеней.
+        if (tiers.isNotEmpty) {
+          await _client.from('booking_prices').upsert(
+            <Map<String, dynamic>>[
+              for (final VrTierEntity t in tiers)
+                for (final ({String day, int value}) r in <({String day, int value})>[
+                  (day: 'weekday', value: t.weekday),
+                  (day: 'weekend', value: t.weekend),
+                ])
+                  <String, dynamic>{
+                    'club_id': clubId,
+                    'station_type': 'vr_headset',
+                    'day_kind': r.day,
+                    'min_qty': t.from,
+                    'price_per_hour': r.value,
+                    'updated_at': now,
+                  },
+            ],
+            onConflict: 'club_id,station_type,day_kind,min_qty',
+          );
+        }
 
-  @override
-  Future<void> clearVrTier(String clubId) => _guard(() async {
-        await _client
+        final Set<int> keep = <int>{for (final VrTierEntity t in tiers) t.from};
+        final List<dynamic> existing = await _client
             .from('booking_prices')
-            .delete()
+            .select('id,min_qty')
             .eq('club_id', clubId)
             .eq('station_type', 'vr_headset')
-            .neq('min_qty', 1);
+            .gt('min_qty', 1);
+        final List<String> stale = <String>[
+          for (final dynamic r in existing)
+            if (!keep.contains(((r as Map<String, dynamic>)['min_qty'] as num).toInt()))
+              r['id'] as String,
+        ];
+        if (stale.isNotEmpty) {
+          await _client.from('booking_prices').delete().inFilter('id', stale);
+        }
       });
 
   @override
@@ -674,9 +678,5 @@ class AdminRepository implements IAdminRepository {
         PriceField.vrWeekend => (type: 'vr_headset', day: 'weekend'),
         PriceField.ps5Weekday => (type: 'ps5', day: 'weekday'),
         PriceField.ps5Weekend => (type: 'ps5', day: 'weekend'),
-        // Ступени сохраняются через saveVrTier — сюда не попадают, но switch
-        // должен покрывать все поля.
-        PriceField.vrTierWeekday => (type: 'vr_headset', day: 'weekday'),
-        PriceField.vrTierWeekend => (type: 'vr_headset', day: 'weekend'),
       };
 }
