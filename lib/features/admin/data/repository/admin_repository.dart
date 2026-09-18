@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../booking/data/dto/busy_interval_dto.dart';
@@ -405,6 +407,42 @@ class AdminRepository implements IAdminRepository {
             .select('id');
         _ensureChanged(rows);
       });
+
+  /// Таблицы, изменения которых видны на вкладках «Записи» и «Доступность».
+  static const List<String> _watchedTables = <String>[
+    'booking_orders',
+    'booking_order_items',
+    'booking_availability',
+    'booking_clubs',
+  ];
+
+  @override
+  Stream<void> watchChanges() {
+    RealtimeChannel? channel;
+    late final StreamController<void> out;
+    out = StreamController<void>.broadcast(
+      onListen: () {
+        final RealtimeChannel c = _client.channel('admin-bookings');
+        for (final String table in _watchedTables) {
+          c.onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: table,
+            callback: (_) {
+              if (!out.isClosed) out.add(null);
+            },
+          );
+        }
+        channel = c..subscribe();
+      },
+      onCancel: () async {
+        final RealtimeChannel? c = channel;
+        channel = null;
+        if (c != null) await _client.removeChannel(c);
+      },
+    );
+    return out.stream;
+  }
 
   @override
   Future<void> saveVrTiers({

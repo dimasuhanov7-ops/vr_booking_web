@@ -123,6 +123,9 @@ class AdminRepositoryMock implements IAdminRepository {
   }) async {}
 
   @override
+  Stream<void> watchChanges() => const Stream<void>.empty();
+
+  @override
   Future<void> saveVrTiers({
     required String clubId,
     required List<VrTierEntity> tiers,

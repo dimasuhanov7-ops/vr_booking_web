@@ -77,6 +77,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   final Duration saveDelay;
 
   Timer? _refreshTimer;
+
+  /// Подписка на изменения в базе (Realtime) и склейка их пачек.
+  StreamSubscription<void>? _changesSub;
+  Timer? _changesDebounce;
   final Map<String, Timer> _saveTimers = <String, Timer>{};
   final Map<String, Future<void> Function()> _pendingSaves =
       <String, Future<void> Function()>{};
@@ -84,6 +88,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   @override
   Future<void> close() async {
     _refreshTimer?.cancel();
+    _changesDebounce?.cancel();
+    await _changesSub?.cancel();
     for (final Timer t in _saveTimers.values) {
       t.cancel();
     }
@@ -177,6 +183,16 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         if (!isClosed) add(const AdminRefreshRequested());
       });
     }
+
+    // Брони с сайта, из другого телефона или менеджера и закрытия времени
+    // приходят сразу, а не с минутным автообновлением. Одна бронь — это
+    // несколько событий (заказ и его места): склеиваем их в одно обновление.
+    _changesSub ??= _repository.watchChanges().listen((_) {
+      _changesDebounce?.cancel();
+      _changesDebounce = Timer(const Duration(milliseconds: 700), () {
+        if (!isClosed) add(const AdminRefreshRequested());
+      });
+    });
   }
 
   /// Перечитать брони и доступность — цены и пакеты не трогаем, чтобы не
@@ -248,10 +264,17 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   }
 
   /// Оптимистичная запись: если провалилась — показываем ошибку в шапке вкладки.
-  Future<void> _persist(Future<void> Function() action, Emitter<AdminState> emit) async {
+  Future<void> _persist(
+    Future<void> Function() action,
+    Emitter<AdminState> emit, {
+    bool refresh = false,
+  }) async {
     try {
       await action();
       if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+      // Закрытия видны и на вкладке «Записи», а там они считаются по списку
+      // из базы: перечитываем сразу, не дожидаясь события Realtime.
+      if (refresh && !isClosed) add(const AdminRefreshRequested());
     } on AdminFailure catch (e) {
       // Репозиторий уже перевёл ошибку на язык сотрудника — в том числе
       // отличил протухшую сессию от обрыва связи.
@@ -515,6 +538,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         closed: closed,
       ),
       emit,
+      refresh: true,
     );
   }
 
@@ -538,6 +562,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         closed: closed,
       ),
       emit,
+      refresh: true,
     );
   }
 
@@ -566,7 +591,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
           closed: event.closeAll,
         );
       }
-    }, emit);
+    }, emit, refresh: true);
   }
 
   void _onFilterChanged(AdminFilterChanged event, Emitter<AdminState> emit) {
