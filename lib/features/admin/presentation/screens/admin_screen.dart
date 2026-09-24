@@ -119,6 +119,25 @@ class AdminScreen extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 14),
                                     ],
+                                    if (state.saveError == null &&
+                                        state.saveNotice != null) ...<Widget>[
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: AdminColors.tile,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: AdminColors.borderInput),
+                                        ),
+                                        child: Text(state.saveNotice!,
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                color: AdminColors.textSoft)),
+                                      ),
+                                      const SizedBox(height: 14),
+                                    ],
                                     switch (state.tab) {
                                       AdminTab.prices =>
                                         PricesTab(state: state, accent: accent),

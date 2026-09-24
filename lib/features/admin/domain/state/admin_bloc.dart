@@ -142,7 +142,9 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   Future<void> _persist(Future<void> Function() action, Emitter<AdminState> emit) async {
     try {
       await action();
-      if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+      if (state.saveError != null || state.saveNotice != null) {
+        emit(state.copyWith(clearSaveError: true, clearSaveNotice: true));
+      }
     } on AdminFailure catch (e) {
       // Репозиторий уже перевёл ошибку на язык сотрудника — в том числе
       // отличил протухшую сессию от обрыва связи.
@@ -171,7 +173,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   }
 
   void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) =>
-      emit(state.copyWith(tab: event.tab));
+      emit(state.copyWith(tab: event.tab, clearSaveNotice: true));
 
   Future<void> _onPriceChanged(
     AdminPriceChanged event,
@@ -255,7 +257,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
           .map((PackageEntity p) =>
               p.id == event.packageId ? p.copyWith(isEnabled: false) : p)
           .toList(growable: false),
-      saveError: 'Пакет уже бронировали, поэтому он выключен, а не удалён: '
+      saveNotice: 'Пакет уже бронировали, поэтому он выключен, а не удалён: '
           'в виджете его больше нет, старые брони его сохраняют.',
     ));
   }
@@ -698,7 +700,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     // Пустой телефон в БД не пройдёт CHECK (5–30 символов) — пишем пометку.
     final String phone =
         d.phone.trim().isEmpty ? 'телефон не указан' : d.phone.trim();
-    emit(state.copyWith(newBooking: d.copyWith(message: 'Сохраняю запись…')));
+    emit(state.copyWith(
+        newBooking: d.copyWith(message: 'Сохраняю запись…', submitting: true)));
     _creatingBooking = true;
     final String id;
     try {
@@ -714,12 +717,15 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         note: d.note.trim(),
       );
     } on AdminFailure catch (e) {
-      emit(state.copyWith(newBooking: state.newBooking?.copyWith(message: e.message)));
+      emit(state.copyWith(
+          newBooking:
+              state.newBooking?.copyWith(message: e.message, submitting: false)));
       return;
     } catch (_) {
       emit(state.copyWith(
         newBooking: state.newBooking?.copyWith(
-            message: 'Не удалось сохранить запись. Проверьте связь и попробуйте ещё раз.'),
+            message: 'Не удалось сохранить запись. Проверьте связь и попробуйте ещё раз.',
+            submitting: false),
       ));
       return;
     } finally {

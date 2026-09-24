@@ -109,6 +109,8 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
           note: note,
         ));
 
+    // Пока запись уходит на сервер, повторное нажатие не должно создать дубль.
+    final bool blocked = noRoom || d.submitting;
     final String message = d.message.isNotEmpty
         ? d.message
         : noRoom
@@ -282,7 +284,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
           ],
           const SizedBox(height: 14),
           InkWell(
-            onTap: noRoom ? null : () => bloc.add(const AdminNewBookingSubmitted()),
+            onTap: blocked ? null : () => bloc.add(const AdminNewBookingSubmitted()),
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: double.infinity,
@@ -290,13 +292,13 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: noRoom ? const Color(0xFF22242A) : accent,
+                color: blocked ? const Color(0xFF22242A) : accent,
               ),
-              child: Text('Создать запись',
+              child: Text(d.submitting ? 'Сохраняю…' : 'Создать запись',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: noRoom ? AdminColors.textFaint : AdminColors.bg,
+                    color: blocked ? AdminColors.textFaint : AdminColors.bg,
                   )),
             ),
           ),

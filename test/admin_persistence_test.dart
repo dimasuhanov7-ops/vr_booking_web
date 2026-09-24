@@ -109,12 +109,14 @@ void main() {
     final PackageEntity pkg = bloc.state.packages.firstWhere((PackageEntity p) => p.isEnabled);
 
     bloc.add(AdminPackageDeleted(pkg.id));
-    await bloc.stream.firstWhere((AdminState s) => s.saveError != null);
+    await bloc.stream.firstWhere((AdminState s) => s.saveNotice != null);
 
     final PackageEntity kept =
         bloc.state.packages.firstWhere((PackageEntity p) => p.id == pkg.id);
     expect(kept.isEnabled, isFalse);
-    expect(bloc.state.saveError, contains('выключен'));
+    // Это не ошибка: пояснение идёт нейтральной плашкой, а не красной.
+    expect(bloc.state.saveNotice, contains('выключен'));
+    expect(bloc.state.saveError, isNull);
     await bloc.close();
   });
 

@@ -133,6 +133,7 @@ class NewBookingDraft extends Equatable {
     this.prepay = 0,
     this.note = '',
     this.message = '',
+    this.submitting = false,
   });
 
   /// Зал.
@@ -173,6 +174,9 @@ class NewBookingDraft extends Equatable {
 
   /// Сообщение под формой (ошибка / подсказка).
   final String message;
+
+  /// Запись уже уходит на сервер: кнопка неактивна.
+  final bool submitting;
 
   /// Число часовых отрезков.
   int get hourCount => (durationMinutes / 60).round().clamp(1, 12);
@@ -219,6 +223,7 @@ class NewBookingDraft extends Equatable {
     int? prepay,
     String? note,
     String? message,
+    bool? submitting,
   }) =>
       NewBookingDraft(
         hallId: hallId ?? this.hallId,
@@ -238,6 +243,7 @@ class NewBookingDraft extends Equatable {
         prepay: prepay ?? this.prepay,
         note: note ?? this.note,
         message: message ?? this.message,
+        submitting: submitting ?? this.submitting,
       );
 
   @override
@@ -255,6 +261,7 @@ class NewBookingDraft extends Equatable {
         prepay,
         note,
         message,
+        submitting,
       ];
 }
 
@@ -287,6 +294,7 @@ class AdminState extends Equatable {
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
     this.saveError,
+    this.saveNotice,
     this.loadError,
     this.loadNeedsReauth = false,
     this.scheduleEditable = true,
@@ -359,6 +367,10 @@ class AdminState extends Equatable {
 
   /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
   final String? saveError;
+
+  /// Пояснение к сохранению, которое не ошибка (например, пакет выключен
+  /// вместо удаления). Показывается нейтральной плашкой.
+  final String? saveNotice;
 
   /// Почему не загрузилась панель (при [AdminStatus.error]).
   final String? loadError;
@@ -551,6 +563,8 @@ class AdminState extends Equatable {
     NewPackageDraft? newPackage,
     String? saveError,
     bool clearSaveError = false,
+    String? saveNotice,
+    bool clearSaveNotice = false,
     String? loadError,
     bool? loadNeedsReauth,
     bool? scheduleEditable,
@@ -579,6 +593,7 @@ class AdminState extends Equatable {
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
+      saveNotice: clearSaveNotice ? null : (saveNotice ?? this.saveNotice),
       loadError: loadError ?? this.loadError,
       loadNeedsReauth: loadNeedsReauth ?? this.loadNeedsReauth,
       scheduleEditable: scheduleEditable ?? this.scheduleEditable,
@@ -609,6 +624,7 @@ class AdminState extends Equatable {
         filterType,
         newPackage,
         saveError,
+        saveNotice,
         loadError,
         loadNeedsReauth,
         scheduleEditable,
