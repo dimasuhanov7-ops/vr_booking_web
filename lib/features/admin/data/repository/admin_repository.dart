@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../booking/domain/service/club_clock.dart';
 import '../../domain/entity/admin_club_entity.dart';
+import '../../domain/entity/audit_entry_entity.dart';
 import '../../domain/entity/admin_failure.dart';
 import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
@@ -242,6 +243,41 @@ class AdminRepository implements IAdminRepository {
     }
     return out;
   }
+
+  @override
+  Future<List<AuditEntryEntity>> fetchAuditLog({int limit = 200}) =>
+      _guard(() async {
+        final List<dynamic> rows = await _client
+            .from('booking_audit_log')
+            .select('id,actor_id,entity,action,before,after,created_at')
+            .order('created_at', ascending: false)
+            .limit(limit);
+        // Имена сотрудников. Пока не применена миграция
+        // online_booking_staff_read_all, RLS отдаёт только свою строку —
+        // остальные покажутся коротким id.
+        final List<dynamic> staff =
+            await _client.from('booking_staff').select('user_id,name');
+        final Map<String, String> names = <String, String>{
+          for (final dynamic s in staff)
+            if (((s as Map<String, dynamic>)['name'] as String?)?.trim().isNotEmpty ??
+                false)
+              s['user_id'] as String: (s['name'] as String).trim(),
+        };
+        return rows.map((dynamic r) {
+          final Map<String, dynamic> m = r as Map<String, dynamic>;
+          final String? actor = m['actor_id'] as String?;
+          return AuditEntryEntity(
+            id: (m['id'] as num).toInt(),
+            at: DateTime.parse(m['created_at'] as String).toUtc(),
+            entity: m['entity'] as String,
+            action: m['action'] as String,
+            actorId: actor,
+            actorName: actor == null ? null : names[actor],
+            before: m['before'] as Map<String, dynamic>?,
+            after: m['after'] as Map<String, dynamic>?,
+          );
+        }).toList(growable: false);
+      });
 
   @override
   Future<AvailabilityEntity> fetchAvailability() async {

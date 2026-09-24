@@ -9,6 +9,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../app/config/booking_config.dart';
 import '../entity/admin_club_entity.dart';
 import '../entity/admin_failure.dart';
+import '../entity/audit_entry_entity.dart';
 import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
@@ -28,6 +29,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         super(const AdminState()) {
     on<AdminStarted>(_onStarted);
     on<AdminRefreshRequested>(_onRefreshRequested);
+    on<AdminAuditRequested>(_onAuditRequested);
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
     on<AdminPriceChanged>(_onPriceChanged);
@@ -244,8 +246,30 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) =>
-      emit(state.copyWith(tab: event.tab, clearSaveNotice: true));
+  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(tab: event.tab, clearSaveNotice: true));
+    // Журнал не держим живым: перечитываем при каждом открытии вкладки.
+    if (event.tab == AdminTab.log) add(const AdminAuditRequested());
+  }
+
+  Future<void> _onAuditRequested(
+    AdminAuditRequested event,
+    Emitter<AdminState> emit,
+  ) async {
+    if (state.auditLoading) return;
+    emit(state.copyWith(auditLoading: true, clearAuditError: true));
+    try {
+      final List<AuditEntryEntity> entries = await _repository.fetchAuditLog();
+      emit(state.copyWith(auditEntries: entries, auditLoading: false));
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(auditLoading: false, auditError: e.message));
+    } catch (_) {
+      emit(state.copyWith(
+        auditLoading: false,
+        auditError: 'Не удалось загрузить журнал. Проверьте связь.',
+      ));
+    }
+  }
 
   Future<void> _onPriceChanged(
     AdminPriceChanged event,

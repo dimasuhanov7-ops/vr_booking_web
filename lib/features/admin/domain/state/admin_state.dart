@@ -12,7 +12,10 @@ enum AdminTab {
   availability,
 
   /// Журнал записей.
-  records;
+  records,
+
+  /// Журнал действий сотрудников (`booking_audit_log`).
+  log;
 
   /// Подпись.
   String get label => switch (this) {
@@ -20,6 +23,7 @@ enum AdminTab {
         AdminTab.packages => 'Пакеты',
         AdminTab.availability => 'Доступность',
         AdminTab.records => 'Записи',
+        AdminTab.log => 'Журнал',
       };
 }
 
@@ -294,6 +298,9 @@ class AdminState extends Equatable {
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
     this.searchQuery = '',
+    this.auditEntries = const <AuditEntryEntity>[],
+    this.auditLoading = false,
+    this.auditError,
     this.saveError,
     this.saveNotice,
     this.loadError,
@@ -368,6 +375,20 @@ class AdminState extends Equatable {
 
   /// Строка поиска брони по имени или телефону (вкладка «Записи»).
   final String searchQuery;
+
+  /// Журнал действий (вкладка «Журнал»), новые сверху.
+  final List<AuditEntryEntity> auditEntries;
+
+  /// Журнал загружается.
+  final bool auditLoading;
+
+  /// Почему журнал не загрузился.
+  final String? auditError;
+
+  /// Записи журнала выбранного клуба и общие (без клуба).
+  List<AuditEntryEntity> get clubAuditEntries => auditEntries
+      .where((AuditEntryEntity e) => e.clubId == null || e.clubId == clubId)
+      .toList(growable: false);
 
   /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
   final String? saveError;
@@ -600,6 +621,10 @@ class AdminState extends Equatable {
     AdminTypeFilter? filterType,
     NewPackageDraft? newPackage,
     String? searchQuery,
+    List<AuditEntryEntity>? auditEntries,
+    bool? auditLoading,
+    String? auditError,
+    bool clearAuditError = false,
     String? saveError,
     bool clearSaveError = false,
     String? saveNotice,
@@ -632,6 +657,9 @@ class AdminState extends Equatable {
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
       searchQuery: searchQuery ?? this.searchQuery,
+      auditEntries: auditEntries ?? this.auditEntries,
+      auditLoading: auditLoading ?? this.auditLoading,
+      auditError: clearAuditError ? null : (auditError ?? this.auditError),
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
       saveNotice: clearSaveNotice ? null : (saveNotice ?? this.saveNotice),
       loadError: loadError ?? this.loadError,
@@ -664,6 +692,9 @@ class AdminState extends Equatable {
         filterType,
         newPackage,
         searchQuery,
+        auditEntries,
+        auditLoading,
+        auditError,
         saveError,
         saveNotice,
         loadError,

@@ -1,4 +1,5 @@
 import '../../domain/entity/admin_club_entity.dart';
+import '../../domain/entity/audit_entry_entity.dart';
 import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
@@ -123,6 +124,53 @@ class AdminRepositoryMock implements IAdminRepository {
   // живёт в состоянии BLoC, сервера нет.
   @override
   Future<bool> isStaff() async => true;
+
+  @override
+  Future<List<AuditEntryEntity>> fetchAuditLog({int limit = 200}) async {
+    final DateTime now = DateTime.now().toUtc();
+    return _delay(<AuditEntryEntity>[
+      AuditEntryEntity(
+        id: 3,
+        at: now.subtract(const Duration(minutes: 12)),
+        entity: 'booking_prices',
+        action: 'update',
+        actorId: 'demo-anna',
+        actorName: 'Анна',
+        before: const <String, dynamic>{
+          'club_id': 'vray', 'station_type': 'vr_headset', 'day_kind': 'weekend',
+          'price_per_hour': 1200, 'min_qty': 1,
+        },
+        after: const <String, dynamic>{
+          'club_id': 'vray', 'station_type': 'vr_headset', 'day_kind': 'weekend',
+          'price_per_hour': 1300, 'min_qty': 1,
+        },
+      ),
+      AuditEntryEntity(
+        id: 2,
+        at: now.subtract(const Duration(hours: 2)),
+        entity: 'booking_availability',
+        action: 'insert',
+        actorId: 'demo-igor',
+        actorName: 'Игорь',
+        after: const <String, dynamic>{
+          'club_id': 'vray', 'room_id': 'v-small', 'day': null,
+          'from_minutes': null, 'to_minutes': null,
+        },
+      ),
+      AuditEntryEntity(
+        id: 1,
+        at: now.subtract(const Duration(days: 1)),
+        entity: 'booking_orders',
+        action: 'update',
+        before: const <String, dynamic>{
+          'club_id': 'vray', 'client_name': 'Юля', 'status': 'confirmed',
+        },
+        after: const <String, dynamic>{
+          'club_id': 'vray', 'client_name': 'Юля', 'status': 'cancelled',
+        },
+      ),
+    ]);
+  }
 
   @override
   Stream<void> changes() => const Stream<void>.empty();

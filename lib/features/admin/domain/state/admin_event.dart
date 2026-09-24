@@ -21,6 +21,12 @@ class AdminRefreshRequested extends AdminEvent {
   const AdminRefreshRequested();
 }
 
+/// Загрузить журнал действий (открыта вкладка «Журнал» или «Обновить»).
+class AdminAuditRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminAuditRequested();
+}
+
 /// Смена клуба.
 class AdminClubChanged extends AdminEvent {
   /// Создаёт событие.

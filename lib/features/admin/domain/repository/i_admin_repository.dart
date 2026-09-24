@@ -1,4 +1,5 @@
 import '../entity/admin_club_entity.dart';
+import '../entity/audit_entry_entity.dart';
 import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
@@ -38,6 +39,9 @@ abstract interface class IAdminRepository {
 
   /// Единый список записей (брони + журнал).
   Future<List<BookingRowEntity>> fetchRows();
+
+  /// Последние [limit] записей журнала действий, новые сверху.
+  Future<List<AuditEntryEntity>> fetchAuditLog({int limit = 200});
 
   /// Пауза приёма и закрытые залы/окна.
   Future<AvailabilityEntity> fetchAvailability();
