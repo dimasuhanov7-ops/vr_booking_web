@@ -293,6 +293,7 @@ class AdminState extends Equatable {
     this.filterHallId = '',
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
+    this.searchQuery = '',
     this.saveError,
     this.saveNotice,
     this.loadError,
@@ -364,6 +365,9 @@ class AdminState extends Equatable {
 
   /// Черновик нового пакета.
   final NewPackageDraft newPackage;
+
+  /// Строка поиска брони по имени или телефону (вкладка «Записи»).
+  final String searchQuery;
 
   /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
   final String? saveError;
@@ -446,6 +450,40 @@ class AdminState extends Equatable {
 
   /// Есть ли несохранённая правка у записи.
   bool isEdited(String id) => rowEdits.containsKey(id);
+
+  /// Брони всех клубов, найденные по [searchQuery]: сначала ближайшие
+  /// будущие, затем прошедшие от недавних к давним. Не больше 30.
+  List<BookingRowEntity> get searchResults {
+    if (searchQuery.trim().isEmpty) return const <BookingRowEntity>[];
+    final List<BookingRowEntity> found = effectiveRows
+        .where((BookingRowEntity r) => matchesSearch(r, searchQuery))
+        .toList();
+    int rank(BookingRowEntity r) => r.dayIndex >= 0 ? 0 : 1;
+    found.sort((BookingRowEntity a, BookingRowEntity b) {
+      final int byRank = rank(a).compareTo(rank(b));
+      if (byRank != 0) return byRank;
+      final int byDay = rank(a) == 0
+          ? a.dayIndex.compareTo(b.dayIndex)
+          : b.dayIndex.compareTo(a.dayIndex);
+      return byDay != 0 ? byDay : a.startMinutes.compareTo(b.startMinutes);
+    });
+    return found.take(30).toList(growable: false);
+  }
+
+  /// Подходит ли бронь под запрос: часть имени или не меньше трёх цифр
+  /// телефона. «8 912…» и «+7 912…» считаются одним номером.
+  static bool matchesSearch(BookingRowEntity r, String query) {
+    final String q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    if (r.clientName.toLowerCase().contains(q)) return true;
+    final String qd = q.replaceAll(RegExp(r'\D'), '');
+    if (qd.length < 3) return false;
+    final String pd = r.phone.replaceAll(RegExp(r'\D'), '');
+    if (pd.contains(qd)) return true;
+    return qd.length >= 4 &&
+        (qd.startsWith('8') || qd.startsWith('7')) &&
+        pd.contains(qd.substring(1));
+  }
 
   /// Открытая запись (с учётом правок).
   BookingRowEntity? get openRow => openRowId == null ? null : rowById(openRowId!);
@@ -561,6 +599,7 @@ class AdminState extends Equatable {
     String? filterHallId,
     AdminTypeFilter? filterType,
     NewPackageDraft? newPackage,
+    String? searchQuery,
     String? saveError,
     bool clearSaveError = false,
     String? saveNotice,
@@ -592,6 +631,7 @@ class AdminState extends Equatable {
       filterHallId: filterHallId ?? this.filterHallId,
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
+      searchQuery: searchQuery ?? this.searchQuery,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
       saveNotice: clearSaveNotice ? null : (saveNotice ?? this.saveNotice),
       loadError: loadError ?? this.loadError,
@@ -623,6 +663,7 @@ class AdminState extends Equatable {
         filterHallId,
         filterType,
         newPackage,
+        searchQuery,
         saveError,
         saveNotice,
         loadError,

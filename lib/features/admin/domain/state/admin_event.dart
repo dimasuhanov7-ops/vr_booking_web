@@ -321,6 +321,30 @@ class AdminRowEditReset extends AdminEvent {
   List<Object?> get props => <Object?>[rowId];
 }
 
+/// Изменилась строка поиска брони.
+class AdminSearchChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchChanged(this.query);
+
+  /// Имя или телефон (часть).
+  final String query;
+
+  @override
+  List<Object?> get props => <Object?>[query];
+}
+
+/// Открыть бронь из результатов поиска: переключает клуб и день.
+class AdminSearchResultOpened extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchResultOpened(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
 /// Сохранить правки карточки брони на сервер.
 class AdminRowSaved extends AdminEvent {
   /// Создаёт событие.

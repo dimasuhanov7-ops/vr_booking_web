@@ -45,6 +45,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminRowEdited>(_onRowEdited);
     on<AdminRowEditReset>(_onRowEditReset);
     on<AdminRowSaved>(_onRowSaved);
+    on<AdminSearchChanged>(_onSearchChanged);
+    on<AdminSearchResultOpened>(_onSearchResultOpened);
     on<AdminNewBookingOpened>(_onNewBookingOpened);
     on<AdminNewBookingClosed>(_onNewBookingClosed);
     on<AdminNewBookingChanged>(_onNewBookingChanged);
@@ -458,6 +460,28 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
 
   void _onRowClosed(AdminRowClosed event, Emitter<AdminState> emit) =>
       emit(state.copyWith(clearOpenRow: true));
+
+  void _onSearchChanged(AdminSearchChanged event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(searchQuery: event.query));
+
+  void _onSearchResultOpened(
+    AdminSearchResultOpened event,
+    Emitter<AdminState> emit,
+  ) {
+    final BookingRowEntity? row = state.rowById(event.rowId);
+    if (row == null) return;
+    // Бронь могла найтись в другом клубе — переключаемся на него и на её день
+    // (прошедший день сетка не показывает, карточка откроется всё равно).
+    emit(state.copyWith(
+      clubId: row.clubId,
+      intakeOpen: !state.pausedClubIds.contains(row.clubId),
+      filterDay: row.dayIndex >= 0 ? row.dayIndex : state.filterDay,
+      openRowId: row.id,
+      searchQuery: '',
+      clearNewBooking: true,
+      clearNewBookingMonth: true,
+    ));
+  }
 
   /// Правка брони копится в оверлее [AdminState.rowEdits] и уходит на сервер
   /// по «Сохранить» ([AdminRowSaved]).
