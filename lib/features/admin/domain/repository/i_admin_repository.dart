@@ -65,6 +65,10 @@ abstract interface class IAdminRepository {
   /// Отменить / вернуть бронь (`status` = `cancelled` / `confirmed`).
   Future<void> setOrderCancelled(String orderId, {required bool cancelled});
 
+  /// Отметить визит: [status] — `confirmed` (ждём), `visited` (пришёл) или
+  /// `noShow` (не пришёл). Отменённую бронь меняет [setOrderCancelled].
+  Future<void> setOrderVisit(String orderId, {required RecordStatus status});
+
   /// Сохранить контакты, предоплату и комментарий брони.
   Future<void> updateOrderDetails({
     required String orderId,

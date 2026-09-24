@@ -20,6 +20,12 @@ class _Repo extends AdminRepositoryMock {
 
   final List<Map<String, Object?>> detailsSaved = <Map<String, Object?>>[];
   final List<Map<String, Object?>> bookingsCreated = <Map<String, Object?>>[];
+  final List<(String, RecordStatus)> visits = <(String, RecordStatus)>[];
+
+  @override
+  Future<void> setOrderVisit(String orderId, {required RecordStatus status}) async {
+    visits.add((orderId, status));
+  }
 
   @override
   Future<bool> isStaff() async => staff;
@@ -182,6 +188,27 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(repo.detailsSaved.single['id'], 'order-from-db');
     expect(repo.detailsSaved.single['prepay'], 2000);
+    await bloc.close();
+  });
+
+  test('визит: «не пришёл» уходит на сервер, у отменённой брони не ставится', () async {
+    final _Repo repo = _Repo();
+    final AdminBloc bloc = await _start(repo);
+    final List<BookingRowEntity> rows = bloc.state.rows;
+    final BookingRowEntity live =
+        rows.firstWhere((BookingRowEntity r) => !bloc.state.isCancelled(r.id));
+
+    bloc.add(AdminVisitMarked(live.id, RecordStatus.noShow));
+    await bloc.stream.firstWhere(
+        (AdminState s) => s.rowById(live.id)!.status == RecordStatus.noShow);
+    await Future<void>.delayed(Duration.zero);
+    expect(repo.visits, <(String, RecordStatus)>[(live.id, RecordStatus.noShow)]);
+
+    bloc.add(AdminRowCancelToggled(live.id));
+    await bloc.stream.firstWhere((AdminState s) => s.isCancelled(live.id));
+    bloc.add(AdminVisitMarked(live.id, RecordStatus.visited));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(repo.visits, hasLength(1));
     await bloc.close();
   });
 }

@@ -48,6 +48,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminRowEdited>(_onRowEdited);
     on<AdminRowEditReset>(_onRowEditReset);
     on<AdminRowSaved>(_onRowSaved);
+    on<AdminVisitMarked>(_onVisitMarked);
     on<AdminSearchChanged>(_onSearchChanged);
     on<AdminSearchResultOpened>(_onSearchResultOpened);
     on<AdminNewBookingOpened>(_onNewBookingOpened);
@@ -593,6 +594,35 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final Map<String, BookingRowEntity> next =
         Map<String, BookingRowEntity>.of(state.rowEdits)..remove(event.rowId);
     emit(state.copyWith(rowEdits: next));
+  }
+
+  Future<void> _onVisitMarked(
+    AdminVisitMarked event,
+    Emitter<AdminState> emit,
+  ) async {
+    final BookingRowEntity? base =
+        state.rows.where((BookingRowEntity r) => r.id == event.rowId).firstOrNull;
+    if (base == null || state.isCancelled(base.id) || base.status == event.status) {
+      return;
+    }
+    List<BookingRowEntity> withStatus(RecordStatus s) => state.rows
+        .map((BookingRowEntity r) => r.id == base.id ? r.copyWith(status: s) : r)
+        .toList(growable: false);
+    Map<String, BookingRowEntity> editsWith(RecordStatus s) =>
+        <String, BookingRowEntity>{
+          for (final MapEntry<String, BookingRowEntity> e in state.rowEdits.entries)
+            e.key: e.key == base.id ? e.value.copyWith(status: s) : e.value,
+        };
+
+    emit(state.copyWith(rows: withStatus(event.status), rowEdits: editsWith(event.status)));
+    bool saved = false;
+    await _persist(() async {
+      await _repository.setOrderVisit(base.id, status: event.status);
+      saved = true;
+    }, emit);
+    if (!saved) {
+      emit(state.copyWith(rows: withStatus(base.status), rowEdits: editsWith(base.status)));
+    }
   }
 
   Future<void> _onRowSaved(AdminRowSaved event, Emitter<AdminState> emit) async {

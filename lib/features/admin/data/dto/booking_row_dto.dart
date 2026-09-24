@@ -99,7 +99,8 @@ abstract final class BookingRowDto {
   }
 
   static RecordStatus _status(String raw) => switch (raw) {
-        'completed' => RecordStatus.paid,
+        'completed' => RecordStatus.visited,
+        'no_show' => RecordStatus.noShow,
         'confirmed' => RecordStatus.confirmed,
         // Отменённая помечается отдельно (isCancelled), статус не «теряем».
         'cancelled' => RecordStatus.confirmed,

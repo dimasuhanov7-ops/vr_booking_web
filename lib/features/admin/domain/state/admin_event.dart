@@ -352,6 +352,21 @@ class AdminSearchResultOpened extends AdminEvent {
   List<Object?> get props => <Object?>[rowId];
 }
 
+/// Отметить визит гостя: ждём / пришёл / не пришёл.
+class AdminVisitMarked extends AdminEvent {
+  /// Создаёт событие.
+  const AdminVisitMarked(this.rowId, this.status);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  /// `confirmed`, `visited` или `noShow`.
+  final RecordStatus status;
+
+  @override
+  List<Object?> get props => <Object?>[rowId, status];
+}
+
 /// Сохранить правки карточки брони на сервер.
 class AdminRowSaved extends AdminEvent {
   /// Создаёт событие.

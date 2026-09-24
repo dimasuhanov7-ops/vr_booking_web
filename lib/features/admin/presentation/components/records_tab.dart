@@ -44,6 +44,12 @@ class RecordsTab extends StatelessWidget {
         .where((BookingRowEntity r) => !state.isCancelled(r.id))
         .toList(growable: false);
     final int cancelled = rows.length - live.length;
+    final int noShows =
+        live.where((BookingRowEntity r) => r.status == RecordStatus.noShow).length;
+    final String dayNote = <String>[
+      if (cancelled > 0) '+ $cancelled отменено',
+      if (noShows > 0) '$noShows не пришли',
+    ].join(' · ');
 
     final int total = live.fold(
       0,
@@ -62,7 +68,7 @@ class RecordsTab extends StatelessWidget {
       (
         label: 'записей за день',
         value: '${live.length}',
-        note: cancelled > 0 ? '+ $cancelled отменено' : 'на выбранный день',
+        note: dayNote.isEmpty ? 'на выбранный день' : dayNote,
       ),
       (label: 'сумма', value: AdminFormat.money(total), note: 'по текущему тарифу'),
     ];

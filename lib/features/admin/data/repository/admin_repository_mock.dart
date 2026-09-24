@@ -116,6 +116,9 @@ class AdminRepositoryMock implements IAdminRepository {
   @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {}
 
+  @override
+  Future<void> setOrderVisit(String orderId, {required RecordStatus status}) async {}
+
   // В демо сотрудник — любой, а время и состав брони можно «править»: всё
   // живёт в состоянии BLoC, сервера нет.
   @override

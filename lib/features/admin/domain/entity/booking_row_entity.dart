@@ -9,13 +9,21 @@ enum RecordStatus {
   confirmed,
 
   /// Оплачена.
-  paid;
+  paid,
+
+  /// Гость пришёл (`booking_orders.status = completed`).
+  visited,
+
+  /// Гость не пришёл (`no_show`).
+  noShow;
 
   /// Разбирает значение из мок-данных.
   static RecordStatus fromRaw(String raw) => switch (raw) {
         'new' => RecordStatus.newRequest,
         'confirmed' => RecordStatus.confirmed,
         'paid' => RecordStatus.paid,
+        'visited' => RecordStatus.visited,
+        'no_show' => RecordStatus.noShow,
         _ => RecordStatus.newRequest,
       };
 
@@ -24,6 +32,8 @@ enum RecordStatus {
         RecordStatus.newRequest => 'новая',
         RecordStatus.confirmed => 'подтверждена',
         RecordStatus.paid => 'оплачена',
+        RecordStatus.visited => 'пришёл',
+        RecordStatus.noShow => 'не пришёл',
       };
 }
 
@@ -195,6 +205,7 @@ class BookingRowEntity extends Equatable {
 
   /// Копия с изменениями (используется при правке брони в админке).
   BookingRowEntity copyWith({
+    RecordStatus? status,
     String? clientName,
     String? phone,
     int? startMinutes,
@@ -218,7 +229,7 @@ class BookingRowEntity extends Equatable {
         consoles: consoles ?? this.consoles,
         clientName: clientName ?? this.clientName,
         phone: phone ?? this.phone,
-        status: status,
+        status: status ?? this.status,
         source: source,
         packageName: packageName,
         isCancelled: isCancelled,

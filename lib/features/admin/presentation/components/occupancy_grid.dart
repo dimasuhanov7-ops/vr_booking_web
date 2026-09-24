@@ -357,7 +357,8 @@ class _HallOccupancyState extends State<_HallOccupancy> {
       ]);
 
   Widget _nameLabel(_Head h) {
-    final bool dim = _hoverId != null && _hoverId != h.row.id;
+    final bool noShow = h.row.status == RecordStatus.noShow;
+    final bool dim = (_hoverId != null && _hoverId != h.row.id) || noShow;
     final ({Color bg, Color border, Color text}) hue = AdminColors.hue(h.hue);
     final double left =
         OccupancyGrid.labelW + h.slot * (_cw + OccupancyGrid.gap) + 4;
@@ -377,7 +378,7 @@ class _HallOccupancyState extends State<_HallOccupancy> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              h.row.clientName,
+              noShow ? '${h.row.clientName} · не пришёл' : h.row.clientName,
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.clip,
@@ -429,7 +430,9 @@ class _OccCell extends StatelessWidget {
     }
     final ({Color bg, Color border, Color text}) h = AdminColors.hue(d.hue);
     final bool active = hoverId == d.row.id;
-    final bool dim = hoverId != null && !active;
+    // Неявка остаётся в сетке (слот был занят), но приглушена.
+    final bool dim = (hoverId != null && !active) ||
+        (!active && d.row.status == RecordStatus.noShow);
 
     return MouseRegion(
       onEnter: (_) => onHover(d.row.id),

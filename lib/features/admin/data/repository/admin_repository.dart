@@ -353,6 +353,18 @@ class AdminRepository implements IAdminRepository {
   }
 
   @override
+  Future<void> setOrderVisit(String orderId, {required RecordStatus status}) async {
+    final String raw = switch (status) {
+      RecordStatus.visited => 'completed',
+      RecordStatus.noShow => 'no_show',
+      _ => 'confirmed',
+    };
+    await _guard(() => _client
+        .from('booking_orders')
+        .update(<String, dynamic>{'status': raw}).eq('id', orderId));
+  }
+
+  @override
   Future<void> updateOrderDetails({
     required String orderId,
     required String clientName,

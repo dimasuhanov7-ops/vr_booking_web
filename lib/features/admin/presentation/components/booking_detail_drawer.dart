@@ -12,6 +12,13 @@ import '../admin_theme.dart';
 import 'admin_atoms.dart';
 import 'admin_drawer_shell.dart';
 
+/// Отметки визита в карточке: статус брони в БД — подпись на кнопке.
+const List<(RecordStatus, String)> _visitStatuses = <(RecordStatus, String)>[
+  (RecordStatus.confirmed, 'ждём'),
+  (RecordStatus.visited, 'пришёл'),
+  (RecordStatus.noShow, 'не пришёл'),
+];
+
 /// Drawer «Карточка брони»: просмотр + правка одной записи.
 class BookingDetailDrawer extends StatelessWidget {
   /// Создаёт drawer.
@@ -134,6 +141,22 @@ class BookingDetailDrawer extends StatelessWidget {
             ],
             bold: true,
           ),
+          if (!cancelled) ...<Widget>[
+            const SizedBox(height: 16),
+            _ChipGroup(
+              label: 'Визит',
+              options: <(String, int)>[
+                for (int i = 0; i < _visitStatuses.length; i++)
+                  (_visitStatuses[i].$2, i),
+              ],
+              value: _visitStatuses
+                  .indexWhere(((RecordStatus, String) v) => v.$1 == row.status)
+                  .clamp(0, _visitStatuses.length - 1),
+              accent: accent,
+              onSelected: (int i) =>
+                  bloc.add(AdminVisitMarked(row.id, _visitStatuses[i].$1)),
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: <Widget>[
