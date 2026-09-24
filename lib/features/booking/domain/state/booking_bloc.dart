@@ -2,6 +2,8 @@
 // не initializing formals — они часть публичного API фичи.
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
@@ -61,6 +63,8 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingHourCopied>(_onHourCopied);
     on<BookingContactChanged>(_onContactChanged);
     on<BookingAvailabilityRefreshed>(_onAvailabilityRefreshed);
+    on<BookingLiveTick>(_onLiveTick);
+    on<BookingVisibilityChanged>(_onVisibilityChanged);
     on<BookingSubmitted>(_onSubmitted);
     on<BookingConflictResolved>(_onConflictResolved);
     on<BookingConflictDismissed>(_onConflictDismissed);
@@ -88,6 +92,111 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
   /// Допустимые длительности сеанса, минут.
   static const List<int> durations = BookingConfig.sessionDurations;
+
+  /// Как часто перечитывать занятость, пока клиент выбирает время и станции:
+  /// чужую бронь лучше увидеть до отправки, а не получить конфликт после.
+  static const Duration liveInterval = Duration(seconds: 20);
+
+  Timer? _live;
+  bool _visible = true;
+
+  @override
+  Future<void> close() {
+    _live?.cancel();
+    return super.close();
+  }
+
+  void _ensureLive() {
+    _live ??= Timer.periodic(liveInterval, (_) {
+      if (!isClosed && _visible) add(const BookingLiveTick());
+    });
+  }
+
+  void _onVisibilityChanged(
+    BookingVisibilityChanged event,
+    Emitter<BookingState> emit,
+  ) {
+    final bool cameBack = event.visible && !_visible;
+    _visible = event.visible;
+    if (cameBack) add(const BookingLiveTick());
+  }
+
+  Future<void> _onLiveTick(BookingLiveTick event, Emitter<BookingState> emit) async {
+    final ClubEntity? club = state.club;
+    final DateTime? date = state.date;
+    if (club == null || date == null || state.hall == null) return;
+    if (state.view != BookingStage.form || state.status != BookingStatus.ready) return;
+
+    final List<BusyIntervalEntity> busy;
+    try {
+      busy = await _repository.fetchBusyIntervals(clubId: club.id, day: date);
+    } on BookingFailure {
+      return; // фоновое обновление: при сбое оставляем то, что на экране
+    }
+    // Пока ждали ответ, клиент мог сменить клуб или дату, или уже отправляет бронь.
+    if (state.club?.id != club.id ||
+        state.date != date ||
+        state.status != BookingStatus.ready) {
+      return;
+    }
+
+    final List<TimeSlotEntity> slots = _slots.generateSlots(
+      club: club,
+      day: date,
+      durationMinutes: state.durationMinutes,
+    );
+    final TimeSlotEntity? slot = state.slot;
+    if (slot != null &&
+        !slots.any((TimeSlotEntity s) => s.startsAt == slot.startsAt)) {
+      // До начала осталось меньше получаса — сервер такую бронь уже не примет.
+      emit(state.copyWith(
+        busy: busy,
+        slots: slots,
+        clearSlot: true,
+        clearPicks: true,
+        quote: QuoteEntity.empty,
+        takenIds: const <String>{},
+        conflictShown: false,
+        errorMessage: 'Запись на выбранное время уже закрыта — выберите другое.',
+      ));
+      return;
+    }
+
+    final ({Map<int, Set<String>> kept, Set<String> taken}) r = _withoutTaken(busy);
+    if (r.taken.isEmpty) {
+      emit(state.copyWith(busy: busy, slots: slots));
+      return;
+    }
+    emit(state.copyWith(
+      busy: busy,
+      slots: slots,
+      pickedByHour: r.kept,
+      takenIds: r.taken,
+      conflictShown: true,
+      quote: _quote(r.kept),
+    ));
+  }
+
+  /// Выбор по часам без станций, которые по [busy] уже заняты.
+  ({Map<int, Set<String>> kept, Set<String> taken}) _withoutTaken(
+    List<BusyIntervalEntity> busy,
+  ) {
+    final BookingState probe = state.copyWith(busy: busy);
+    final Set<String> taken = <String>{};
+    final Map<int, Set<String>> kept = <int, Set<String>>{};
+    for (int h = 0; h < state.hourCount; h++) {
+      final Set<String> ok = <String>{};
+      for (final String id in state.pickedAt(h)) {
+        if (probe.isFreeAt(h, id)) {
+          ok.add(id);
+        } else {
+          taken.add(id);
+        }
+      }
+      kept[h] = ok;
+    }
+    return (kept: kept, taken: taken);
+  }
 
   // ---------------------------------------------------------------------------
 
@@ -552,29 +661,14 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         day: state.date!,
       );
       // Пересобираем выбор по каждому часу, убирая ставшие занятыми станции.
-      final BookingState probe = state.copyWith(busy: busy);
-      final Set<String> taken = <String>{};
-      final Map<int, Set<String>> kept = <int, Set<String>>{};
-      for (int h = 0; h < state.hourCount; h++) {
-        final Set<String> was = state.pickedAt(h);
-        final Set<String> ok = <String>{};
-        for (final String id in was) {
-          if (probe.isFreeAt(h, id)) {
-            ok.add(id);
-          } else {
-            taken.add(id);
-          }
-        }
-        kept[h] = ok;
-      }
-
+      final ({Map<int, Set<String>> kept, Set<String> taken}) r = _withoutTaken(busy);
       emit(state.copyWith(
         status: BookingStatus.ready,
         busy: busy,
-        pickedByHour: kept,
-        takenIds: taken,
-        conflictShown: taken.isNotEmpty,
-        quote: _quote(kept),
+        pickedByHour: r.kept,
+        takenIds: r.taken,
+        conflictShown: r.taken.isNotEmpty,
+        quote: _quote(r.kept),
       ));
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.ready, errorMessage: e.message));
@@ -690,6 +784,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       }
 
       final bool clearPicks = keptHours.isEmpty;
+      _ensureLive();
       emit(state.copyWith(
         status: BookingStatus.ready,
         busy: busy,

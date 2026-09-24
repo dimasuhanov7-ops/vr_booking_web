@@ -32,8 +32,25 @@ class _BookingScreenState extends State<BookingScreen> {
   Timer? _heightDebounce;
   int _pendingHeight = 0;
 
+  /// Скрытая вкладка не опрашивает занятость; при возврате — сразу обновляем.
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onShow: () => context
+          .read<BookingBloc>()
+          .add(const BookingVisibilityChanged(visible: true)),
+      onHide: () => context
+          .read<BookingBloc>()
+          .add(const BookingVisibilityChanged(visible: false)),
+    );
+  }
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     _heightDebounce?.cancel();
     super.dispose();
   }
