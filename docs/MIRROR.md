@@ -27,9 +27,18 @@ pg_cron, 03:00 по Перми ──▶ booking-mirror {"mode":"resync"} (до�
   Функция повторяет запись ещё дважды — через 2 и 6 секунд; если не вышло,
   строку поправит ночная досинхронизация.
 
-Файлы: миграция `supabase/migrations/20260918120400_online_booking_mirror.sql`,
+Файлы: миграция `supabase/migrations/20260915081448_online_booking_mirror.sql`,
 функция `supabase/functions/booking-mirror/index.ts`,
 скрипт таблицы `tool/google_apps_script/booking_mirror.gs`.
+
+## Стоимость в таблице и Telegram
+
+Цена пакета, если бронь по пакету, иначе сумма `booking_order_items.price`;
+затем минус промокод (`booking_orders.discount_id` → `booking_discounts`):
+процент от этой суммы с округлением до рубля, фиксированная скидка — не больше
+суммы. Так же считают виджет и админка. Отдельной колонки под скидку нет —
+код пишется к составу («…; промокод VRPARTY −10%»), в Telegram — рядом с суммой.
+Промокоды — с `booking-mirror` v10 (24.09).
 
 ## Что нужно настроить (один раз)
 

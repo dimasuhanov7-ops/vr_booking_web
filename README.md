@@ -24,10 +24,14 @@ lib/
 
 ## Backend
 
-Миграция: [`supabase/migrations/20260903120000_online_booking_feature.sql`](supabase/migrations/20260903120000_online_booking_feature.sql)
-— **не применена**, ждёт ревью. Таблицы с префиксом `booking_` в схеме `public`.
+Миграции — [`supabase/migrations/`](supabase/migrations/), все применены к проду;
+имя файла = версия в журнале прода. Таблицы с префиксом `booking_` в схеме `public`.
+База общая с приложением менеджера, поэтому `supabase db push` не используется:
+новые миграции — через Supabase MCP `apply_migration`, затем файл переименовать
+под присвоенную версию (подробнее — [`HANDOFF.md`](HANDOFF.md)).
 
-Применение: `supabase db push` (или через Supabase MCP `apply_migration`).
+Edge Functions: `booking-intake` (приём брони) и `booking-mirror` (Telegram +
+Google Таблица, [`docs/MIRROR.md`](docs/MIRROR.md)).
 
 ## Запуск
 

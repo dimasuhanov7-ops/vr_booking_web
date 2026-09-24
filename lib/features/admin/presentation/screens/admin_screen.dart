@@ -8,6 +8,7 @@ import '../components/admin_header.dart';
 import '../components/admin_tab_bar.dart';
 import '../components/availability_tab.dart';
 import '../components/booking_detail_drawer.dart';
+import '../components/log_tab.dart';
 import '../components/new_booking_drawer.dart';
 import '../components/packages_tab.dart';
 import '../components/prices_tab.dart';
@@ -115,6 +116,13 @@ class AdminScreen extends StatelessWidget {
                                         AdminErrorBox(state.saveError!),
                                         const SizedBox(height: 14),
                                       ],
+                                      // Пояснение, которое не ошибка: например,
+                                      // пакет выключен вместо удаления.
+                                      if (state.saveError == null &&
+                                          state.saveNotice != null) ...<Widget>[
+                                        AdminNoticeBox(state.saveNotice!),
+                                        const SizedBox(height: 14),
+                                      ],
                                       switch (state.tab) {
                                         AdminTab.records => RecordsTab(
                                           state: state,
@@ -133,6 +141,7 @@ class AdminScreen extends StatelessWidget {
                                             state: state,
                                             accent: accent,
                                           ),
+                                        AdminTab.log => LogTab(state: state),
                                       },
                                     ],
                                   ),

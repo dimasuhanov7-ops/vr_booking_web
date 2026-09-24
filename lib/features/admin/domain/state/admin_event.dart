@@ -14,6 +14,19 @@ class AdminStarted extends AdminEvent {
   const AdminStarted();
 }
 
+/// Перечитать брони и доступность: пришло событие Realtime, сработал
+/// резервный таймер, сотрудник нажал «Обновить» или вернулся в приложение.
+class AdminRefreshRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRefreshRequested();
+}
+
+/// Загрузить журнал действий (открыта вкладка «Журнал» или «Обновить»).
+class AdminAuditRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminAuditRequested();
+}
+
 /// Смена клуба.
 class AdminClubChanged extends AdminEvent {
   /// Создаёт событие.
@@ -159,6 +172,57 @@ class AdminNewPackageSubmitted extends AdminEvent {
   const AdminNewPackageSubmitted();
 }
 
+/// Включить / выключить промокод.
+class AdminPromoToggled extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoToggled(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Удалить промокод.
+class AdminPromoDeleted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoDeleted(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Правка формы нового промокода.
+class AdminNewPromoChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoChanged({this.code, this.kind, this.value, this.minStations});
+
+  /// Код.
+  final String? code;
+
+  /// Процент или сумма.
+  final PromoKind? kind;
+
+  /// Процент или ₽.
+  final int? value;
+
+  /// От скольких станций.
+  final int? minStations;
+
+  @override
+  List<Object?> get props => <Object?>[code, kind, value, minStations];
+}
+
+/// Завести промокод из формы.
+class AdminNewPromoSubmitted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoSubmitted();
+}
+
 /// Переключить приём заявок.
 class AdminIntakeToggled extends AdminEvent {
   /// Создаёт событие.
@@ -295,17 +359,85 @@ class AdminRowEdited extends AdminEvent {
   List<Object?> get props => <Object?>[rowId, clientName, phone, prepay, note];
 }
 
-/// Перечитать брони и доступность с сервера.
-class AdminRefreshRequested extends AdminEvent {
-  /// Создаёт событие.
-  const AdminRefreshRequested();
-}
-
 /// Служебное: отложенное сохранение после паузы в наборе.
 class _AdminDeferredSave extends AdminEvent {
   const _AdminDeferredSave(this.action);
 
   final Future<void> Function() action;
+}
+
+/// Изменилась строка поиска брони.
+class AdminSearchChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchChanged(this.query);
+
+  /// Имя или телефон (часть).
+  final String query;
+
+  @override
+  List<Object?> get props => <Object?>[query];
+}
+
+/// Открыть бронь из результатов поиска: переключает клуб и день.
+class AdminSearchResultOpened extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchResultOpened(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
+/// Отметить визит гостя: ждём / пришёл / не пришёл.
+class AdminVisitMarked extends AdminEvent {
+  /// Создаёт событие.
+  const AdminVisitMarked(this.rowId, this.status);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  /// `confirmed`, `visited` или `noShow`.
+  final RecordStatus status;
+
+  @override
+  List<Object?> get props => <Object?>[rowId, status];
+}
+
+/// Перенести бронь и/или сменить её состав из карточки.
+///
+/// Время и состав применяются к брони целиком через
+/// `booking_reschedule_order`: старые места освобождаются, новые подбираются
+/// по актуальной занятости, при нехватке мест бронь остаётся как была.
+class AdminRowRescheduled extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowRescheduled({
+    required this.rowId,
+    required this.dayIndex,
+    required this.startMinutes,
+    required this.headsetsByHour,
+    required this.consolesByHour,
+  });
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  /// Новый день (смещение от сегодня).
+  final int dayIndex;
+
+  /// Новое начало, минут от полуночи.
+  final int startMinutes;
+
+  /// Сколько шлемов нужно в каждый час сеанса.
+  final List<int> headsetsByHour;
+
+  /// Сколько PS5 нужно в каждый час сеанса.
+  final List<int> consolesByHour;
+
+  @override
+  List<Object?> get props =>
+      <Object?>[rowId, dayIndex, startMinutes, headsetsByHour, consolesByHour];
 }
 
 /// Открыть drawer «Новая запись».

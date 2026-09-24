@@ -10,10 +10,12 @@ import '../../../../app/config/booking_config.dart';
 import '../entity/admin_booking_request_entity.dart';
 import '../entity/admin_club_entity.dart';
 import '../entity/admin_failure.dart';
+import '../entity/audit_entry_entity.dart';
 import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
+import '../entity/promo_entity.dart';
 import '../repository/i_admin_repository.dart';
 
 part 'admin_event.dart';
@@ -38,6 +40,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         super(const AdminState()) {
     on<AdminStarted>(_onStarted);
     on<AdminRefreshRequested>(_onRefreshRequested);
+    on<AdminAuditRequested>(_onAuditRequested);
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
     on<AdminVrTiersChanged>(_onVrTiersChanged);
@@ -47,6 +50,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminPackageDeleted>(_onPackageDeleted);
     on<AdminNewPackageChanged>(_onNewPackageChanged);
     on<AdminNewPackageSubmitted>(_onNewPackageSubmitted);
+    on<AdminPromoToggled>(_onPromoToggled);
+    on<AdminPromoDeleted>(_onPromoDeleted);
+    on<AdminNewPromoChanged>(_onNewPromoChanged);
+    on<AdminNewPromoSubmitted>(_onNewPromoSubmitted);
     on<AdminIntakeToggled>(_onIntakeToggled);
     on<AdminHallClosureToggled>(_onHallClosureToggled);
     on<AdminAvailDayChanged>(_onAvailDayChanged);
@@ -57,6 +64,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminRowOpened>(_onRowOpened);
     on<AdminRowClosed>(_onRowClosed);
     on<AdminRowEdited>(_onRowEdited);
+    on<AdminVisitMarked>(_onVisitMarked);
+    on<AdminSearchChanged>(_onSearchChanged);
+    on<AdminSearchResultOpened>(_onSearchResultOpened);
+    on<AdminRowRescheduled>(_onRowRescheduled);
     on<AdminNewBookingOpened>(_onNewBookingOpened);
     on<AdminNewBookingClosed>(_onNewBookingClosed);
     on<AdminNewBookingChanged>(_onNewBookingChanged);
@@ -150,6 +161,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
+    // Промокоды — не повод не пустить в панель: без них просто пустой список.
+    List<PromoEntity> promos = const <PromoEntity>[];
+    try {
+      promos = await _repository.fetchPromos();
+    } catch (_) {}
+
     final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
     final String clubId =
         hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
@@ -157,12 +174,14 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
 
     emit(state.copyWith(
       status: AdminStatus.ready,
+      scheduleEditable: _repository.canEditSchedule,
       clubId: hasClub ? null : (clubs.isEmpty ? null : clubs.first.id),
       clubs: clubs,
       prices: <String, HallPriceEntity>{
         for (final HallPriceEntity p in prices) p.hallId: p,
       },
       packages: packages,
+      promos: promos,
       rows: rows,
       cancelledRowIds: <String>{
         for (final BookingRowEntity r in rows)
@@ -271,7 +290,9 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   }) async {
     try {
       await action();
-      if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+      if (state.saveError != null || state.saveNotice != null) {
+        emit(state.copyWith(clearSaveError: true, clearSaveNotice: true));
+      }
       // Закрытия видны и на вкладке «Записи», а там они считаются по списку
       // из базы: перечитываем сразу, не дожидаясь события Realtime.
       if (refresh && !isClosed) add(const AdminRefreshRequested());
@@ -302,8 +323,30 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) =>
-      emit(state.copyWith(tab: event.tab));
+  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(tab: event.tab, clearSaveNotice: true));
+    // Журнал не держим живым: перечитываем при каждом открытии вкладки.
+    if (event.tab == AdminTab.log) add(const AdminAuditRequested());
+  }
+
+  Future<void> _onAuditRequested(
+    AdminAuditRequested event,
+    Emitter<AdminState> emit,
+  ) async {
+    if (state.auditLoading) return;
+    emit(state.copyWith(auditLoading: true, clearAuditError: true));
+    try {
+      final List<AuditEntryEntity> entries = await _repository.fetchAuditLog();
+      emit(state.copyWith(auditEntries: entries, auditLoading: false));
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(auditLoading: false, auditError: e.message));
+    } catch (_) {
+      emit(state.copyWith(
+        auditLoading: false,
+        auditError: 'Не удалось загрузить журнал. Проверьте связь.',
+      ));
+    }
+  }
 
   void _onPriceChanged(AdminPriceChanged event, Emitter<AdminState> emit) {
     // Цены в БД — по клубу: правка распространяется на все залы клуба.
@@ -402,12 +445,32 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     Emitter<AdminState> emit,
   ) async {
     _dropSave('pkg-${event.packageId}');
+    final List<PackageEntity> before = state.packages;
     emit(state.copyWith(
-      packages: state.packages
+      packages: before
           .where((PackageEntity p) => p.id != event.packageId)
           .toList(growable: false),
     ));
-    await _persist(() => _repository.deletePackage(event.packageId), emit);
+    bool? deleted;
+    await _persist(() async {
+      deleted = await _repository.deletePackage(event.packageId);
+    }, emit);
+    if (deleted == true) return;
+    if (deleted == null) {
+      // Запись не прошла (ошибку уже показал _persist) — пакет возвращаем.
+      emit(state.copyWith(packages: before));
+      return;
+    }
+    // По пакету уже есть брони — сервер его выключил, а не удалил: возвращаем
+    // в список выключенным, чтобы сотрудник видел, что произошло.
+    emit(state.copyWith(
+      packages: before
+          .map((PackageEntity p) =>
+              p.id == event.packageId ? p.copyWith(isEnabled: false) : p)
+          .toList(growable: false),
+      saveNotice: 'Пакет уже бронировали, поэтому он выключен, а не удалён: '
+          'в виджете его больше нет, старые брони его сохраняют.',
+    ));
   }
 
   void _onNewPackageChanged(
@@ -501,6 +564,144 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       newPackage: NewPackageDraft(
         hallId: hallId,
         message: 'Пакет «${created.name}» добавлен в «${hall.name}».',
+      ),
+    ));
+  }
+
+  Future<void> _onPromoToggled(
+    AdminPromoToggled event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    PromoEntity? changed;
+    emit(state.copyWith(
+      promos: before.map((PromoEntity p) {
+        if (p.id != event.promoId) return p;
+        return changed = p.copyWith(isActive: !p.isActive);
+      }).toList(growable: false),
+    ));
+    if (changed == null) return;
+    bool ok = false;
+    await _persist(() async {
+      await _repository.setPromoActive(changed!.id, active: changed!.isActive);
+      ok = true;
+    }, emit);
+    if (!ok) emit(state.copyWith(promos: before));
+  }
+
+  Future<void> _onPromoDeleted(
+    AdminPromoDeleted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    emit(state.copyWith(
+      promos: before
+          .where((PromoEntity p) => p.id != event.promoId)
+          .toList(growable: false),
+    ));
+    bool? deleted;
+    await _persist(() async {
+      deleted = await _repository.deletePromo(event.promoId);
+    }, emit);
+    if (deleted == true) return;
+    if (deleted == null) {
+      emit(state.copyWith(promos: before));
+      return;
+    }
+    emit(state.copyWith(
+      promos: before
+          .map((PromoEntity p) =>
+              p.id == event.promoId ? p.copyWith(isActive: false) : p)
+          .toList(growable: false),
+      saveNotice: 'По промокоду уже есть брони, поэтому он выключен, а не '
+          'удалён: клиенты его больше не применят, старые брони сохранят скидку.',
+    ));
+  }
+
+  void _onNewPromoChanged(AdminNewPromoChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(
+      newPromo: state.newPromo.copyWith(
+        code: event.code,
+        kind: event.kind,
+        value: event.value,
+        minStations: event.minStations,
+        message: '',
+        isError: false,
+      ),
+    ));
+  }
+
+  /// Буквы (латиница, кириллица), цифры, дефис и подчёркивание.
+  static final RegExp _promoCodeChars = RegExp(r'^[A-ZА-ЯЁ0-9_-]+$');
+
+  Future<void> _onNewPromoSubmitted(
+    AdminNewPromoSubmitted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final NewPromoDraft d = state.newPromo;
+    if (d.submitting) return;
+    final String code = d.normalizedCode;
+
+    String? error;
+    if (code.length < 3 || code.length > 32) {
+      error = 'Код — от 3 до 32 символов.';
+    } else if (!_promoCodeChars.hasMatch(code)) {
+      error = 'В коде только буквы, цифры, «-» и «_», без пробелов.';
+    } else if (state.promos.any((PromoEntity p) => p.code.toUpperCase() == code)) {
+      error = 'Промокод $code уже есть.';
+    } else if (d.kind == PromoKind.percent && (d.value < 1 || d.value > 100)) {
+      error = 'Процент — от 1 до 100.';
+    } else if (d.value < 1) {
+      error = 'Укажите сумму скидки.';
+    } else if (d.minStations < 1) {
+      error = 'Минимум — одно место.';
+    }
+    if (error != null) {
+      emit(state.copyWith(newPromo: d.copyWith(message: error, isError: true)));
+      return;
+    }
+
+    emit(state.copyWith(newPromo: d.copyWith(submitting: true, message: '')));
+    final PromoEntity draft = PromoEntity(
+      id: 'new',
+      code: code,
+      kind: d.kind,
+      value: d.value,
+      minStations: d.minStations,
+    );
+    final String id;
+    try {
+      id = await _repository.createPromo(draft);
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(message: e.message, isError: true, submitting: false),
+      ));
+      return;
+    } catch (_) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(
+          message: 'Не удалось сохранить промокод. Проверьте связь и права.',
+          isError: true,
+          submitting: false,
+        ),
+      ));
+      return;
+    }
+    final PromoEntity created = PromoEntity(
+      id: id,
+      code: code,
+      kind: draft.kind,
+      value: draft.value,
+      minStations: draft.minStations,
+    );
+    emit(state.copyWith(
+      promos: <PromoEntity>[...state.promos, created]
+        ..sort((PromoEntity a, PromoEntity b) => a.code.compareTo(b.code)),
+      newPromo: NewPromoDraft(
+        kind: d.kind,
+        value: d.value,
+        message: 'Промокод $code (${created.effectLabel}) добавлен — '
+            'клиенты могут вводить его в виджете.',
       ),
     ));
   }
@@ -636,6 +837,28 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   void _onRowClosed(AdminRowClosed event, Emitter<AdminState> emit) =>
       emit(state.copyWith(clearOpenRow: true));
 
+  void _onSearchChanged(AdminSearchChanged event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(searchQuery: event.query));
+
+  void _onSearchResultOpened(
+    AdminSearchResultOpened event,
+    Emitter<AdminState> emit,
+  ) {
+    final BookingRowEntity? row = state.rowById(event.rowId);
+    if (row == null) return;
+    // Бронь могла найтись в другом клубе — переключаемся на него и на её день
+    // (прошедший день сетка не показывает, карточка откроется всё равно).
+    emit(state.copyWith(
+      clubId: row.clubId,
+      intakeOpen: !state.pausedClubIds.contains(row.clubId),
+      filterDay: row.dayIndex >= 0 ? row.dayIndex : state.filterDay,
+      openRowId: row.id,
+      searchQuery: '',
+      clearNewBooking: true,
+      clearNewBookingMonth: true,
+    ));
+  }
+
   /// Контакты, комментарий и предоплата брони — сразу в журнал (во все строки
   /// заказа) и после паузы в наборе — в БД.
   void _onRowEdited(AdminRowEdited event, Emitter<AdminState> emit) {
@@ -675,6 +898,69 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         prepay: edited.prepay,
       ),
     );
+  }
+
+  /// Визит отмечается у заказа целиком: у брони в нескольких залах строка на
+  /// каждый зал, и «пришёл» относится ко всем сразу.
+  Future<void> _onVisitMarked(
+    AdminVisitMarked event,
+    Emitter<AdminState> emit,
+  ) async {
+    final BookingRowEntity? base = state.rowById(event.rowId);
+    if (base == null || state.isCancelled(base.id) || base.status == event.status) {
+      return;
+    }
+    final String orderId = base.orderId;
+    List<BookingRowEntity> withStatus(RecordStatus s) => state.rows
+        .map((BookingRowEntity r) => r.orderId == orderId ? r.copyWith(status: s) : r)
+        .toList(growable: false);
+
+    emit(state.copyWith(rows: withStatus(event.status)));
+    bool saved = false;
+    await _persist(() async {
+      await _repository.setOrderVisit(orderId, status: event.status);
+      saved = true;
+    }, emit);
+    if (!saved) emit(state.copyWith(rows: withStatus(base.status)));
+  }
+
+  /// Перенос брони / смена состава (`booking_reschedule_order`).
+  ///
+  /// Бронь в нескольких залах так не переносится: функция заменяет все места
+  /// заказа отрезками одного зала, и места во втором зале пропали бы молча.
+  Future<void> _onRowRescheduled(
+    AdminRowRescheduled event,
+    Emitter<AdminState> emit,
+  ) async {
+    final BookingRowEntity? base = state.rowById(event.rowId);
+    if (base == null) return;
+    if (state.rows.where((BookingRowEntity r) => r.orderId == base.orderId).length > 1) {
+      emit(state.copyWith(
+        saveError: 'Бронь в нескольких залах так не переносится: отмените её и '
+            'создайте новую запись.',
+      ));
+      return;
+    }
+    if (event.headsetsByHour.every((int v) => v == 0) &&
+        event.consolesByHour.every((int v) => v == 0)) {
+      emit(state.copyWith(saveError: 'Нужно хотя бы одно устройство.'));
+      return;
+    }
+    bool saved = false;
+    await _persist(() async {
+      await _repository.rescheduleOrder(
+        orderId: base.orderId,
+        clubId: base.clubId,
+        hallId: base.hallId,
+        day: _today().add(Duration(days: event.dayIndex)),
+        startMinutes: event.startMinutes,
+        headsetsByHour: event.headsetsByHour,
+        consolesByHour: event.consolesByHour,
+      );
+      saved = true;
+    }, emit);
+    // Время и состав знает только сервер (места подбирает он) — перечитываем.
+    if (saved && !isClosed) add(const AdminRefreshRequested());
   }
 
   // -- новая запись ------------------------------------------------------

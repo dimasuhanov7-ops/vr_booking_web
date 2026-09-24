@@ -62,10 +62,29 @@ class BookingState extends Equatable {
     this.accountListOpen = false,
     this.createdOrderId,
     this.errorMessage,
+    this.promoInput = '',
+    this.promo,
+    this.promoError,
+    this.promoChecking = false,
   });
 
   /// Форма / успех.
   final BookingStage view;
+
+  /// Что введено в поле промокода.
+  final String promoInput;
+
+  /// Проверенный сервером промокод.
+  final DiscountEntity? promo;
+
+  /// Почему промокод не принят.
+  final String? promoError;
+
+  /// Промокод проверяется.
+  final bool promoChecking;
+
+  /// Промокод применяется к текущему выбору: хватает станций.
+  bool get promoApplies => promo != null && pickedIds.length >= promo!.minStations;
 
   /// Статус.
   final BookingStatus status;
@@ -467,6 +486,12 @@ class BookingState extends Equatable {
     bool? accountListOpen,
     String? createdOrderId,
     String? errorMessage,
+    String? promoInput,
+    DiscountEntity? promo,
+    bool clearPromo = false,
+    String? promoError,
+    bool clearPromoError = false,
+    bool? promoChecking,
     bool clearSlot = false,
     bool clearAccount = false,
     bool clearHall = false,
@@ -508,6 +533,10 @@ class BookingState extends Equatable {
       accountListOpen: accountListOpen ?? this.accountListOpen,
       createdOrderId: createdOrderId ?? this.createdOrderId,
       errorMessage: clearError ? errorMessage : (errorMessage ?? this.errorMessage),
+      promoInput: promoInput ?? this.promoInput,
+      promo: clearPromo ? null : (promo ?? this.promo),
+      promoError: clearPromoError ? null : (promoError ?? this.promoError),
+      promoChecking: promoChecking ?? this.promoChecking,
     );
   }
 
@@ -544,5 +573,9 @@ class BookingState extends Equatable {
         accountListOpen,
         createdOrderId,
         errorMessage,
+        promoInput,
+        promo,
+        promoError,
+        promoChecking,
       ];
 }

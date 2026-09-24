@@ -513,6 +513,31 @@ class AdminErrorBox extends StatelessWidget {
   }
 }
 
+/// Нейтральная плашка-пояснение: не ошибка, но сотруднику надо знать
+/// (например, пакет с бронями выключен, а не удалён).
+class AdminNoticeBox extends StatelessWidget {
+  /// Создаёт плашку.
+  const AdminNoticeBox(this.message, {super.key});
+
+  /// Текст пояснения.
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AdminColors.tile,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AdminColors.borderInput),
+      ),
+      child: Text(message,
+          style: const TextStyle(fontSize: 13, height: 1.35, color: AdminColors.textSoft)),
+    );
+  }
+}
+
 /// Подтверждение действия, которое заметят клиенты или которое не вернуть:
 /// удаление пакета, отмена брони, закрытие зала или дня.
 ///

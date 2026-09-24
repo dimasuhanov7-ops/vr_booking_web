@@ -11,7 +11,7 @@ class SlotGeneratorService {
   /// За сколько до начала сеанса закрывается запись.
   ///
   /// Зашито и в БД: `booking_create_order` отвечает `TOO_LATE_TO_BOOK`
-  /// (миграция `20260918120200_online_booking_lead_time`). Менять вместе.
+  /// (миграция `20260910083531_online_booking_lead_time`). Менять вместе.
   static const Duration bookingLead = Duration(minutes: 30);
 
   /// Генерирует старты сеансов на дату [day].

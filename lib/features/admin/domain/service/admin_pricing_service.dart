@@ -57,9 +57,23 @@ class AdminPricingService {
     return null;
   }
 
-  /// Итоговая стоимость записи: цена пакета (если состав совпал) либо по часам.
-  /// При разном составе по часам суммируем каждый час отдельно.
+  /// Итоговая стоимость записи: [baseCost] минус промокод брони.
   int rowCost({
+    required BookingRowEntity row,
+    required HallPriceEntity price,
+    required List<PackageEntity> packages,
+  }) {
+    final int base = baseCost(row: row, price: price, packages: packages);
+    return base - promoDiscount(row: row, base: base);
+  }
+
+  /// Скидка по промокоду брони с суммы [base] (0 — промокода нет).
+  int promoDiscount({required BookingRowEntity row, required int base}) =>
+      row.promo?.amountOn(base) ?? 0;
+
+  /// Стоимость до промокода: цена пакета (если состав совпал) либо по часам.
+  /// При разном составе по часам суммируем каждый час отдельно.
+  int baseCost({
     required BookingRowEntity row,
     required HallPriceEntity price,
     required List<PackageEntity> packages,

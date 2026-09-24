@@ -122,6 +122,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
             : noRoom
                 ? 'На это время всё занято — выберите другое время или день.'
                 : '';
+    // Пока запись уходит на сервер, повторное нажатие не должно создать дубль.
     final bool canSubmit = !noRoom && !d.saving && times.isNotEmpty;
 
     return AdminDrawerShell(

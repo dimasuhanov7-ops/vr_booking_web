@@ -42,6 +42,15 @@ class BookingWindowFailure extends BookingFailure {
       : super('Выбранное время недоступно для брони. Проверьте дату и рабочие часы клуба.');
 }
 
+/// До начала сеанса меньше 30 минут — онлайн-запись на него уже закрыта
+/// (`TOO_LATE_TO_BOOK` в `booking_create_order`).
+class BookingTooLateToBookFailure extends BookingFailure {
+  /// Создаёт ошибку.
+  const BookingTooLateToBookFailure()
+      : super('Онлайн-запись закрывается за 30 минут до начала сеанса. '
+            'Выберите время позже или позвоните в клуб.');
+}
+
 /// С этого номера бронируют слишком часто (антиспам на стороне БД).
 class BookingRateLimitedFailure extends BookingFailure {
   /// Создаёт ошибку превышения частоты.

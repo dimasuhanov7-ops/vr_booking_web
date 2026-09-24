@@ -1,114 +1,22 @@
--- Ступени цены: «до N станций одна цена за час, дальше другая».
---
--- Цена берётся из строки booking_prices с наибольшим min_qty, не превышающим
--- число станций этого типа в отрезке брони. Ступень применяется ко всем
--- станциям сразу (решение заказчика 2026-09-16): 8 шлемов по цене ступени,
--- а не «6 по первой цене и 2 по второй».
---
--- Базовая строка тарифа — min_qty = 1, она есть всегда. Ступеней может быть
--- сколько угодно; админка сейчас редактирует одну дополнительную для шлемов.
+drop function if exists public.booking_create_order(
+  uuid, text, text, jsonb, int, text, text, text, uuid);
 
-alter table public.booking_prices
-  add column if not exists min_qty integer not null default 1;
-
-alter table public.booking_prices
-  drop constraint if exists booking_prices_min_qty_check;
-alter table public.booking_prices
-  add constraint booking_prices_min_qty_check check (min_qty >= 1);
-
--- Уникальность теперь с учётом ступени: у одного типа станции в один тип дня
--- может быть несколько цен — по одной на ступень.
-alter table public.booking_prices
-  drop constraint if exists booking_prices_club_id_station_type_day_kind_key;
-alter table public.booking_prices
-  drop constraint if exists booking_prices_club_type_day_qty_key;
-alter table public.booking_prices
-  add constraint booking_prices_club_type_day_qty_key
-  unique (club_id, station_type, day_kind, min_qty);
-
--- Старая сигнатура удаляется: с параметром по умолчанию вызов с тремя
--- аргументами стал бы неоднозначным.
-drop function if exists public.booking_station_price(uuid, timestamptz, int);
-
-create or replace function public.booking_station_price(
-  p_station_id uuid,
-  p_starts_at  timestamptz,
-  p_minutes    integer,
-  p_qty        integer default 1
-)
-returns numeric
-language plpgsql
-stable
-security definer
-set search_path to 'public'
-as $function$
-declare v_type text; v_club_id uuid; v_tz text; v_rate numeric;
-begin
-  select s.type, c.id, c.timezone into v_type, v_club_id, v_tz
-  from public.booking_stations s
-  join public.booking_rooms r on r.id = s.room_id
-  join public.booking_clubs c on c.id = r.club_id
-  where s.id = p_station_id;
-  if not found then raise exception 'STATION_NOT_FOUND' using errcode = 'P0002'; end if;
-
-  -- Подходящая ступень: самая высокая из тех, что не больше количества.
-  select p.price_per_hour into v_rate
-  from public.booking_prices p
-  where p.club_id = v_club_id and p.station_type = v_type
-    and p.day_kind = public.booking_day_kind(p_starts_at, v_tz)
-    and p.min_qty <= greatest(coalesce(p_qty, 1), 1)
-  order by p.min_qty desc
-  limit 1;
-
-  return round(coalesce(v_rate, 0) * p_minutes / 60.0);
-end;
-$function$;
-
-revoke all on function public.booking_station_price(uuid, timestamptz, int, int)
-  from public, anon, authenticated;
-
--- booking_quote клиентом не используется, но пусть считает по тем же правилам.
-create or replace function public.booking_quote(
-  p_station_ids uuid[],
-  p_starts_at   timestamptz,
-  p_minutes     integer
-)
-returns table(station_id uuid, price numeric)
-language sql
-stable
-security definer
-set search_path to 'public'
-as $function$
-  with kit as (
-    select s.id, s.type,
-           count(*) filter (where s.type = 'vr_headset') over () as vr,
-           count(*) filter (where s.type = 'ps5')        over () as ps
-    from public.booking_stations s
-    where s.id = any (p_station_ids)
-  )
-  select k.id,
-         public.booking_station_price(
-           k.id, p_starts_at, p_minutes,
-           (case when k.type = 'ps5' then k.ps else k.vr end)::int)
-  from kit k;
-$function$;
-
-create or replace function public.booking_create_order(
-  p_club_id uuid,
-  p_client_name text,
-  p_client_phone text,
-  p_segments jsonb,
-  p_people_count integer default null::integer,
-  p_discount_code text default null::text,
-  p_comment text default null::text,
-  p_source text default 'site'::text,
-  p_package_id uuid default null::uuid
+create function public.booking_create_order(
+  p_club_id       uuid,
+  p_client_name   text,
+  p_client_phone  text,
+  p_segments      jsonb,
+  p_people_count  int     default null,
+  p_discount_code text    default null,
+  p_comment       text    default null,
+  p_source        text    default 'site',
+  p_package_id    uuid    default null
 )
 returns uuid
 language plpgsql
 security definer
-set search_path to 'public'
-as $function$
+set search_path = public
+as $fn$
 declare
   v_club        public.booking_clubs;
   v_discount    public.booking_discounts;
@@ -129,8 +37,6 @@ declare
   v_local_start timestamp;
   v_local_end   timestamp;
   v_seg_count   int;
-  v_seg_vr      int;
-  v_seg_ps      int;
   v_phone       text;
   v_staff       boolean;
   v_source      text;
@@ -220,10 +126,6 @@ begin
     if v_seg_start <= now() then
       raise exception 'STARTS_IN_PAST' using errcode = 'P0001';
     end if;
-    -- Запись закрывается за 30 минут до начала (кроме персонала).
-    if not v_staff and v_seg_start < now() + interval '30 minutes' then
-      raise exception 'TOO_LATE_TO_BOOK' using errcode = 'P0001';
-    end if;
 
     if v_prev_end is not null and v_seg_start < v_prev_end then
       raise exception 'BAD_DURATION' using errcode = 'P0001';
@@ -272,21 +174,10 @@ begin
     v_max_end   := greatest(v_max_end, v_seg_end);
     v_all_ids   := v_all_ids || v_seg_ids;
 
-    -- Цена станции зависит от того, сколько станций того же типа в отрезке:
-    -- «до 6 шлемов одна цена, дальше другая» (ступени в booking_prices.min_qty).
-    select count(*) filter (where s.type = 'vr_headset'),
-           count(*) filter (where s.type = 'ps5')
-      into v_seg_vr, v_seg_ps
-      from public.booking_stations s
-     where s.id = any (v_seg_ids);
-
     insert into public.booking_order_items (order_id, station_id, starts_at, ends_at, price)
-    select v_order_id, s.id, v_seg_start, v_seg_end,
-           public.booking_station_price(
-             s.id, v_seg_start, v_seg_minutes,
-             case when s.type = 'ps5' then v_seg_ps else v_seg_vr end)
-    from public.booking_stations s
-    where s.id = any (v_seg_ids);
+    select v_order_id, sid, v_seg_start, v_seg_end,
+           public.booking_station_price(sid, v_seg_start, v_seg_minutes)
+    from unnest(v_seg_ids) as sid;
   end loop;
 
   if round(extract(epoch from (v_max_end - v_min_start)) / 60) > 300 then
@@ -331,4 +222,12 @@ begin
 
   return v_order_id;
 end;
-$function$;
+$fn$;
+
+comment on function public.booking_create_order is
+  'Единственный способ создать бронь. Отрезки (p_segments), лимиты по ключу телефона (3/час, 5 активных), пауза приёма и закрытые окна.';
+
+revoke all on function public.booking_create_order(
+  uuid, text, text, jsonb, int, text, text, text, uuid) from public;
+grant execute on function public.booking_create_order(
+  uuid, text, text, jsonb, int, text, text, text, uuid) to anon, authenticated;

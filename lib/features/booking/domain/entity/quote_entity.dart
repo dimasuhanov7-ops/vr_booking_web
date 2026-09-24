@@ -32,6 +32,9 @@ class QuoteEntity extends Equatable {
     this.discountLabel = '',
     this.netOverride,
     this.packageId,
+    this.promoPercent = 0,
+    this.promoFixed = 0,
+    this.promoLabel = '',
   });
 
   /// Пустой расчёт.
@@ -57,19 +60,65 @@ class QuoteEntity extends Equatable {
   /// чтобы сервер записал бронь как пакетную.
   final String? packageId;
 
-  /// Есть ли скидка.
-  bool get hasDiscount =>
-      discountPercent > 0 || (netOverride != null && netOverride! < gross);
+  /// Промокод: процент от суммы после пакета.
+  final num promoPercent;
 
-  /// Сумма скидки, ₽ (округление до рубля).
+  /// Промокод: фиксированная сумма, ₽ (не больше суммы после пакета).
+  final num promoFixed;
+
+  /// Подпись промокода, например «Промокод VRPARTY».
+  final String promoLabel;
+
+  /// Есть ли скидка (пакет дешевле почасовой, процент или промокод).
+  bool get hasDiscount =>
+      discountPercent > 0 || (netOverride != null && netOverride! < gross) || hasPromo;
+
+  /// Выгода пакета или процентной скидки, ₽ (без промокода).
   num get discountAmount => netOverride != null
       ? (gross - netOverride!).clamp(0, gross)
       : (gross * discountPercent / 100).round();
 
+  /// Сумма до промокода: цена пакета или почасовая за вычетом процента.
+  num get _beforePromo => netOverride ?? (gross - discountAmount);
+
+  /// Скидка по промокоду, ₽. Те же правила — в админке и `booking-mirror`.
+  num get promoAmount {
+    final num base = _beforePromo;
+    if (base <= 0) return 0;
+    if (promoPercent > 0) return (base * promoPercent / 100).round();
+    return promoFixed.clamp(0, base);
+  }
+
+  /// Применён ли промокод.
+  bool get hasPromo => promoAmount > 0;
+
   /// Итог к оплате, ₽.
-  num get net => netOverride ?? (gross - discountAmount);
+  num get net => _beforePromo - promoAmount;
+
+  /// Копия с промокодом (или без него).
+  QuoteEntity withPromo({num percent = 0, num fixed = 0, String label = ''}) =>
+      QuoteEntity(
+        lines: lines,
+        gross: gross,
+        discountPercent: discountPercent,
+        discountLabel: discountLabel,
+        netOverride: netOverride,
+        packageId: packageId,
+        promoPercent: percent,
+        promoFixed: fixed,
+        promoLabel: label,
+      );
 
   @override
-  List<Object?> get props =>
-      <Object?>[lines, gross, discountPercent, discountLabel, netOverride, packageId];
+  List<Object?> get props => <Object?>[
+        lines,
+        gross,
+        discountPercent,
+        discountLabel,
+        netOverride,
+        packageId,
+        promoPercent,
+        promoFixed,
+        promoLabel,
+      ];
 }

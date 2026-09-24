@@ -198,6 +198,9 @@ class BookingRepository implements IBookingRepository {
     if (m.contains('TOO_LATE_TO_CANCEL')) {
       return const BookingTooLateToCancelFailure();
     }
+    if (m.contains('TOO_LATE_TO_BOOK')) {
+      return const BookingTooLateToBookFailure();
+    }
     if (m.contains('INTAKE_CLOSED')) return const BookingIntakeClosedFailure();
     if (m.contains('SLOT_CLOSED')) return const BookingSlotClosedFailure();
     if (m.contains('RATE_LIMITED')) return const BookingRateLimitedFailure();

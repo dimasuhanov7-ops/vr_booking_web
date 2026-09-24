@@ -15,7 +15,7 @@
   ТОЧКА ИНТЕГРАЦИИ  —  Supabase Edge Function `booking-intake`
   • валидирует вход
   • вызывает RPC booking_create_order (атомарно, конфликт → 23P01)
-  • на успех: уведомление в Telegram-группу персонала (fire-and-forget)
+  • уведомления и Google Таблица — booking-mirror по триггеру в БД (docs/MIRROR.md)
   • [потом] вебхук в приложение / Bukza / что угодно
         │
         ▼
@@ -111,7 +111,7 @@ CORS: функция отдаёт `Access-Control-Allow-Origin` (по умолч
 ## Edge Function `booking-intake`
 
 Код: [`supabase/functions/booking-intake/index.ts`](../supabase/functions/booking-intake/index.ts).
-**Задеплоена** на `cpjmirlujtfuzvdnysyx` (2026-09-04, v1, `verify_jwt=true`).
+**Задеплоена** на `cpjmirlujtfuzvdnysyx` (v11, `verify_jwt=true`; первая версия — 2026-09-04).
 URL: `https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`.
 Проверены все эндпоинты (clubs/stations/prices/availability/discount/reservations,
 конфликт → 409 SLOT_TAKEN, без токена → 401).
@@ -122,22 +122,21 @@ URL: `https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`.
 | `SUPABASE_URL` | берётся автоматически |
 | `SUPABASE_SERVICE_ROLE_KEY` | берётся автоматически; функция ходит в БД под ним |
 | `BOOKING_INTAKE_KEY` | ожидаемый Bearer-ключ (если пусто — принимается любой валидный `anon`/`service`) |
-| `BOOKING_CORS_ORIGIN` | `*` или конкретный origin сайта |
-| `TELEGRAM_BOT_TOKEN` | токен бота для уведомлений (пусто — уведомления off) |
-| `TELEGRAM_CHAT_ID` | id группы/чата персонала |
+| `BOOKING_CORS_ORIGIN` | `*` или список origin через запятую |
 
 Деплой (после применения миграции `booking_*`):
 ```bash
 supabase functions deploy booking-intake --project-ref cpjmirlujtfuzvdnysyx
 supabase secrets set --project-ref cpjmirlujtfuzvdnysyx \
-  TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... BOOKING_CORS_ORIGIN=https://booking.vrclub.example
+  BOOKING_CORS_ORIGIN=https://booking.effectvr.ru,https://vrayarena.ru
 ```
 
 ## Telegram
 
-1. **Уведомления персоналу** — внутри `booking-intake` после успешного `POST /reservations`:
-   `sendMessage` в `TELEGRAM_CHAT_ID`. Не блокирует бронь (ошибка Telegram → бронь всё равно создана).
-   Альтернатива без функции: триггер в БД + `pg_net` → Bot API (см. миграцию, сейчас не включено).
+1. **Уведомления персоналу** — функция `booking-mirror`, которую вызывает триггер
+   на `booking_orders` через `pg_net`: новая бронь, отмена, возврат — из любого
+   источника (виджет, админка, API). Секреты `TELEGRAM_*` задаются у неё. Подробно —
+   [`MIRROR.md`](MIRROR.md).
 
 2. **Бронирование через бота** — бот/Mini App это просто ещё один клиент:
    `GET /clubs|/stations|/prices|/availability` для показа, `POST /reservations` с `source: "tg"`.

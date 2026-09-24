@@ -9,8 +9,9 @@ import '../../domain/state/admin_bloc.dart';
 import '../admin_format.dart';
 import '../admin_theme.dart';
 import 'admin_atoms.dart';
+import 'promos_card.dart';
 
-/// Вкладка «Цены» — тарифы клуба и превью длительности.
+/// Вкладка «Цены» — тарифы клуба, ступени, превью длительности и промокоды.
 ///
 /// В БД цены заданы на клуб, а не на зал, поэтому карточка одна. Раньше
 /// показывалось по карточке на зал с одинаковыми полями: правка одной молча
@@ -48,6 +49,8 @@ class PricesTab extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _DurationPreview(price: price),
+        const SizedBox(height: 14),
+        PromosCard(state: state, accent: accent),
       ],
     );
   }

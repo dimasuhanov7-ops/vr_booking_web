@@ -1,23 +1,11 @@
--- Зеркало броней: Google Таблица + уведомления в служебный Telegram-чат.
---
--- На каждую новую бронь, отмену и правку триггер асинхронно (pg_net) вызывает
--- Edge Function `booking-mirror`. Бронь клиента вызова не ждёт и не падает,
--- даже если Google или Telegram недоступны. Раз в сутки pg_cron просит функцию
--- досинхронизировать всё, что не доехало. Настройка — docs/MIRROR.md.
-
--- Что уже ушло наружу: о каком статусе написали в Telegram и когда строка
--- последний раз попала в таблицу. Нужно, чтобы повторы не давали дублей.
 create table if not exists public.booking_mirror_state (
   order_id        uuid primary key references public.booking_orders(id) on delete cascade,
   notified_status text,
   synced_at       timestamptz
 );
 alter table public.booking_mirror_state enable row level security;
--- Политик нет намеренно: читает и пишет только функция с service role.
 revoke all on public.booking_mirror_state from anon, authenticated;
 
--- Секрет вызова функции генерируется в базе и хранится в Vault — вводить его
--- руками никому не нужно.
 select vault.create_secret(
   encode(extensions.gen_random_bytes(32), 'hex'),
   'booking_mirror_secret',
@@ -25,7 +13,6 @@ select vault.create_secret(
 )
 where not exists (select 1 from vault.secrets where name = 'booking_mirror_secret');
 
--- Секрет для проверки на стороне функции — только service role.
 create or replace function public.booking_mirror_secret()
 returns text
 language sql
@@ -40,9 +27,6 @@ $$;
 revoke all on function public.booking_mirror_secret() from public, anon, authenticated;
 grant execute on function public.booking_mirror_secret() to service_role;
 
--- «Занять» отправку уведомления о статусе заказа. Возвращает прошлый
--- отправленный статус ('' — ещё ничего не отправляли) или null, если об этом
--- статусе уже написали. Атомарно: два одновременных вызова не отправят дважды.
 create or replace function public.booking_mirror_claim_notice(p_order_id uuid, p_status text)
 returns text
 language plpgsql
@@ -71,7 +55,6 @@ begin
   values (p_order_id, p_status)
   on conflict (order_id) do nothing;
   if not found then
-    -- Параллельный вызов успел раньше — он и отправит.
     return null;
   end if;
   return '';
@@ -80,7 +63,6 @@ $$;
 revoke all on function public.booking_mirror_claim_notice(uuid, text) from public, anon, authenticated;
 grant execute on function public.booking_mirror_claim_notice(uuid, text) to service_role;
 
--- Асинхронный вызов функции. Без секрета в Vault молча ничего не делает.
 create or replace function public.booking_mirror_call(p_body jsonb)
 returns void
 language plpgsql
@@ -121,7 +103,6 @@ begin
   perform public.booking_mirror_call(jsonb_build_object('order_id', new.id));
   return null;
 exception when others then
-  -- Зеркало не должно ломать бронь ни при каких обстоятельствах.
   return null;
 end;
 $$;
@@ -134,7 +115,6 @@ create trigger booking_orders_mirror
   for each row
   execute function public.booking_mirror_on_order();
 
--- Ночная досинхронизация: 22:00 UTC = 03:00 по Перми.
 select cron.schedule(
   'booking-mirror-resync',
   '0 22 * * *',

@@ -31,6 +31,7 @@ import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
 import '../components/package_cards.dart';
 import '../components/package_hint.dart';
+import '../components/promo_field.dart';
 import '../components/session_hours.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
@@ -673,6 +674,18 @@ class _FormBody extends StatelessWidget {
           onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
         ),
         const SizedBox(height: 12),
+        PromoField(
+          input: state.promoInput,
+          promo: state.promo,
+          applies: state.promoApplies,
+          checking: state.promoChecking,
+          error: state.promoError,
+          accent: BookingColors.accentFor(state.club?.slug),
+          onChanged: (String v) => bloc.add(BookingPromoInputChanged(v)),
+          onSubmit: () => bloc.add(const BookingPromoSubmitted()),
+          onClear: () => bloc.add(const BookingPromoCleared()),
+        ),
+        const SizedBox(height: 12),
         const _ConsentNote(),
       ];
 
@@ -762,11 +775,19 @@ class _FormBody extends StatelessWidget {
   Widget _conflict(BookingBloc bloc) {
     final StationEntity? alt = state.conflictAlternative;
     final int kept = state.pickedIds.length;
+    // Живая занятость может снять сразу несколько станций.
+    final int lost = state.takenIds.isEmpty ? 1 : state.takenIds.length;
+    final String title = lost == 1
+        ? 'Одно место заняли, пока вы оформляли'
+        : '$lost ${BookingFormat.plural(lost, 'место', 'места', 'мест')} '
+            'заняли, пока вы оформляли';
     final String keepLabel = alt != null
         ? 'Взять ${alt.label}'
         : kept == 0
             ? 'Выбрать другое время'
-            : 'Продолжить без него';
+            : lost == 1
+                ? 'Продолжить без него'
+                : 'Продолжить без них';
     final String text = alt != null
         ? (kept == 0
             ? 'Свободно место ${alt.label} в этом же зале.'
@@ -778,7 +799,7 @@ class _FormBody extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: ConflictBanner(
-        title: 'Одно место заняли, пока вы оформляли',
+        title: title,
         text: text,
         keepLabel: keepLabel,
         onKeep: () => bloc.add(const BookingConflictResolved()),

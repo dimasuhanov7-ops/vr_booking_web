@@ -1,4 +1,5 @@
 import '../../domain/entity/booking_row_entity.dart';
+import '../../domain/entity/promo_entity.dart';
 
 /// Разбор заказа `booking_orders` (с позициями и пакетом) в записи админки.
 ///
@@ -121,15 +122,34 @@ abstract final class BookingRowDto {
       source: _source(json['source'] as String? ?? 'site'),
       packageName: pkg?['name'] as String?,
       isCancelled: status == 'cancelled',
+      prepay: (json['prepay'] as num?)?.toInt() ?? 0,
+      note: json['comment'] as String? ?? '',
       hourHeadsets: varies ? vrByHour : null,
       hourConsoles: varies ? psByHour : null,
-      note: json['comment'] as String? ?? '',
-      prepay: (json['prepay'] as num?)?.toInt() ?? 0,
+      promo: _promo(json),
+    );
+  }
+
+  /// Скидка брони из вложенного `booking_discounts`. Пока у сотрудника нет
+  /// права читать таблицу (миграция online_booking_discounts_admin), PostgREST
+  /// отдаёт здесь `null` — бронь считается без скидки.
+  static PromoEntity? _promo(Map<String, dynamic> json) {
+    final Map<String, dynamic>? d =
+        json['booking_discounts'] as Map<String, dynamic>?;
+    if (d == null) return null;
+    final String? code = d['code'] as String?;
+    final String? title = d['title'] as String?;
+    return PromoEntity(
+      id: json['discount_id'] as String? ?? '',
+      code: code ?? title ?? 'скидка',
+      kind: PromoKind.fromRaw(d['kind'] as String?),
+      value: PromoKind.valueOf(d['value']),
     );
   }
 
   static RecordStatus _status(String raw) => switch (raw) {
-        'completed' => RecordStatus.paid,
+        'completed' => RecordStatus.visited,
+        'no_show' => RecordStatus.noShow,
         'confirmed' => RecordStatus.confirmed,
         // Отменённая помечается отдельно (isCancelled), статус не «теряем».
         'cancelled' => RecordStatus.confirmed,

@@ -54,7 +54,8 @@ class BookingRepositoryMock implements IBookingRepository {
       <String, List<StationEntity>>{
     'club-effect': _room('e-main', 'Зал', headsets: 4, consoles: 2, base: 1),
     'club-vray': <StationEntity>[
-      ..._room('v-big', 'Большой зал', headsets: 12, consoles: 0, base: 1),
+      // Арена — две половины по 6 шлемов (миграция online_booking_arena_halves).
+      ..._room('v-big', 'Большой зал', headsets: 12, consoles: 0, base: 1, perRow: 6),
       ..._room('v-small', 'Малый зал', headsets: 4, consoles: 2, base: 20),
     ],
   };
@@ -149,12 +150,29 @@ class BookingRepositoryMock implements IBookingRepository {
     return _delay(busy);
   }
 
+  /// Демо-промокоды: как строки `booking_discounts`.
+  static const List<DiscountEntity> _promos = <DiscountEntity>[
+    DiscountEntity(
+        id: 'd1', code: 'VRPARTY', kind: DiscountKind.percent, value: 10, minStations: 2),
+    DiscountEntity(
+        id: 'd2', code: 'MINUS500', kind: DiscountKind.fixed, value: 500, minStations: 1),
+  ];
+
   @override
   Future<DiscountEntity?> resolveDiscount({
     String? code,
     required int stationCount,
-  }) async =>
-      null; // скидок пока нет
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final String c = (code ?? '').trim().toUpperCase();
+    if (c.isEmpty) return null; // автоскидок в демо нет
+    for (final DiscountEntity d in _promos) {
+      if (d.code != c) continue;
+      if (stationCount < d.minStations) throw DiscountMinStationsFailure(d.minStations);
+      return d;
+    }
+    throw const DiscountNotFoundFailure();
+  }
 
   @override
   Future<String> createReservation(ReservationRequestEntity request) async {
@@ -204,6 +222,7 @@ class BookingRepositoryMock implements IBookingRepository {
     required int headsets,
     required int consoles,
     required int base,
+    int perRow = 4,
   }) {
     final List<StationEntity> out = <StationEntity>[];
     // Как в БД: арена на 12 шлемов — две половины по 6, остальные залы — по 4.
