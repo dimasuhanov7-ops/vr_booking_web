@@ -710,11 +710,19 @@ class _FormBody extends StatelessWidget {
   Widget _conflict(BookingBloc bloc) {
     final StationEntity? alt = state.conflictAlternative;
     final int kept = state.pickedIds.length;
+    // Живая занятость может снять сразу несколько станций.
+    final int lost = state.takenIds.isEmpty ? 1 : state.takenIds.length;
+    final String title = lost == 1
+        ? 'Одну станцию забрали, пока вы оформляли'
+        : '$lost ${BookingFormat.plural(lost, 'станцию', 'станции', 'станций')} '
+            'забрали, пока вы оформляли';
     final String keepLabel = alt != null
         ? 'Взять ${alt.label}'
         : kept == 0
             ? 'Выбрать другое время'
-            : 'Продолжить без неё';
+            : lost == 1
+                ? 'Продолжить без неё'
+                : 'Продолжить без них';
     final String text = alt != null
         ? (kept == 0
             ? 'Свободна ${alt.label} в этом же зале.'
@@ -726,7 +734,7 @@ class _FormBody extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: ConflictBanner(
-        title: 'Одну станцию забрали, пока вы оформляли',
+        title: title,
         text: text,
         keepLabel: keepLabel,
         onKeep: () => bloc.add(const BookingConflictResolved()),

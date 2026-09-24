@@ -2,10 +2,8 @@
 
 Функция [`booking-mirror`](../supabase/functions/booking-mirror/index.ts) и миграция
 [`20260915081448_online_booking_mirror`](../supabase/migrations/20260915081448_online_booking_mirror.sql).
-Обе задеплоены на `cpjmirlujtfuzvdnysyx` (функция — v9, `verify_jwt=false`).
-
-> ⚠️ Код функции в репозитории новее v9: учитывает промокод брони (см. ниже
-> «Стоимость»). Нужен редеплой — до него сумма в таблице и Telegram без скидки.
+Обе задеплоены на `cpjmirlujtfuzvdnysyx` (функция — v10 от 24.09, `verify_jwt=false`;
+v10 = v9 + скидка промокода в сумме, см. «Стоимость»).
 
 > Этот файл восстановлен по коду функции и миграции, выгруженным с прода
 > 2026-09-24: исходные `docs/MIRROR.md` и Apps Script в репозиторий не попали.

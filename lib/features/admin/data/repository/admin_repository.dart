@@ -278,9 +278,9 @@ class AdminRepository implements IAdminRepository {
             .select('id,actor_id,entity,action,before,after,created_at')
             .order('created_at', ascending: false)
             .limit(limit);
-        // Имена сотрудников. Пока не применена миграция
-        // online_booking_staff_read_all, RLS отдаёт только свою строку —
-        // остальные покажутся коротким id.
+        // Имена сотрудников: всех видно по миграции
+        // online_booking_staff_read_all; без неё RLS отдаёт только свою
+        // строку, и остальные показываются коротким id.
         final List<dynamic> staff =
             await _client.from('booking_staff').select('user_id,name');
         final Map<String, String> names = <String, String>{
