@@ -13,41 +13,21 @@
 (часть миграций и функций) была применена к проду, но в GitHub не попала.
 24.09 недостающее выгружено с прода в репозиторий:
 
-- **Миграции.** Все 23 миграции `online_booking_*` из журнала прода теперь есть
-  в `supabase/migrations/`. Восемь новых файлов совпадают с продом побайтно
-  (md5 по `supabase_migrations.schema_migrations`). Первые четыре файла
-  (`20260904…`) совпадают с журналом и по версии, у остальных имя ≠ версии на
-  проде — соответствие ниже. Старые 15 файлов по коду совпадают
-  с применёнными; расходятся только тексты комментариев. `…_feature` правили
-  после применения (там уже `btree_gist` в `extensions`, `sort_order`, revoke),
-  итоговое состояние то же.
+- **Миграции.** Все 23 миграции `online_booking_*` из журнала прода есть в
+  `supabase/migrations/`, **имя файла = версия и имя на проде** (выровнено
+  24.09). Восемь файлов, выгруженных с прода, совпадают с ним побайтно (md5
+  по `supabase_migrations.schema_migrations`); остальные по коду совпадают с
+  применёнными, расходятся только комментарии. `…_feature` правили после
+  применения (там уже `btree_gist` в `extensions`, `sort_order`, revoke) —
+  итоговое состояние то же. В SQL-комментариях старых файлов остались прежние
+  имена соседних миграций — это история, содержимое не трогали.
 
-  | Файл в репозитории | Версия на проде |
-  |---|---|
-  | `20260907120000_online_booking_durations` | `20260908191029` |
-  | `20260908120000_online_booking_packages` | `20260908191137` |
-  | `20260909120000_online_booking_staff_auth` | `20260908191216` |
-  | `20260910120000_online_booking_hourly_segments` | `20260908191300` |
-  | `20260911120000_online_booking_lockdown` | `20260908191400` |
-  | `20260912120000_online_booking_revoke_is_staff_anon` | `20260908191609` |
-  | `20260913120000_online_booking_availability` | `20260908223610` |
-  | `20260914120000_online_booking_order_respects_closures` | `20260908223656` |
-  | `20260915120000_online_booking_audit_log` | `20260908224041` |
-  | `20260916120000_online_booking_client_cancel` | `20260908224145` |
-  | `20260917120000_online_booking_phone_key` | `20260908224452` |
-  | `20260918120000_online_booking_limits_use_phone_key` | `20260908224539` |
-  | `20260918120100_online_booking_perm_timezone` | `20260910072736` |
-  | `20260918120200_online_booking_arena_halves` | `20260910072755` |
-  | `20260918120300_online_booking_lead_time` | `20260910083531` |
-  | `20260918120400_online_booking_prepay_phone_key` | `20260910101723` |
-  | `20260918120500_online_booking_mirror` | `20260915081448` |
-  | `20260919120000_online_booking_price_tiers` | `20260916163400` |
-  | `20260920120000_online_booking_admin_realtime` | `20260918160339` |
-
-  Из-за разных версий `supabase db push` против прода **не запускать**: журналы
-  не сходятся, и он либо откажется, либо попробует применить файлы заново.
-  Новые миграции — через MCP `apply_migration` (или сначала выровнять журнал
-  `supabase migration repair`).
+  **`supabase db push` здесь не работает и не нужен:** база общая с
+  приложением менеджера `vr_club_app`, его миграции (смены, пуши и т. п.) тоже
+  в журнале, а в этой папке их нет — CLI откажется. Новую миграцию применять
+  через Supabase MCP `apply_migration` (или SQL-редактор); сервер присвоит ей
+  версию-время применения — после этого **переименуйте файл под эту версию**
+  (`list_migrations`), чтобы репозиторий и журнал не разъезжались снова.
 - **Edge Functions.** `booking-intake` в репозитории = задеплоенная v11 (без
   Telegram). `booking-mirror` (v9) добавлена — уведомления в Telegram и Google
   Таблица по триггеру, см. [`docs/MIRROR.md`](docs/MIRROR.md). Apps Script
@@ -102,7 +82,7 @@
 
 | Тема | Решение |
 |---|---|
-| Длительности сеанса | **60 / 120 / 180 / 240** мин (1,5 ч нет, есть 4 ч). Шаг сетки = длительность + пауза клуба (Effect 10 мин, V-Ray 0). Зашито в RLS/RPC — миграция `20260907120000_online_booking_durations`. |
+| Длительности сеанса | **60 / 120 / 180 / 240** мин (1,5 ч нет, есть 4 ч). Шаг сетки = длительность + пауза клуба (Effect 10 мин, V-Ray 0). Зашито в RLS/RPC — миграция `20260908191029_online_booking_durations`. |
 | Цены | В БД (`booking_prices`), редактируются из админки. На проде (24.09): VR **800 ₽/ч** будни / **1200 ₽/ч** выходные; PS5 **300** / **400**. Одинаково для обоих клубов. Возможны ступени «от N станций» (`min_qty`). Оплата на месте, суммы в виджете справочные. |
 | Залы V-Ray | «Большой зал» (12 VR), «Малый зал» (4 VR + 2 PS5) + вариант **«Весь клуб»** — одна бронь на станции из обоих залов. Effect VR — один зал «Зал» (4 VR + 2 PS5). |
 | Часы | Effect **11:00–22:30**, V-Ray **11:00–23:00**, TZ **Asia/Yekaterinburg** (Пермь, UTC+5). |
@@ -117,11 +97,11 @@
 + `20260904083849_online_booking_clubs_sort_order`.
 
 ✅ **Применены 2026-09-09** (через MCP `apply_migration`, см. раздел
-«Состояние прода» выше): `20260907120000_online_booking_durations`,
-`20260908120000_online_booking_packages`, `20260909120000_online_booking_staff_auth`,
-`20260910120000_online_booking_hourly_segments`,
-`20260911120000_online_booking_lockdown`,
-`20260912120000_online_booking_revoke_is_staff_anon`.
+«Состояние прода» выше): `20260908191029_online_booking_durations`,
+`20260908191137_online_booking_packages`, `20260908191216_online_booking_staff_auth`,
+`20260908191300_online_booking_hourly_segments`,
+`20260908191400_online_booking_lockdown`,
+`20260908191609_online_booking_revoke_is_staff_anon`.
 Edge Function `booking-intake` передеплоена (v3).
 
 - ⚠️ **Цены пакетов из макета не бьются с тарифами в БД.** Макет: VR 1400 ₽/ч,
@@ -215,7 +195,7 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 `?admin=1` за `AdminAuthGate`: в `USE_MOCK` — открывается сразу (демо), иначе —
 экран входа `AdminLoginScreen` (Supabase Auth email+пароль). Кнопка «Выйти» в
 шапке. `Injection.init(adminMode:)` поднимает Supabase SDK и в api-сборке.
-Миграция `20260909120000_online_booking_staff_auth` (применена):
+Миграция `20260908191216_online_booking_staff_auth` (применена):
 таблица `booking_staff` (allowlist по `auth.users.id`), функция
 `booking_is_staff()`, RLS-политики write для персонала на `booking_prices`,
 `booking_packages`, `booking_clubs` (update), `booking_orders` (read+update),
@@ -291,7 +271,7 @@ Supabase SDK не инициализируется.
   drawer «Новая запись» — состав на каждый час.
 - **Бэкенд:** бронь уходит «отрезками» — `ReservationSegmentEntity` →
   `p_segments jsonb` в `booking_create_order`. Миграция
-  **`20260910120000_online_booking_hourly_segments.sql` — НЕ ПРИМЕНЕНА**;
+  **`20260908191300_online_booking_hourly_segments.sql` — НЕ ПРИМЕНЕНА**;
   после неё передеплоить `booking-intake` (Edge Function уже обновлена, принимает
   и `segments`, и старый плоский формат).
 - **Осталось:** правка состава по часам в карточке брони (`booking_detail_drawer`)
@@ -304,7 +284,7 @@ Supabase SDK не инициализируется.
 
 > **Версии в удалённой истории не совпадают с именами файлов.** Миграции
 > применялись через MCP `apply_migration`, который присваивает версию по дате
-> применения: файл `20260907120000_online_booking_durations.sql` записан как
+> применения: файл `20260908191029_online_booking_durations.sql` записан как
 > `20260908191029_online_booking_durations`. **`supabase db push` использовать
 > нельзя** — он посчитает локальные файлы неприменёнными и попытается накатить
 > их повторно. Новые миграции применять через MCP или SQL Editor.
@@ -380,7 +360,7 @@ Supabase SDK не инициализируется.
   при системном увеличении шрифта;
 - `manifest.json` и `theme-color` приведены под проект;
 - **спринт 1 (безопасность)** — миграция
-  `20260911120000_online_booking_lockdown` (применена): единственный
+  `20260908191400_online_booking_lockdown` (применена): единственный
   вход для брони — RPC (прямой insert анониму закрыт), лимиты 3 брони/час и
   5 активных на номер, валидация отрезков; Edge Function отдаёт 429 на лимиты
   и понимает список CORS-origin; CSP + `frame-ancestors` + `Referrer-Policy`;

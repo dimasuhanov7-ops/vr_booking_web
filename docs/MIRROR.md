@@ -1,7 +1,7 @@
 # Зеркало броней: Telegram-уведомления и Google Таблица
 
 Функция [`booking-mirror`](../supabase/functions/booking-mirror/index.ts) и миграция
-[`20260918120500_online_booking_mirror`](../supabase/migrations/20260918120500_online_booking_mirror.sql).
+[`20260915081448_online_booking_mirror`](../supabase/migrations/20260915081448_online_booking_mirror.sql).
 Обе задеплоены на `cpjmirlujtfuzvdnysyx` (функция — v9, `verify_jwt=false`).
 
 > Этот файл восстановлен по коду функции и миграции, выгруженным с прода

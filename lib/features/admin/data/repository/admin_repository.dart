@@ -15,7 +15,7 @@ import '../dto/booking_row_dto.dart';
 /// Реализация [IAdminRepository] поверх Supabase (PostgREST).
 ///
 /// Пишет от лица авторизованного сотрудника — доступ проверяет RLS
-/// (`booking_is_staff()`), см. миграцию `20260909120000_online_booking_staff_auth`.
+/// (`booking_is_staff()`), см. миграцию `20260908191216_online_booking_staff_auth`.
 class AdminRepository implements IAdminRepository {
   /// Создаёт репозиторий.
   const AdminRepository(this._client);
