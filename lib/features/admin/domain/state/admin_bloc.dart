@@ -665,8 +665,28 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
+    final BookingRowEntity? base =
+        state.rows.where((BookingRowEntity r) => r.id == edited.id).firstOrNull;
+    final bool moved = base != null && _scheduleChanged(base, edited);
+
     bool saved = false;
     await _persist(() async {
+      // Сначала время и состав: если станций не хватит, контакты не трогаем.
+      if (moved) {
+        await _repository.rescheduleOrder(
+          orderId: edited.id,
+          clubId: edited.clubId,
+          hallId: edited.hallId,
+          day: _today().add(Duration(days: edited.dayIndex)),
+          startMinutes: edited.startMinutes,
+          headsetsByHour: <int>[
+            for (int h = 0; h < edited.hourCount; h++) edited.headsetsAt(h),
+          ],
+          consolesByHour: <int>[
+            for (int h = 0; h < edited.hourCount; h++) edited.consolesAt(h),
+          ],
+        );
+      }
       await _repository.updateOrderDetails(
         orderId: edited.id,
         clientName: name,
@@ -689,6 +709,19 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
           .toList(growable: false),
       rowEdits: edits,
     ));
+  }
+
+  /// Поменялись ли время, длительность или состав по часам.
+  static bool _scheduleChanged(BookingRowEntity a, BookingRowEntity b) {
+    if (a.startMinutes != b.startMinutes || a.durationMinutes != b.durationMinutes) {
+      return true;
+    }
+    for (int h = 0; h < b.hourCount; h++) {
+      if (a.headsetsAt(h) != b.headsetsAt(h) || a.consolesAt(h) != b.consolesAt(h)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // -- новая запись ------------------------------------------------------

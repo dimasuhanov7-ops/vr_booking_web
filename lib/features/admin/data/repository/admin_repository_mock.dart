@@ -182,6 +182,17 @@ class AdminRepositoryMock implements IAdminRepository {
   bool get canEditSchedule => true;
 
   @override
+  Future<void> rescheduleOrder({
+    required String orderId,
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+  }) async {}
+
+  @override
   Future<void> updateOrderDetails({
     required String orderId,
     required String clientName,

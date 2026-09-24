@@ -32,10 +32,10 @@ class AdminRepository implements IAdminRepository {
   Future<bool> isStaff() =>
       _guard(() async => await _client.rpc<bool>('booking_is_staff') == true);
 
-  /// Позиции брони (время, станции) сотруднику по RLS только читаются —
-  /// менять их из админки нельзя, только отменить бронь и создать новую.
+  /// Время и состав меняет RPC `booking_reschedule_order` (миграция
+  /// `online_booking_reschedule`); напрямую позиции сотруднику только читаются.
   @override
-  bool get canEditSchedule => false;
+  bool get canEditSchedule => true;
 
   /// Таблицы, изменения которых панель ловит через Realtime. Их публикацию
   /// включает миграция `online_booking_admin_realtime`; события приходят с
@@ -435,104 +435,14 @@ class AdminRepository implements IAdminRepository {
     required String note,
   }) =>
       _guard(() async {
-        final Map<String, dynamic> club = await _client
-            .from('booking_clubs')
-            .select('timezone')
-            .eq('id', clubId)
-            .single();
-        final Duration tz =
-            ClubClock.offsetOf(club['timezone'] as String? ?? _defaultTimezone);
-        final int hours = headsetsByHour.length;
-        final DateTime from = DateTime.utc(day.year, day.month, day.day)
-            .add(Duration(minutes: startMinutes))
-            .subtract(tz);
-        final DateTime to = from.add(Duration(hours: hours));
-
-        final List<dynamic> stationRows = await _client
-            .from('booking_stations')
-            .select('id,type')
-            .eq('room_id', hallId)
-            .eq('is_active', true)
-            .order('sort_order', ascending: true);
-        final List<({String id, bool ps5})> stations = <({String id, bool ps5})>[
-          for (final dynamic s in stationRows)
-            (
-              id: (s as Map<String, dynamic>)['id'] as String,
-              ps5: s['type'] == 'ps5',
-            ),
-        ];
-
-        final List<dynamic> busyRows = stations.isEmpty
-            ? const <dynamic>[]
-            : await _client
-                .from('booking_order_items')
-                .select('station_id,starts_at,ends_at')
-                .inFilter('station_id',
-                    stations.map((({String id, bool ps5}) s) => s.id).toList())
-                .eq('is_active', true)
-                .lt('starts_at', to.toIso8601String())
-                .gt('ends_at', from.toIso8601String());
-        final List<({String id, DateTime start, DateTime end})> busy =
-            <({String id, DateTime start, DateTime end})>[
-          for (final dynamic b in busyRows)
-            (
-              id: (b as Map<String, dynamic>)['station_id'] as String,
-              start: DateTime.parse(b['starts_at'] as String),
-              end: DateTime.parse(b['ends_at'] as String),
-            ),
-        ];
-
-        // Подбираем станции по часам. Сначала те же, что в прошлом часе:
-        // гостю не нужно пересаживаться, а отрезков брони выходит меньше.
-        final List<List<String>> perHour = <List<String>>[];
-        List<String> prev = const <String>[];
-        for (int h = 0; h < hours; h++) {
-          final DateTime a = from.add(Duration(hours: h));
-          final DateTime b = a.add(const Duration(hours: 1));
-          List<String> pick({required bool ps5, required int need}) {
-            final List<String> free = <String>[
-              for (final ({String id, bool ps5}) s in stations)
-                if (s.ps5 == ps5 &&
-                    !busy.any((({String id, DateTime start, DateTime end}) x) =>
-                        x.id == s.id && x.start.isBefore(b) && x.end.isAfter(a)))
-                  s.id,
-            ];
-            if (free.length < need) {
-              throw AdminFailure('${h + 1}-й час: свободно только '
-                  '${free.length} ${ps5 ? 'PS5' : 'шлемов'}.');
-            }
-            return <String>[
-              ...free.where(prev.contains),
-              ...free.where((String id) => !prev.contains(id)),
-            ].take(need).toList();
-          }
-
-          final List<String> ids = <String>[
-            ...pick(ps5: false, need: headsetsByHour[h]),
-            ...pick(ps5: true, need: consolesByHour[h]),
-          ];
-          perHour.add(ids);
-          prev = ids;
-        }
-
-        // Подряд идущие часы с одинаковым составом — один отрезок (p_segments).
-        final List<Map<String, dynamic>> segments = <Map<String, dynamic>>[];
-        int runStart = 0;
-        for (int h = 1; h <= hours; h++) {
-          if (h < hours && _sameIds(perHour[h - 1], perHour[h])) continue;
-          if (perHour[runStart].isNotEmpty) {
-            segments.add(<String, dynamic>{
-              'station_ids': perHour[runStart],
-              'starts_at': from.add(Duration(hours: runStart)).toIso8601String(),
-              'ends_at': from.add(Duration(hours: h)).toIso8601String(),
-            });
-          }
-          runStart = h;
-        }
-        if (segments.isEmpty) {
-          throw const AdminFailure('Добавьте хотя бы один шлем или одну PS5.');
-        }
-
+        final List<Map<String, dynamic>> segments = await _planSegments(
+          clubId: clubId,
+          hallId: hallId,
+          day: day,
+          startMinutes: startMinutes,
+          headsetsByHour: headsetsByHour,
+          consolesByHour: consolesByHour,
+        );
         try {
           // От сотрудника RPC не применяет лимиты и паузу приёма, source=staff.
           return await _client.rpc<String>(
@@ -550,6 +460,169 @@ class AdminRepository implements IAdminRepository {
           throw _bookingError(e) ?? e;
         }
       });
+
+  @override
+  Future<void> rescheduleOrder({
+    required String orderId,
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+  }) =>
+      _guard(() async {
+        // Станции самой брони: их не считаем занятыми и берём в первую очередь —
+        // при переносе гость по возможности остаётся на тех же местах.
+        final List<dynamic> own = await _client
+            .from('booking_order_items')
+            .select('station_id')
+            .eq('order_id', orderId);
+        final List<String> prefer = <String>{
+          for (final dynamic r in own) (r as Map<String, dynamic>)['station_id'] as String,
+        }.toList();
+        final List<Map<String, dynamic>> segments = await _planSegments(
+          clubId: clubId,
+          hallId: hallId,
+          day: day,
+          startMinutes: startMinutes,
+          headsetsByHour: headsetsByHour,
+          consolesByHour: consolesByHour,
+          excludeOrderId: orderId,
+          prefer: prefer,
+        );
+        try {
+          await _client.rpc<void>(
+            'booking_reschedule_order',
+            params: <String, dynamic>{'p_order_id': orderId, 'p_segments': segments},
+          );
+        } on PostgrestException catch (e) {
+          // PGRST202 — функции на сервере нет: миграция ещё не применена.
+          if (e.code == 'PGRST202') {
+            throw const AdminFailure('Перенос брони ещё не включён на сервере: '
+                'нужна миграция online_booking_reschedule.');
+          }
+          throw _bookingError(e) ?? e;
+        }
+      });
+
+  /// Отрезки брони для RPC: на каждый час подбирает свободные станции зала
+  /// нужного типа и склеивает подряд идущие часы с одинаковым составом.
+  ///
+  /// [excludeOrderId] — позиции этой брони не считаются занятыми (перенос);
+  /// [prefer] — станции, которые берутся первыми.
+  Future<List<Map<String, dynamic>>> _planSegments({
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+    String? excludeOrderId,
+    List<String> prefer = const <String>[],
+  }) async {
+    final Map<String, dynamic> club = await _client
+        .from('booking_clubs')
+        .select('timezone')
+        .eq('id', clubId)
+        .single();
+    final Duration tz =
+        ClubClock.offsetOf(club['timezone'] as String? ?? _defaultTimezone);
+    final int hours = headsetsByHour.length;
+    final DateTime from = DateTime.utc(day.year, day.month, day.day)
+        .add(Duration(minutes: startMinutes))
+        .subtract(tz);
+    final DateTime to = from.add(Duration(hours: hours));
+
+    final List<dynamic> stationRows = await _client
+        .from('booking_stations')
+        .select('id,type')
+        .eq('room_id', hallId)
+        .eq('is_active', true)
+        .order('sort_order', ascending: true);
+    final List<({String id, bool ps5})> stations = <({String id, bool ps5})>[
+      for (final dynamic s in stationRows)
+        (
+          id: (s as Map<String, dynamic>)['id'] as String,
+          ps5: s['type'] == 'ps5',
+        ),
+    ];
+
+    List<dynamic> busyRows = const <dynamic>[];
+    if (stations.isNotEmpty) {
+      PostgrestFilterBuilder<List<Map<String, dynamic>>> q = _client
+          .from('booking_order_items')
+          .select('station_id,starts_at,ends_at')
+          .inFilter('station_id',
+              stations.map((({String id, bool ps5}) s) => s.id).toList())
+          .eq('is_active', true)
+          .lt('starts_at', to.toIso8601String())
+          .gt('ends_at', from.toIso8601String());
+      if (excludeOrderId != null) q = q.neq('order_id', excludeOrderId);
+      busyRows = await q;
+    }
+    final List<({String id, DateTime start, DateTime end})> busy =
+        <({String id, DateTime start, DateTime end})>[
+      for (final dynamic b in busyRows)
+        (
+          id: (b as Map<String, dynamic>)['station_id'] as String,
+          start: DateTime.parse(b['starts_at'] as String),
+          end: DateTime.parse(b['ends_at'] as String),
+        ),
+    ];
+
+    // Подбираем станции по часам. Сначала те же, что в прошлом часе (или
+    // [prefer] для первого): гостю не нужно пересаживаться, отрезков меньше.
+    final List<List<String>> perHour = <List<String>>[];
+    List<String> prev = prefer;
+    for (int h = 0; h < hours; h++) {
+      final DateTime a = from.add(Duration(hours: h));
+      final DateTime b = a.add(const Duration(hours: 1));
+      List<String> pick({required bool ps5, required int need}) {
+        final List<String> free = <String>[
+          for (final ({String id, bool ps5}) s in stations)
+            if (s.ps5 == ps5 &&
+                !busy.any((({String id, DateTime start, DateTime end}) x) =>
+                    x.id == s.id && x.start.isBefore(b) && x.end.isAfter(a)))
+              s.id,
+        ];
+        if (free.length < need) {
+          throw AdminFailure('${h + 1}-й час: свободно только '
+              '${free.length} ${ps5 ? 'PS5' : 'шлемов'}.');
+        }
+        return <String>[
+          ...free.where(prev.contains),
+          ...free.where((String id) => !prev.contains(id)),
+        ].take(need).toList();
+      }
+
+      final List<String> ids = <String>[
+        ...pick(ps5: false, need: headsetsByHour[h]),
+        ...pick(ps5: true, need: consolesByHour[h]),
+      ];
+      perHour.add(ids);
+      prev = ids.isEmpty ? prev : ids;
+    }
+
+    // Подряд идущие часы с одинаковым составом — один отрезок (p_segments).
+    final List<Map<String, dynamic>> segments = <Map<String, dynamic>>[];
+    int runStart = 0;
+    for (int h = 1; h <= hours; h++) {
+      if (h < hours && _sameIds(perHour[h - 1], perHour[h])) continue;
+      if (perHour[runStart].isNotEmpty) {
+        segments.add(<String, dynamic>{
+          'station_ids': perHour[runStart],
+          'starts_at': from.add(Duration(hours: runStart)).toIso8601String(),
+          'ends_at': from.add(Duration(hours: h)).toIso8601String(),
+        });
+      }
+      runStart = h;
+    }
+    if (segments.isEmpty) {
+      throw const AdminFailure('Добавьте хотя бы один шлем или одну PS5.');
+    }
+    return segments;
+  }
 
   /// Понятный сотруднику текст для отказа `booking_create_order`, либо `null`.
   static AdminFailure? _bookingError(PostgrestException e) {
@@ -569,6 +642,12 @@ class AdminRepository implements IAdminRepository {
     }
     if (m.contains('BAD_DURATION')) {
       return const AdminFailure('Такой сеанс сервер не принимает: не длиннее 5 часов.');
+    }
+    if (m.contains('ORDER_CANCELLED')) {
+      return const AdminFailure('Отменённую бронь перенести нельзя — сначала верните её.');
+    }
+    if (m.contains('ORDER_NOT_FOUND')) {
+      return const AdminFailure('Бронь не найдена — возможно, её удалили.');
     }
     return null;
   }

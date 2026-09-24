@@ -16,8 +16,7 @@ abstract interface class IAdminRepository {
   /// справочники и видеть брони RLS разрешает только сотрудникам.
   Future<bool> isStaff();
 
-  /// Можно ли менять время и состав брони. В БД позиции брони сотруднику
-  /// только читаются (RLS), поэтому в боевой сборке — нет.
+  /// Можно ли менять время и состав брони ([rescheduleOrder]).
   bool get canEditSchedule;
 
   /// Сигналы «на сервере поменялись брони, закрытия или пауза приёма» —
@@ -98,6 +97,19 @@ abstract interface class IAdminRepository {
     required String clientName,
     required String phone,
     required String note,
+  });
+
+  /// Перенести бронь / сменить состав: новое начало [startMinutes] в день
+  /// [day] и нужное число станций по часам (станции подбирает репозиторий,
+  /// предпочитая те, что уже у брони).
+  Future<void> rescheduleOrder({
+    required String orderId,
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
   });
 
   /// Приём онлайн-броней клуба (пауза).

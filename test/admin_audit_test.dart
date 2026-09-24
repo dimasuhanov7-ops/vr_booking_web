@@ -89,6 +89,20 @@ void main() {
     );
   });
 
+  test('перенос брони: было → стало', () {
+    final AuditLine l = _d.describe(_e('booking_reschedule', 'update',
+        before: <String, dynamic>{
+          'club_id': 'vray', 'client_name': 'Игорь', 'day': '2026-09-25',
+          'from': '12:00', 'to': '14:00', 'vr': 6, 'ps': 0,
+        },
+        after: <String, dynamic>{
+          'club_id': 'vray', 'client_name': 'Игорь', 'day': '2026-09-25',
+          'from': '13:00', 'to': '15:00', 'vr': 4, 'ps': 1,
+        }));
+    expect(l.title, 'Бронь перенесена · Игорь · V-Ray');
+    expect(l.details, '25.09 12:00–14:00, 6 VR → 25.09 13:00–15:00, 4 VR + 1 PS5');
+  });
+
   test('автор: имя, короткий id или клиент', () {
     expect(AuditDescriber.actorOf(_e('x', 'update', actorId: 'u1', actorName: 'Анна')), 'Анна');
     expect(

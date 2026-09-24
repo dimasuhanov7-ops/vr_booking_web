@@ -30,7 +30,7 @@ class _Repo extends AdminRepositoryMock {
   @override
   Future<bool> isStaff() async => staff;
 
-  /// Как боевой репозиторий: позиции брони сотруднику только читаются.
+  /// Репозиторий, который не умеет переносить брони.
   @override
   bool get canEditSchedule => false;
 
@@ -144,7 +144,7 @@ void main() {
     await bloc.close();
   });
 
-  test('боевая сборка: время и состав брони не правятся', () async {
+  test('без переноса в репозитории время и состав брони не правятся', () async {
     final AdminBloc bloc = await _start(_Repo());
     expect(bloc.state.scheduleEditable, isFalse);
     final BookingRowEntity row = bloc.state.rows.first;
@@ -211,4 +211,89 @@ void main() {
     expect(repo.visits, hasLength(1));
     await bloc.close();
   });
+
+  test('перенос: новое время и состав уходят на сервер до контактов', () async {
+    final _MovableRepo repo = _MovableRepo();
+    final AdminBloc bloc = await _start(repo);
+    expect(bloc.state.scheduleEditable, isTrue);
+    final BookingRowEntity row = bloc.state.rows.firstWhere(
+        (BookingRowEntity r) => !r.variesByHour && r.durationMinutes == 120);
+
+    bloc
+      ..add(AdminRowEdited(
+          rowId: row.id, startMinutes: row.startMinutes + 60, headsets: 1, clearHourly: true))
+      ..add(AdminRowSaved(row.id));
+    await bloc.stream.firstWhere((AdminState s) => !s.isEdited(row.id));
+
+    expect(repo.moves, hasLength(1));
+    expect(repo.moves.single['id'], row.id);
+    expect(repo.moves.single['start'], row.startMinutes + 60);
+    expect(repo.moves.single['vr'], <int>[1, 1]);
+    expect(repo.log, <String>['move', 'details']);
+    expect(bloc.state.rowById(row.id)!.startMinutes, row.startMinutes + 60);
+    await bloc.close();
+  });
+
+  test('перенос: только контакты — без вызова переноса', () async {
+    final _MovableRepo repo = _MovableRepo();
+    final AdminBloc bloc = await _start(repo);
+    final BookingRowEntity row = bloc.state.rows.first;
+
+    bloc
+      ..add(AdminRowEdited(rowId: row.id, clientName: 'Только имя'))
+      ..add(AdminRowSaved(row.id));
+    await bloc.stream.firstWhere((AdminState s) => !s.isEdited(row.id));
+
+    expect(repo.moves, isEmpty);
+    expect(repo.log, <String>['details']);
+    await bloc.close();
+  });
+}
+
+/// Репозиторий, который умеет переносить брони, с журналом вызовов.
+class _MovableRepo extends _Repo {
+  _MovableRepo();
+
+  final List<Map<String, Object?>> moves = <Map<String, Object?>>[];
+  final List<String> log = <String>[];
+
+  @override
+  bool get canEditSchedule => true;
+
+  @override
+  Future<void> rescheduleOrder({
+    required String orderId,
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+  }) async {
+    log.add('move');
+    moves.add(<String, Object?>{
+      'id': orderId,
+      'start': startMinutes,
+      'vr': headsetsByHour,
+      'ps': consolesByHour,
+    });
+  }
+
+  @override
+  Future<void> updateOrderDetails({
+    required String orderId,
+    required String clientName,
+    required String phone,
+    required int prepay,
+    required String note,
+  }) async {
+    log.add('details');
+    await super.updateOrderDetails(
+      orderId: orderId,
+      clientName: clientName,
+      phone: phone,
+      prepay: prepay,
+      note: note,
+    );
+  }
 }

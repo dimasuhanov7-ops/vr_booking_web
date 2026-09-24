@@ -36,6 +36,7 @@ class AuditDescriber {
       'booking_availability' => _availability(e, row),
       'booking_clubs' => _club(e, row),
       'booking_orders' => _order(e, row),
+      'booking_reschedule' => _reschedule(e, row),
       _ => (title: '${e.entity} · ${e.action}', details: null),
     };
   }
@@ -139,6 +140,23 @@ class AuditDescriber {
     return (
       title: 'Бронь · $who · ${_clubName(row['club_id'])}',
       details: 'статус: ${_status(was)} → ${_status(now)}',
+    );
+  }
+
+  /// Перенос брони (`booking_reschedule_order`): прежнее и новое расписание.
+  AuditLine _reschedule(AuditEntryEntity e, Map<String, dynamic> row) {
+    String span(Map<String, dynamic>? r) {
+      if (r == null) return '—';
+      final int vr = (r['vr'] as num?)?.toInt() ?? 0;
+      final int ps = (r['ps'] as num?)?.toInt() ?? 0;
+      final String kit = <String>[if (vr > 0) '$vr VR', if (ps > 0) '$ps PS5'].join(' + ');
+      final String day = r['day'] == null ? '' : '${_date(r['day'] as String)} ';
+      return '$day${r['from']}–${r['to']}, $kit';
+    }
+
+    return (
+      title: 'Бронь перенесена · ${row['client_name'] ?? 'бронь'} · ${_clubName(row['club_id'])}',
+      details: '${span(e.before)} → ${span(e.after)}',
     );
   }
 
