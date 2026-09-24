@@ -61,6 +61,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORDER_SELECT =
   "id,created_at,status,source,client_name,client_phone,people_count,comment,prepay," +
   "booking_clubs(name,timezone),booking_packages(name,price)," +
+  "booking_discounts(code,title,kind,value)," +
   "booking_order_items(station_id,starts_at,ends_at,price,booking_stations(type,booking_rooms(name)))";
 
 type Item = {
@@ -83,8 +84,36 @@ type Order = {
   prepay: number | null;
   booking_clubs: { name: string; timezone: string } | null;
   booking_packages: { name: string; price: number | string } | null;
+  booking_discounts: Discount | null;
   booking_order_items: Item[] | null;
 };
+
+type Discount = {
+  code: string | null;
+  title: string | null;
+  kind: string;
+  value: number | string;
+};
+
+/**
+ * Скидка по промокоду с суммы base — так же, как виджет и админка:
+ * процент округляется до рубля, фиксированная сумма не больше base.
+ */
+function discountOf(d: Discount | null, base: number): number {
+  if (!d || base <= 0) return 0;
+  const v = Number(d.value) || 0;
+  if (v <= 0) return 0;
+  return d.kind === "fixed"
+    ? Math.min(v, base)
+    : Math.round((base * Math.min(v, 100)) / 100);
+}
+
+/** «промокод VRPARTY −10%». */
+function discountLabel(d: Discount): string {
+  const name = d.code ? `промокод ${d.code}` : `скидка «${d.title ?? ""}»`;
+  const v = Number(d.value) || 0;
+  return `${name} −${v}${d.kind === "fixed" ? " ₽" : "%"}`;
+}
 
 type Cell = string | number;
 
@@ -275,14 +304,17 @@ function summarize(o: Order) {
   const hasTime = Number.isFinite(start) && Number.isFinite(end);
   const from = hasTime ? clock(new Date(start).toISOString(), tz) : null;
   const to = hasTime ? clock(new Date(end).toISOString(), tz) : null;
-  const cost = o.booking_packages
+  // Сначала пакет (или сумма позиций), потом промокод от этой суммы.
+  const base = o.booking_packages
     ? Number(o.booking_packages.price)
     : Math.round(itemsSum);
+  const discount = discountOf(o.booking_discounts, base);
 
   return {
     tz,
     composition,
-    cost,
+    cost: base - discount,
+    discount,
     date: from?.date ?? "",
     day: from?.day ?? "",
     time: from && to ? `${from.time}–${to.time}` : "",
@@ -295,11 +327,14 @@ function row(o: Order): Cell[] {
   const created = clock(o.created_at, s.tz);
   const now = clock(new Date().toISOString(), s.tz);
   const pack = o.booking_packages ? ` (пакет «${o.booking_packages.name}»)` : "";
+  // Отдельной колонки под скидку в таблице нет — код пишем к составу,
+  // в «Сумме» — уже со скидкой.
+  const promo = o.booking_discounts ? `; ${discountLabel(o.booking_discounts)}` : "";
   return [
     s.date,
     s.time,
     o.booking_clubs?.name ?? "",
-    s.composition + pack,
+    s.composition + pack + promo,
     o.client_name ?? "",
     o.client_phone ?? "",
     o.people_count ?? "",
@@ -343,6 +378,9 @@ async function notify(o: Order): Promise<void> {
       esc(s.composition),
       who,
       `${SOURCE[o.source] ?? esc(o.source)} · ${money(s.cost)}` +
+        (o.booking_discounts && s.discount > 0
+          ? ` (${esc(discountLabel(o.booking_discounts))}, скидка ${money(s.discount)})`
+          : "") +
         (o.prepay ? ` · предоплата ${money(o.prepay)}` : ""),
     ];
     if (o.comment) lines.push(`💬 ${esc(o.comment)}`);
