@@ -120,6 +120,71 @@ class NewPackageDraft extends Equatable {
       <Object?>[name, hallId, headsets, consoles, minutes, price, message];
 }
 
+/// Черновик нового промокода.
+class NewPromoDraft extends Equatable {
+  /// Создаёт черновик.
+  const NewPromoDraft({
+    this.code = '',
+    this.kind = PromoKind.percent,
+    this.value = 10,
+    this.minStations = 1,
+    this.message = '',
+    this.isError = false,
+    this.submitting = false,
+  });
+
+  /// Код.
+  final String code;
+
+  /// Процент или сумма.
+  final PromoKind kind;
+
+  /// Процент или ₽.
+  final int value;
+
+  /// От скольких станций действует.
+  final int minStations;
+
+  /// Сообщение под формой.
+  final String message;
+
+  /// [message] — ошибка (иначе подтверждение).
+  final bool isError;
+
+  /// Промокод уходит на сервер — кнопка заблокирована.
+  final bool submitting;
+
+  /// Код в том виде, в каком он сохранится.
+  String get normalizedCode => code.trim().toUpperCase();
+
+  /// Можно ли нажимать «Добавить».
+  bool get isValid => normalizedCode.length >= 3 && value > 0 && !submitting;
+
+  /// Копия с изменениями.
+  NewPromoDraft copyWith({
+    String? code,
+    PromoKind? kind,
+    int? value,
+    int? minStations,
+    String? message,
+    bool? isError,
+    bool? submitting,
+  }) =>
+      NewPromoDraft(
+        code: code ?? this.code,
+        kind: kind ?? this.kind,
+        value: value ?? this.value,
+        minStations: minStations ?? this.minStations,
+        message: message ?? this.message,
+        isError: isError ?? this.isError,
+        submitting: submitting ?? this.submitting,
+      );
+
+  @override
+  List<Object?> get props =>
+      <Object?>[code, kind, value, minStations, message, isError, submitting];
+}
+
 /// Черновик новой брони, создаваемой сотрудником в админке.
 class NewBookingDraft extends Equatable {
   /// Создаёт черновик.
@@ -282,6 +347,8 @@ class AdminState extends Equatable {
     this.clubs = const <AdminClubEntity>[],
     this.prices = const <String, HallPriceEntity>{},
     this.packages = const <PackageEntity>[],
+    this.promos = const <PromoEntity>[],
+    this.newPromo = const NewPromoDraft(),
     this.rows = const <BookingRowEntity>[],
     this.rowEdits = const <String, BookingRowEntity>{},
     this.cancelledRowIds = const <String>{},
@@ -325,6 +392,12 @@ class AdminState extends Equatable {
 
   /// Пакеты (всех клубов).
   final List<PackageEntity> packages;
+
+  /// Промокоды (общие для всех клубов).
+  final List<PromoEntity> promos;
+
+  /// Черновик нового промокода.
+  final NewPromoDraft newPromo;
 
   /// Записи (всех клубов), как пришли с сервера + созданные в этой сессии.
   final List<BookingRowEntity> rows;
@@ -602,6 +675,8 @@ class AdminState extends Equatable {
     List<AdminClubEntity>? clubs,
     Map<String, HallPriceEntity>? prices,
     List<PackageEntity>? packages,
+    List<PromoEntity>? promos,
+    NewPromoDraft? newPromo,
     List<BookingRowEntity>? rows,
     Map<String, BookingRowEntity>? rowEdits,
     Set<String>? cancelledRowIds,
@@ -640,6 +715,8 @@ class AdminState extends Equatable {
       clubs: clubs ?? this.clubs,
       prices: prices ?? this.prices,
       packages: packages ?? this.packages,
+      promos: promos ?? this.promos,
+      newPromo: newPromo ?? this.newPromo,
       rows: rows ?? this.rows,
       rowEdits: rowEdits ?? this.rowEdits,
       cancelledRowIds: cancelledRowIds ?? this.cancelledRowIds,
@@ -676,6 +753,8 @@ class AdminState extends Equatable {
         clubs,
         prices,
         packages,
+        promos,
+        newPromo,
         rows,
         rowEdits,
         cancelledRowIds,

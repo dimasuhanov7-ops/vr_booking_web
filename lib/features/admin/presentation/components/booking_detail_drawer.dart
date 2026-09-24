@@ -51,11 +51,13 @@ class BookingDetailDrawer extends StatelessWidget {
     final DateTime date = pricing.dateOf(row.dayIndex);
     final bool weekend = pricing.isWeekend(row.dayIndex);
     final PackageEntity? pkg = pricing.matchPackage(row, state.packages);
-    final int full = pricing.rowCost(
+    final int base = pricing.baseCost(
       row: row,
       price: state.priceOf(row.hallId),
       packages: state.packages,
     );
+    final int promoOff = pricing.promoDiscount(row: row, base: base);
+    final int full = base - promoOff;
     final int due = (full - row.prepay).clamp(0, full);
     final bool edited = state.isEdited(row.id);
     final bool cancelled = state.isCancelled(row.id);
@@ -125,16 +127,23 @@ class BookingDetailDrawer extends StatelessWidget {
                   : AdminFormat.composition(row.headsets, row.consoles)
             ),
             ('Расчёт', pkg != null ? 'пакет «${pkg.name}»' : 'почасовая оплата'),
+            if (row.promo != null)
+              ('Промокод', '${row.promo!.code} · ${row.promo!.effectLabel}'),
             ('Источник', row.source.label),
           ]),
           const SizedBox(height: 10),
           _InfoTable(
             rows: <(String, String)>[
+              if (promoOff > 0) ...<(String, String)>[
+                ('Без скидки', AdminFormat.money(base)),
+                ('Скидка по промокоду', '−${AdminFormat.money(promoOff)}'),
+              ],
               ('Стоимость', AdminFormat.money(full)),
               ('Предоплата', row.prepay > 0 ? AdminFormat.money(row.prepay) : 'нет'),
               ('К оплате на месте', AdminFormat.money(due)),
             ],
             valueColors: <Color?>[
+              if (promoOff > 0) ...<Color?>[null, tint],
               tint,
               row.prepay > 0 ? null : AdminColors.warn,
               due > 0 ? AdminColors.warn : null,

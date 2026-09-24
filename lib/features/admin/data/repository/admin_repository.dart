@@ -10,6 +10,7 @@ import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/entity/package_entity.dart';
+import '../../domain/entity/promo_entity.dart';
 import '../../domain/repository/i_admin_repository.dart';
 import '../dto/booking_row_dto.dart';
 
@@ -203,6 +204,30 @@ class AdminRepository implements IAdminRepository {
   }
 
   @override
+  Future<List<PromoEntity>> fetchPromos() => _guard(() async {
+        final List<dynamic> rows = await _client
+            .from('booking_discounts')
+            .select('id,code,kind,value,min_stations,active,valid_from,valid_until')
+            .not('code', 'is', null)
+            .order('code', ascending: true);
+        return rows.map((dynamic r) {
+          final Map<String, dynamic> m = r as Map<String, dynamic>;
+          DateTime? at(String k) =>
+              m[k] == null ? null : DateTime.parse(m[k] as String).toUtc();
+          return PromoEntity(
+            id: m['id'] as String,
+            code: m['code'] as String,
+            kind: PromoKind.fromRaw(m['kind'] as String?),
+            value: PromoKind.valueOf(m['value']),
+            minStations: (m['min_stations'] as num?)?.toInt() ?? 1,
+            isActive: m['active'] as bool? ?? true,
+            validFrom: at('valid_from'),
+            validUntil: at('valid_until'),
+          );
+        }).toList(growable: false);
+      });
+
+  @override
   Future<List<BookingRowEntity>> fetchRows() async {
     // Время брони показываем в таймзоне её клуба (booking_clubs.timezone),
     // а не в зашитом смещении: иначе при смене таймзоны клуба всё «съезжает».
@@ -219,8 +244,9 @@ class AdminRepository implements IAdminRepository {
         .from('booking_orders')
         .select(
           'id,club_id,client_name,client_phone,status,source,created_at,'
-          'prepay,comment,'
+          'prepay,comment,discount_id,'
           'booking_packages(name),'
+          'booking_discounts(code,title,kind,value),'
           'booking_order_items(starts_at,ends_at,booking_stations(type,room_id))',
         )
         .order('created_at', ascending: false)
@@ -377,6 +403,69 @@ class AdminRepository implements IAdminRepository {
             'is_active': false,
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           }).eq('id', packageId);
+          return false;
+        }
+      });
+
+  /// Промокоды без политики сотрудника (миграция не применена): вставку RLS
+  /// отклоняет, а правка и удаление молча не находят строк.
+  static const AdminFailure _promosOff = AdminFailure(
+    'Промокоды ещё не включены на сервере — нужна миграция '
+    'online_booking_discounts_admin.',
+  );
+
+  @override
+  Future<String> createPromo(PromoEntity draft) => _guard(() async {
+        try {
+          final Map<String, dynamic> row = await _client
+              .from('booking_discounts')
+              .insert(<String, dynamic>{
+                'code': draft.code.trim().toUpperCase(),
+                'kind': draft.kind.raw,
+                'value': draft.value,
+                'min_stations': draft.minStations,
+                'active': draft.isActive,
+              })
+              .select('id')
+              .single();
+          return row['id'] as String;
+        } on PostgrestException catch (e) {
+          if (e.code == '23505') {
+            throw AdminFailure('Промокод ${draft.code.trim().toUpperCase()} уже есть.');
+          }
+          if (e.code == '42501' || e.message.toLowerCase().contains('row-level security')) {
+            throw _promosOff;
+          }
+          rethrow;
+        }
+      });
+
+  @override
+  Future<void> setPromoActive(String promoId, {required bool active}) =>
+      _guard(() async {
+        final List<dynamic> updated = await _client
+            .from('booking_discounts')
+            .update(<String, dynamic>{'active': active})
+            .eq('id', promoId)
+            .select('id');
+        if (updated.isEmpty) throw _promosOff;
+      });
+
+  @override
+  Future<bool> deletePromo(String promoId) => _guard(() async {
+        try {
+          final List<dynamic> deleted = await _client
+              .from('booking_discounts')
+              .delete()
+              .eq('id', promoId)
+              .select('id');
+          if (deleted.isEmpty) throw _promosOff;
+          return true;
+        } on PostgrestException catch (e) {
+          // 23503 — промокод уже в бронях (booking_orders.discount_id):
+          // удалить нельзя, выключаем — клиенты его больше не применят.
+          if (e.code != '23503') rethrow;
+          await setPromoActive(promoId, active: false);
           return false;
         }
       });

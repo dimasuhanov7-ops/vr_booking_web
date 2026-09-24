@@ -1,4 +1,5 @@
 import '../../domain/entity/booking_row_entity.dart';
+import '../../domain/entity/promo_entity.dart';
 
 /// Разбор заказа `booking_orders` (с позициями и пакетом) в запись админки.
 ///
@@ -95,6 +96,24 @@ abstract final class BookingRowDto {
       note: json['comment'] as String? ?? '',
       hourHeadsets: varies ? vrByHour : null,
       hourConsoles: varies ? psByHour : null,
+      promo: _promo(json),
+    );
+  }
+
+  /// Скидка брони из вложенного `booking_discounts`. Пока у сотрудника нет
+  /// права читать таблицу (миграция online_booking_discounts_admin), PostgREST
+  /// отдаёт здесь `null` — бронь считается без скидки.
+  static PromoEntity? _promo(Map<String, dynamic> json) {
+    final Map<String, dynamic>? d =
+        json['booking_discounts'] as Map<String, dynamic>?;
+    if (d == null) return null;
+    final String? code = d['code'] as String?;
+    final String? title = d['title'] as String?;
+    return PromoEntity(
+      id: json['discount_id'] as String? ?? '',
+      code: code ?? title ?? 'скидка',
+      kind: PromoKind.fromRaw(d['kind'] as String?),
+      value: PromoKind.valueOf(d['value']),
     );
   }
 

@@ -4,6 +4,7 @@ import '../../domain/entity/availability_entity.dart';
 import '../../domain/entity/booking_row_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/entity/package_entity.dart';
+import '../../domain/entity/promo_entity.dart';
 import '../../domain/repository/i_admin_repository.dart';
 
 /// In-memory данные админки. Повторяют прототип «Админка VR.dc.html»
@@ -64,12 +65,25 @@ class AdminRepositoryMock implements IAdminRepository {
         PackageEntity(id: 'p7', clubId: 'vray', hallId: 'v-small', name: 'Шлемы и PS5', headsets: 2, consoles: 2, minutes: 60, price: 4300, isEnabled: true),
       ]);
 
+  /// Те же демо-коды, что в моке виджета (BookingRepositoryMock).
+  static const PromoEntity _vrParty = PromoEntity(
+      id: 'd1', code: 'VRPARTY', kind: PromoKind.percent, value: 10, minStations: 2);
+  static const PromoEntity _minus500 =
+      PromoEntity(id: 'd2', code: 'MINUS500', kind: PromoKind.fixed, value: 500);
+
+  @override
+  Future<List<PromoEntity>> fetchPromos() => _delay(const <PromoEntity>[
+        _minus500,
+        _vrParty,
+        PromoEntity(id: 'd3', code: 'SUMMER', kind: PromoKind.percent, value: 15, isActive: false),
+      ]);
+
   @override
   Future<List<BookingRowEntity>> fetchRows() => _delay(<BookingRowEntity>[
         _row('l1', 'vray', 'v-big', 0, 720, 120, 6, 0, 'Игорь', '+7 (912) 344-11-08', 'paid', 'виджет',
             pack: 'Команда', prepay: 14000, note: 'Оплатили полностью переводом. Просят арену без новичков рядом.'),
         _row('l2', 'vray', 'v-small', 0, 900, 120, 3, 1, 'Настя', '+7 (903) 771-20-64', 'confirmed', 'виджет',
-            prepay: 3000, note: 'Детская группа, нужен инструктаж подлиннее.'),
+            prepay: 3000, note: 'Детская группа, нужен инструктаж подлиннее.', promo: _vrParty),
         _row('l3', 'vray', 'v-big', 0, 1140, 60, 12, 0, 'Дима', '+7 (999) 208-45-31', 'new', 'звонок',
             note: 'Корпоратив, счёт на организацию. Перезвонить до 18:00.'),
         _row('l4', 'vray', 'v-small', 1, 780, 60, 0, 2, 'Кирилл', '+7 (964) 112-90-77', 'confirmed', 'виджет'),
@@ -78,7 +92,8 @@ class AdminRepositoryMock implements IAdminRepository {
         _row('l7', 'effect', 'e-main', 0, 730, 60, 2, 0, 'Лена', '+7 (905) 613-77-42', 'confirmed', 'виджет'),
         _row('l8', 'effect', 'e-main', 0, 1150, 120, 4, 2, 'Артём', '+7 (962) 480-15-93', 'paid', 'виджет', pack: 'Полный зал'),
         _row('l9', 'effect', 'e-main', 1, 940, 60, 0, 2, 'Соня', '+7 (951) 220-64-09', 'new', 'виджет'),
-        _row('l10', 'effect', 'e-main', 2, 1080, 120, 2, 0, 'Паша', '+7 (926) 337-45-11', 'confirmed', 'звонок'),
+        _row('l10', 'effect', 'e-main', 2, 1080, 120, 2, 0, 'Паша', '+7 (926) 337-45-11', 'confirmed', 'звонок',
+            promo: _minus500),
         _row('l11', 'vray', 'v-small', 0, 660, 60, 2, 2, 'Рома', '+7 (982) 145-70-23', 'paid', 'виджет',
             pack: 'Шлемы и PS5', prepay: 4300, note: 'День рождения, привезут торт — нужен стол.'),
         _row('l12', 'vray', 'v-big', 0, 960, 60, 4, 0, 'Юля', '+7 (919) 302-88-14', 'new', 'виджет',
@@ -115,6 +130,16 @@ class AdminRepositoryMock implements IAdminRepository {
   Future<bool> deletePackage(String packageId) async => true;
 
   @override
+  Future<String> createPromo(PromoEntity draft) async =>
+      'd${DateTime.now().millisecondsSinceEpoch}';
+
+  @override
+  Future<void> setPromoActive(String promoId, {required bool active}) async {}
+
+  @override
+  Future<bool> deletePromo(String promoId) async => true;
+
+  @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {}
 
   @override
@@ -129,6 +154,18 @@ class AdminRepositoryMock implements IAdminRepository {
   Future<List<AuditEntryEntity>> fetchAuditLog({int limit = 200}) async {
     final DateTime now = DateTime.now().toUtc();
     return _delay(<AuditEntryEntity>[
+      AuditEntryEntity(
+        id: 4,
+        at: now.subtract(const Duration(minutes: 5)),
+        entity: 'booking_discounts',
+        action: 'insert',
+        actorId: 'demo-anna',
+        actorName: 'Анна',
+        after: const <String, dynamic>{
+          'code': 'VRPARTY', 'kind': 'percent', 'value': 10,
+          'min_stations': 2, 'active': true,
+        },
+      ),
       AuditEntryEntity(
         id: 3,
         at: now.subtract(const Duration(minutes: 12)),
@@ -257,6 +294,7 @@ class AdminRepositoryMock implements IAdminRepository {
     String note = '',
     List<int>? hourVr,
     List<int>? hourPs,
+    PromoEntity? promo,
   }) =>
       BookingRowEntity(
         id: id,
@@ -276,6 +314,7 @@ class AdminRepositoryMock implements IAdminRepository {
         packageName: pack,
         prepay: prepay,
         note: note,
+        promo: promo,
       );
 
   Future<T> _delay<T>(T value) =>

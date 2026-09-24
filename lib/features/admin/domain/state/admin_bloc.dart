@@ -14,6 +14,7 @@ import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
+import '../entity/promo_entity.dart';
 import '../repository/i_admin_repository.dart';
 
 part 'admin_event.dart';
@@ -38,6 +39,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminPackageDeleted>(_onPackageDeleted);
     on<AdminNewPackageChanged>(_onNewPackageChanged);
     on<AdminNewPackageSubmitted>(_onNewPackageSubmitted);
+    on<AdminPromoToggled>(_onPromoToggled);
+    on<AdminPromoDeleted>(_onPromoDeleted);
+    on<AdminNewPromoChanged>(_onNewPromoChanged);
+    on<AdminNewPromoSubmitted>(_onNewPromoSubmitted);
     on<AdminIntakeToggled>(_onIntakeToggled);
     on<AdminHallClosureToggled>(_onHallClosureToggled);
     on<AdminAvailDayChanged>(_onAvailDayChanged);
@@ -178,6 +183,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
+    // Промокоды — не повод не пустить в панель: без них просто пустой список.
+    List<PromoEntity> promos = const <PromoEntity>[];
+    try {
+      promos = await _repository.fetchPromos();
+    } catch (_) {}
+
     final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
     final String clubId =
         hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
@@ -193,6 +204,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
         for (final HallPriceEntity p in prices) p.hallId: p,
       },
       packages: packages,
+      promos: promos,
       rows: rows,
       cancelledRowIds: <String>{
         for (final BookingRowEntity r in rows)
@@ -440,6 +452,144 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       newPackage: NewPackageDraft(
         hallId: hallId,
         message: 'Пакет «${created.name}» добавлен в «${hall.name}».',
+      ),
+    ));
+  }
+
+  Future<void> _onPromoToggled(
+    AdminPromoToggled event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    PromoEntity? changed;
+    emit(state.copyWith(
+      promos: before.map((PromoEntity p) {
+        if (p.id != event.promoId) return p;
+        return changed = p.copyWith(isActive: !p.isActive);
+      }).toList(growable: false),
+    ));
+    if (changed == null) return;
+    bool ok = false;
+    await _persist(() async {
+      await _repository.setPromoActive(changed!.id, active: changed!.isActive);
+      ok = true;
+    }, emit);
+    if (!ok) emit(state.copyWith(promos: before));
+  }
+
+  Future<void> _onPromoDeleted(
+    AdminPromoDeleted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    emit(state.copyWith(
+      promos: before
+          .where((PromoEntity p) => p.id != event.promoId)
+          .toList(growable: false),
+    ));
+    bool? deleted;
+    await _persist(() async {
+      deleted = await _repository.deletePromo(event.promoId);
+    }, emit);
+    if (deleted == true) return;
+    if (deleted == null) {
+      emit(state.copyWith(promos: before));
+      return;
+    }
+    emit(state.copyWith(
+      promos: before
+          .map((PromoEntity p) =>
+              p.id == event.promoId ? p.copyWith(isActive: false) : p)
+          .toList(growable: false),
+      saveNotice: 'По промокоду уже есть брони, поэтому он выключен, а не '
+          'удалён: клиенты его больше не применят, старые брони сохранят скидку.',
+    ));
+  }
+
+  void _onNewPromoChanged(AdminNewPromoChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(
+      newPromo: state.newPromo.copyWith(
+        code: event.code,
+        kind: event.kind,
+        value: event.value,
+        minStations: event.minStations,
+        message: '',
+        isError: false,
+      ),
+    ));
+  }
+
+  /// Буквы (латиница, кириллица), цифры, дефис и подчёркивание.
+  static final RegExp _promoCodeChars = RegExp(r'^[A-ZА-ЯЁ0-9_-]+$');
+
+  Future<void> _onNewPromoSubmitted(
+    AdminNewPromoSubmitted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final NewPromoDraft d = state.newPromo;
+    if (d.submitting) return;
+    final String code = d.normalizedCode;
+
+    String? error;
+    if (code.length < 3 || code.length > 32) {
+      error = 'Код — от 3 до 32 символов.';
+    } else if (!_promoCodeChars.hasMatch(code)) {
+      error = 'В коде только буквы, цифры, «-» и «_», без пробелов.';
+    } else if (state.promos.any((PromoEntity p) => p.code.toUpperCase() == code)) {
+      error = 'Промокод $code уже есть.';
+    } else if (d.kind == PromoKind.percent && (d.value < 1 || d.value > 100)) {
+      error = 'Процент — от 1 до 100.';
+    } else if (d.value < 1) {
+      error = 'Укажите сумму скидки.';
+    } else if (d.minStations < 1) {
+      error = 'Минимум — одна станция.';
+    }
+    if (error != null) {
+      emit(state.copyWith(newPromo: d.copyWith(message: error, isError: true)));
+      return;
+    }
+
+    emit(state.copyWith(newPromo: d.copyWith(submitting: true, message: '')));
+    final PromoEntity draft = PromoEntity(
+      id: 'new',
+      code: code,
+      kind: d.kind,
+      value: d.value,
+      minStations: d.minStations,
+    );
+    final String id;
+    try {
+      id = await _repository.createPromo(draft);
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(message: e.message, isError: true, submitting: false),
+      ));
+      return;
+    } catch (_) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(
+          message: 'Не удалось сохранить промокод. Проверьте связь и права.',
+          isError: true,
+          submitting: false,
+        ),
+      ));
+      return;
+    }
+    final PromoEntity created = PromoEntity(
+      id: id,
+      code: code,
+      kind: draft.kind,
+      value: draft.value,
+      minStations: draft.minStations,
+    );
+    emit(state.copyWith(
+      promos: <PromoEntity>[...state.promos, created]
+        ..sort((PromoEntity a, PromoEntity b) => a.code.compareTo(b.code)),
+      newPromo: NewPromoDraft(
+        kind: d.kind,
+        value: d.value,
+        message: 'Промокод $code (${created.effectLabel}) добавлен — '
+            'клиенты могут вводить его в виджете.',
       ),
     ));
   }

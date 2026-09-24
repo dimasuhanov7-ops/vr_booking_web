@@ -10,7 +10,7 @@ import '../admin_theme.dart';
 import 'admin_atoms.dart';
 
 /// Вкладка «Журнал» — кто, когда и что менял в ценах, пакетах, доступности,
-/// настройках клуба и статусах броней выбранного клуба.
+/// настройках клуба и бронях выбранного клуба, а также в общих промокодах.
 class LogTab extends StatelessWidget {
   /// Создаёт вкладку.
   const LogTab({required this.state, super.key});
@@ -39,7 +39,7 @@ class LogTab extends StatelessWidget {
           AdminCardTitle(
             'Журнал действий',
             subtitle: 'Последние изменения цен, пакетов, доступности, настроек '
-                'и статусов броней клуба ${state.club.name}. Новые сверху.',
+                'и броней клуба ${state.club.name}, а также промокодов. Новые сверху.',
             trailing: AdminGhostButton(
               label: state.auditLoading ? 'Загружаю…' : 'Обновить',
               onTap: () => bloc.add(const AdminAuditRequested()),

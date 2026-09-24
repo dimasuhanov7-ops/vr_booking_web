@@ -37,6 +37,7 @@ class AuditDescriber {
       'booking_clubs' => _club(e, row),
       'booking_orders' => _order(e, row),
       'booking_reschedule' => _reschedule(e, row),
+      'booking_discounts' => _discount(e, row),
       _ => (title: '${e.entity} · ${e.action}', details: null),
     };
   }
@@ -158,6 +159,46 @@ class AuditDescriber {
       title: 'Бронь перенесена · ${row['client_name'] ?? 'бронь'} · ${_clubName(row['club_id'])}',
       details: '${span(e.before)} → ${span(e.after)}',
     );
+  }
+
+  /// Промокод (или автоскидка без кода) — общий для всех клубов.
+  AuditLine _discount(AuditEntryEntity e, Map<String, dynamic> row) {
+    final String name = row['code'] != null
+        ? 'Промокод ${row['code']}'
+        : 'Автоскидка «${row['title'] ?? 'без названия'}»';
+    String effect(Map<String, dynamic> r) {
+      final String v = _num(r['value']) ?? '?';
+      return r['kind'] == 'fixed' ? '−$v ₽' : '−$v%';
+    }
+
+    String from(Object? n) => 'от ${_num(n) ?? 1} мест';
+
+    if (e.action == 'insert') {
+      final int min = (row['min_stations'] as num?)?.toInt() ?? 1;
+      return (
+        title: row['code'] != null
+            ? 'Новый промокод ${row['code']}'
+            : 'Новая автоскидка «${row['title'] ?? 'без названия'}»',
+        details: '${effect(row)}${min > 1 ? ', ${from(min)}' : ''}'
+            '${row['active'] == false ? ', выключен' : ''}',
+      );
+    }
+    if (e.action == 'delete') return (title: '$name удалён', details: null);
+
+    final Map<String, dynamic> b = e.before ?? const <String, dynamic>{};
+    final Map<String, dynamic> a = e.after ?? const <String, dynamic>{};
+    final List<String> changes = <String>[];
+    if (b['code'] != a['code']) changes.add('код: ${b['code']} → ${a['code']}');
+    if (b['kind'] != a['kind'] || _num(b['value']) != _num(a['value'])) {
+      changes.add('скидка: ${effect(b)} → ${effect(a)}');
+    }
+    if (b['min_stations'] != a['min_stations']) {
+      changes.add('${from(b['min_stations'])} → ${from(a['min_stations'])}');
+    }
+    if (b['active'] != a['active']) {
+      changes.add(a['active'] == true ? 'включён' : 'выключен');
+    }
+    return (title: name, details: changes.isEmpty ? null : changes.join('; '));
   }
 
   // -- мелочи -----------------------------------------------------------------

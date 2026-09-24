@@ -70,7 +70,7 @@ class RecordsTab extends StatelessWidget {
         value: '${live.length}',
         note: dayNote.isEmpty ? 'на выбранный день' : dayNote,
       ),
-      (label: 'сумма', value: AdminFormat.money(total), note: 'по текущему тарифу'),
+      (label: 'сумма', value: AdminFormat.money(total), note: 'по текущему тарифу, с промокодами'),
     ];
 
     return Column(

@@ -159,6 +159,57 @@ class AdminNewPackageSubmitted extends AdminEvent {
   const AdminNewPackageSubmitted();
 }
 
+/// Включить / выключить промокод.
+class AdminPromoToggled extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoToggled(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Удалить промокод.
+class AdminPromoDeleted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoDeleted(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Правка формы нового промокода.
+class AdminNewPromoChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoChanged({this.code, this.kind, this.value, this.minStations});
+
+  /// Код.
+  final String? code;
+
+  /// Процент или сумма.
+  final PromoKind? kind;
+
+  /// Процент или ₽.
+  final int? value;
+
+  /// От скольких станций.
+  final int? minStations;
+
+  @override
+  List<Object?> get props => <Object?>[code, kind, value, minStations];
+}
+
+/// Завести промокод из формы.
+class AdminNewPromoSubmitted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoSubmitted();
+}
+
 /// Переключить приём заявок.
 class AdminIntakeToggled extends AdminEvent {
   /// Создаёт событие.

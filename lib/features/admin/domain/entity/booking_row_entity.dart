@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'promo_entity.dart';
+
 /// Статус записи.
 enum RecordStatus {
   /// Новая (заявка не обработана).
@@ -86,6 +88,7 @@ class BookingRowEntity extends Equatable {
     this.note = '',
     this.hourHeadsets,
     this.hourConsoles,
+    this.promo,
   });
 
   /// Идентификатор.
@@ -141,6 +144,9 @@ class BookingRowEntity extends Equatable {
 
   /// PS5 по часам брони. `null` — одинаково весь сеанс.
   final List<int>? hourConsoles;
+
+  /// Промокод, с которым оформлена бронь (`booking_orders.discount_id`).
+  final PromoEntity? promo;
 
   /// Конец, минут от полуночи.
   int get endMinutes => startMinutes + durationMinutes;
@@ -237,6 +243,7 @@ class BookingRowEntity extends Equatable {
         note: note ?? this.note,
         hourHeadsets: clearHourly ? null : (hourHeadsets ?? this.hourHeadsets),
         hourConsoles: clearHourly ? null : (hourConsoles ?? this.hourConsoles),
+        promo: promo,
       );
 
   @override
@@ -259,5 +266,6 @@ class BookingRowEntity extends Equatable {
         note,
         hourHeadsets,
         hourConsoles,
+        promo,
       ];
 }

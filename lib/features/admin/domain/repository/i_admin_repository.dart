@@ -4,6 +4,7 @@ import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
+import '../entity/promo_entity.dart';
 
 /// Контракт данных админки.
 ///
@@ -36,6 +37,10 @@ abstract interface class IAdminRepository {
   /// Стартовые пакеты.
   Future<List<PackageEntity>> fetchPackages();
 
+  /// Промокоды (общие для всех клубов). Пока не применена миграция
+  /// `online_booking_discounts_admin`, сервер отдаёт пустой список.
+  Future<List<PromoEntity>> fetchPromos();
+
   /// Единый список записей (брони + журнал).
   Future<List<BookingRowEntity>> fetchRows();
 
@@ -64,6 +69,17 @@ abstract interface class IAdminRepository {
   /// `booking_orders.package_id`), пакет не удаляется, а выключается —
   /// тогда возвращает `false`.
   Future<bool> deletePackage(String packageId);
+
+  /// Завести промокод. Возвращает присвоенный сервером id.
+  Future<String> createPromo(PromoEntity draft);
+
+  /// Включить / выключить промокод.
+  Future<void> setPromoActive(String promoId, {required bool active});
+
+  /// Удалить промокод. Если по нему уже есть брони
+  /// (`booking_orders.discount_id`), он не удаляется, а выключается — тогда
+  /// возвращает `false`.
+  Future<bool> deletePromo(String promoId);
 
   /// Отменить / вернуть бронь (`status` = `cancelled` / `confirmed`).
   Future<void> setOrderCancelled(String orderId, {required bool cancelled});
