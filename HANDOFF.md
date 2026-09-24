@@ -3,9 +3,78 @@
 > Прочитай этот файл целиком перед работой. Затем открой `design/DESIGN_SPEC.md`
 > и вызови скилл `flutter-dev` (стандарты Friflex — им следует весь код).
 >
-> **Раздел «Админка»** (`?admin=1`) — UI на моках готов (`lib/features/admin/`).
-> Осталось: Supabase Auth для персонала + реальные записи/правки в БД. Контекст:
-> [`docs/ADMIN_TASK.md`](docs/ADMIN_TASK.md), [`design/ADMIN_DESIGN_SPEC.md`](design/ADMIN_DESIGN_SPEC.md).
+> **Раздел «Админка»** (`?admin=1`) — работает на реальной БД (Supabase Auth +
+> `booking_staff`). Контекст: [`docs/ADMIN_TASK.md`](docs/ADMIN_TASK.md),
+> [`design/ADMIN_DESIGN_SPEC.md`](design/ADMIN_DESIGN_SPEC.md).
+
+## ⚡ Состояние на 2026-09-24 — читать первым
+
+**Источник истины — прод `cpjmirlujtfuzvdnysyx`.** Работа 10–18 сентября
+(часть миграций и функций) была применена к проду, но в GitHub не попала.
+24.09 недостающее выгружено с прода в репозиторий:
+
+- **Миграции.** Все 23 миграции `online_booking_*` из журнала прода теперь есть
+  в `supabase/migrations/`. Восемь новых файлов совпадают с продом побайтно
+  (md5 по `supabase_migrations.schema_migrations`). Первые четыре файла
+  (`20260904…`) совпадают с журналом и по версии, у остальных имя ≠ версии на
+  проде — соответствие ниже. Старые 15 файлов по коду совпадают
+  с применёнными; расходятся только тексты комментариев. `…_feature` правили
+  после применения (там уже `btree_gist` в `extensions`, `sort_order`, revoke),
+  итоговое состояние то же.
+
+  | Файл в репозитории | Версия на проде |
+  |---|---|
+  | `20260907120000_online_booking_durations` | `20260908191029` |
+  | `20260908120000_online_booking_packages` | `20260908191137` |
+  | `20260909120000_online_booking_staff_auth` | `20260908191216` |
+  | `20260910120000_online_booking_hourly_segments` | `20260908191300` |
+  | `20260911120000_online_booking_lockdown` | `20260908191400` |
+  | `20260912120000_online_booking_revoke_is_staff_anon` | `20260908191609` |
+  | `20260913120000_online_booking_availability` | `20260908223610` |
+  | `20260914120000_online_booking_order_respects_closures` | `20260908223656` |
+  | `20260915120000_online_booking_audit_log` | `20260908224041` |
+  | `20260916120000_online_booking_client_cancel` | `20260908224145` |
+  | `20260917120000_online_booking_phone_key` | `20260908224452` |
+  | `20260918120000_online_booking_limits_use_phone_key` | `20260908224539` |
+  | `20260918120100_online_booking_perm_timezone` | `20260910072736` |
+  | `20260918120200_online_booking_arena_halves` | `20260910072755` |
+  | `20260918120300_online_booking_lead_time` | `20260910083531` |
+  | `20260918120400_online_booking_prepay_phone_key` | `20260910101723` |
+  | `20260918120500_online_booking_mirror` | `20260915081448` |
+  | `20260919120000_online_booking_price_tiers` | `20260916163400` |
+  | `20260920120000_online_booking_admin_realtime` | `20260918160339` |
+
+  Из-за разных версий `supabase db push` против прода **не запускать**: журналы
+  не сходятся, и он либо откажется, либо попробует применить файлы заново.
+  Новые миграции — через MCP `apply_migration` (или сначала выровнять журнал
+  `supabase migration repair`).
+- **Edge Functions.** `booking-intake` в репозитории = задеплоенная v11 (без
+  Telegram). `booking-mirror` (v9) добавлена — уведомления в Telegram и Google
+  Таблица по триггеру, см. [`docs/MIRROR.md`](docs/MIRROR.md). Apps Script
+  таблицы в репозиторий так и не попал — выгрузить из таблицы.
+- **Таймзона — Пермь** (`Asia/Yekaterinburg`, UTC+5) у обоих клубов. Клиент
+  берёт её из `booking_clubs.timezone`; админка тоже (раньше была зашита
+  Москва +3, и все брони в ней съезжали на 2 часа).
+- **Запись закрывается за 30 минут** до начала (кроме персонала):
+  `TOO_LATE_TO_BOOK` в RPC, виджет такие слоты не показывает.
+- **Ступени цен** (`booking_prices.min_qty`): «до N станций одна цена, дальше
+  другая». Виджет считает так же, как `booking_station_price`; админка правит
+  только базовую ступень `min_qty = 1`. Сейчас на проде ступеней нет.
+- **Арена V-Ray** — два ряда по 6 шлемов.
+- **Предоплата** — `booking_orders.prepay`.
+
+Админка (сделано 24.09): «Новая запись» создаёт бронь в БД через
+`booking_create_order` (от сотрудника: без лимитов и паузы, `source=staff`);
+карточка брони сохраняет имя/телефон/предоплату/комментарий по «Сохранить»;
+время и состав брони в боевой сборке не редактируются — позиции брони
+сотруднику по RLS только читаются (нужна RPC, если это понадобится); вход
+проверяет `booking_is_staff()`; ошибка загрузки — экран с «Повторить»/«Выйти»;
+пакет с бронями выключается вместо удаления.
+
+Не восстановлено: Flutter-код после 09.09, если он менялся (с прода его не
+достать — там только собранный бандл). Например, под миграцию `admin_realtime`
+в админке нет подписки на Realtime — данные обновляются только при загрузке
+страницы.
 
 ## Что это
 
@@ -34,9 +103,9 @@
 | Тема | Решение |
 |---|---|
 | Длительности сеанса | **60 / 120 / 180 / 240** мин (1,5 ч нет, есть 4 ч). Шаг сетки = длительность + пауза клуба (Effect 10 мин, V-Ray 0). Зашито в RLS/RPC — миграция `20260907120000_online_booking_durations`. |
-| Цены | В БД (`booking_prices`), редактируются без миграций. Сейчас: VR **600 ₽/ч** будни / **1000 ₽/ч** выходные; PS5 **300** / **400**. Одинаково для обоих клубов. Оплата на месте, суммы в виджете справочные. |
+| Цены | В БД (`booking_prices`), редактируются из админки. На проде (24.09): VR **800 ₽/ч** будни / **1200 ₽/ч** выходные; PS5 **300** / **400**. Одинаково для обоих клубов. Возможны ступени «от N станций» (`min_qty`). Оплата на месте, суммы в виджете справочные. |
 | Залы V-Ray | «Большой зал» (12 VR), «Малый зал» (4 VR + 2 PS5) + вариант **«Весь клуб»** — одна бронь на станции из обоих залов. Effect VR — один зал «Зал» (4 VR + 2 PS5). |
-| Часы | Effect **11:00–22:30**, V-Ray **11:00–23:00**, TZ Europe/Moscow. |
+| Часы | Effect **11:00–22:30**, V-Ray **11:00–23:00**, TZ **Asia/Yekaterinburg** (Пермь, UTC+5). |
 | Скидки | **Пока без UI.** Инфраструктура в БД (`booking_discounts`, RPC `booking_validate_discount`) оставлена на будущее, данных нет, поле промокода в виджете не показывается. |
 | Выходные | сб + вс (по дате брони в TZ клуба). |
 
@@ -91,7 +160,7 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
   `BookingRepositoryMock` (демо-данные = сид миграции).
 - **domain**: сущности; `IBookingRepository`; сервисы `SlotGeneratorService`
   (шаг = длительность+пауза), `PricingService` (будни/выходные, per-hour),
-  `ClubClock` (TZ-перевод, фикс. смещение Москвы +3); `BookingBloc` — один
+  `ClubClock` (TZ-перевод, фикс. смещение по таймзоне клуба, Пермь +5); `BookingBloc` — один
   прокручиваемый экран, шаг 1..4 выводится из состояния (клуб / слот / станции).
 - **presentation**: `BookingScreen` + `BookingView`; компоненты
   `ClubSelector`, `HallSelector` (+ пунктирный чип «Весь клуб»), `DateField` +
@@ -116,7 +185,7 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 ([`design/DESIGN_SPEC.md §0`](design/DESIGN_SPEC.md)):
 1. ✅ Десктоп 2 колонки (≥860px), `_frameWide` 1000px, заглушка правой колонки.
 2. ✅ Карточки-поля (`FieldCard`) для даты/длительности + строки тарифа.
-3. ✅ Пакеты (`booking_packages` — **миграция не применена**; `PackageCards`).
+3. ✅ Пакеты (`booking_packages`; `PackageCards`).
 4. ✅ Аккаунт по телефону (`AccountBlock` + localStorage).
 5. ✅ Чек с пунктирными разделителями (`DashedDivider` в `success_view`).
 Слоты/план зала уже были по макету.
@@ -139,15 +208,14 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
 `lib/features/admin/` — та же слоёная структура. Полноширинная панель персонала:
 вкладки **Цены · Пакеты · Доступность · Брони · Записи**, переключатель клуба,
 все расчёты («по часам», KPI, суммы) реактивны от вкладки «Цены». Данные —
-`AdminRepositoryMock` (повторяет прототип, единый датасет `LOG`). Роутинг —
-`BookingApp._isAdmin` по query `?admin=1` (без пакета роутинга). Правки цен/пакетов/
-доступности/отмены живут в `AdminBloc`, на сервер ничего не уходит.
+`AdminRepositoryMock` в демо-сборке, `AdminRepository` (Supabase) в боевой.
+Роутинг — `BookingApp._isAdmin` по query `?admin=1` (без пакета роутинга).
 
 ### Авторизация (сделано)
 `?admin=1` за `AdminAuthGate`: в `USE_MOCK` — открывается сразу (демо), иначе —
 экран входа `AdminLoginScreen` (Supabase Auth email+пароль). Кнопка «Выйти» в
 шапке. `Injection.init(adminMode:)` поднимает Supabase SDK и в api-сборке.
-Миграция `20260909120000_online_booking_staff_auth` (⏳ **не применена**):
+Миграция `20260909120000_online_booking_staff_auth` (применена):
 таблица `booking_staff` (allowlist по `auth.users.id`), функция
 `booking_is_staff()`, RLS-политики write для персонала на `booking_prices`,
 `booking_packages`, `booking_clubs` (update), `booking_orders` (read+update),
@@ -165,13 +233,10 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
   (`cancelled`/`confirmed`), триггер освобождает слот.
 Ошибка записи → плашка `state.saveError` в шапке вкладки.
 
-⏳ Проверить вживую нельзя, пока не применены `20260908120000_online_booking_packages`
-и `20260909120000_online_booking_staff_auth` и не создан аккаунт сотрудника.
-
-**Осталось:** доступность (пауза приёма / закрытие залов и слотов) — правки живут
-только в сессии, не сохраняются (плашка предупреждает). Нужна таблица
-`booking_availability` + интеграция в `booking_busy_intervals` публичного виджета.
-Плюс: редактирование часов работы клуба (сейчас не пишется).
+Доступность (пауза приёма, закрытые залы и окна) пишется в `booking_clubs.intake_open`
+и `booking_availability`. Новая запись, карточка брони, проверка сотрудника — см.
+«Состояние на 2026-09-24» вверху. **Осталось:** редактирование часов работы
+клуба; перенос/смена состава существующей брони (нужна RPC).
 
 ## Слой интеграции (виджет ↔ бэкенд)
 
@@ -182,15 +247,13 @@ RPC: `booking_busy_intervals(club_id, day)`, `booking_quote(...)`,
   + `BOOKING_API_BASE=<url>` + `BOOKING_API_KEY=<key>`
 
 Точка развода — Supabase Edge Function [`supabase/functions/booking-intake/index.ts`](supabase/functions/booking-intake/index.ts)
-— **задеплоена** на `cpjmirlujtfuzvdnysyx` (v1, `verify_jwt=true`), URL
-`https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`, все эндпоинты
-проверены. Принимает бронь, вызывает `booking_create_order`, уведомляет Telegram
-(если заданы секреты), дальше можно добавить получателей (приложение, CRM) не трогая
-клиентов. Telegram-бот = ещё один клиент того же контракта. Описание —
-[`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+— **задеплоена** на `cpjmirlujtfuzvdnysyx` (v11, `verify_jwt=true`), URL
+`https://cpjmirlujtfuzvdnysyx.functions.supabase.co/booking-intake`. Принимает
+бронь и вызывает `booking_create_order`. Telegram-бот = ещё один клиент того же
+контракта. Описание — [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
 
-Для Telegram-уведомлений: `supabase secrets set --project-ref cpjmirlujtfuzvdnysyx
-TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=…` (без них уведомления просто пропускаются).
+Уведомления в Telegram и Google Таблица — отдельная функция `booking-mirror` по
+триггеру на `booking_orders`, для всех источников: [`docs/MIRROR.md`](docs/MIRROR.md).
 Чтобы переключить виджет на функцию: собрать с `--dart-define=BOOKING_BACKEND=api`.
 
 ## Как запустить (демо без БД)
@@ -317,7 +380,7 @@ Supabase SDK не инициализируется.
   при системном увеличении шрифта;
 - `manifest.json` и `theme-color` приведены под проект;
 - **спринт 1 (безопасность)** — миграция
-  `20260911120000_online_booking_lockdown` (⏳ **не применена**): единственный
+  `20260911120000_online_booking_lockdown` (применена): единственный
   вход для брони — RPC (прямой insert анониму закрыт), лимиты 3 брони/час и
   5 активных на номер, валидация отрезков; Edge Function отдаёт 429 на лимиты
   и понимает список CORS-origin; CSP + `frame-ancestors` + `Referrer-Policy`;
@@ -337,8 +400,8 @@ Supabase SDK не инициализируется.
 
 ## TODO / полировка (по убыванию важности)
 
-1. **Ревью и применение миграций** (ждёт заказчика) — включая
-   `20260910120000_online_booking_hourly_segments`.
+1. **Держать репозиторий = прод.** Каждую миграцию/функцию, применённую к проду,
+   сразу коммитить и пушить (24.09 пришлось восстанавливать с прода).
 2. На выбранной (лаймовой) карточке клуба текст «Ежедневно 11:00–22:30» плохо
    читается — поднять контраст в `club_selector.dart`.
 3. Проверить сквозной сценарий на реальной БД: выбор станций, конфликт (две
