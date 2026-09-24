@@ -790,11 +790,21 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final List<StationEntity> picked = s.stations
         .where((StationEntity st) => all.contains(st.id))
         .toList(growable: false);
+    final Map<String, StationType> typeOf = <String, StationType>{
+      for (final StationEntity st in s.stations) st.id: st.type,
+    };
     final QuoteEntity q = _pricing.quote(
       club: club,
       stations: picked,
       startsAtUtc: slot.startsAt,
       minutesOf: (StationEntity st) => 60 * s.stationHours(st.id),
+      // Ступень тарифа — по числу станций того же типа в каждом часе,
+      // как сервер считает по отрезкам брони.
+      qtyByHourOf: (StationEntity st) => <int>[
+        for (int h = 0; h < s.hourCount; h++)
+          if (s.pickedAt(h).contains(st.id))
+            s.pickedAt(h).where((String id) => typeOf[id] == st.type).length,
+      ],
       rates: state.prices,
       showRoomInLabel: state.hall?.isCombo ?? false,
     );

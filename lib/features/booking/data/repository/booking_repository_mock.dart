@@ -15,14 +15,14 @@ class BookingRepositoryMock implements IBookingRepository {
   /// Создаёт mock-репозиторий.
   BookingRepositoryMock();
 
-  static const Duration _tz = Duration(hours: 3); // Europe/Moscow
+  static const Duration _tz = Duration(hours: 5); // Asia/Yekaterinburg (Пермь)
 
   final List<ClubEntity> _clubs = const <ClubEntity>[
     ClubEntity(
       id: 'club-effect',
       slug: 'effect_vr',
       name: 'Effect VR',
-      timezone: 'Europe/Moscow',
+      timezone: 'Asia/Yekaterinburg',
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 22, minutes: 30),
       slotGapMinutes: 10,
@@ -32,7 +32,7 @@ class BookingRepositoryMock implements IBookingRepository {
       id: 'club-vray',
       slug: 'v_ray',
       name: 'V-Ray',
-      timezone: 'Europe/Moscow',
+      timezone: 'Asia/Yekaterinburg',
       openTime: Duration(hours: 11),
       closeTime: Duration(hours: 23),
       slotGapMinutes: 0,
@@ -54,7 +54,8 @@ class BookingRepositoryMock implements IBookingRepository {
       <String, List<StationEntity>>{
     'club-effect': _room('e-main', 'Зал', headsets: 4, consoles: 2, base: 1),
     'club-vray': <StationEntity>[
-      ..._room('v-big', 'Большой зал', headsets: 12, consoles: 0, base: 1),
+      // Арена — две половины по 6 шлемов (миграция online_booking_arena_halves).
+      ..._room('v-big', 'Большой зал', headsets: 12, consoles: 0, base: 1, perRow: 6),
       ..._room('v-small', 'Малый зал', headsets: 4, consoles: 2, base: 20),
     ],
   };
@@ -204,6 +205,7 @@ class BookingRepositoryMock implements IBookingRepository {
     required int headsets,
     required int consoles,
     required int base,
+    int perRow = 4,
   }) {
     final List<StationEntity> out = <StationEntity>[];
     for (int i = 0; i < headsets; i++) {
@@ -213,8 +215,8 @@ class BookingRepositoryMock implements IBookingRepository {
         roomName: roomName,
         type: StationType.vrHeadset,
         label: '#${i + 1}',
-        rowIndex: i ~/ 4,
-        positionInRow: i % 4,
+        rowIndex: i ~/ perRow,
+        positionInRow: i % perRow,
         sortOrder: base + i,
         isActive: true,
       ));
@@ -226,7 +228,7 @@ class BookingRepositoryMock implements IBookingRepository {
         roomName: roomName,
         type: StationType.ps5,
         label: 'PS5-${i + 1}',
-        rowIndex: (headsets / 4).ceil(),
+        rowIndex: (headsets / perRow).ceil(),
         positionInRow: i,
         sortOrder: base + headsets + i,
         isActive: true,

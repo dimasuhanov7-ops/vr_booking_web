@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../booking/domain/service/club_clock.dart';
 import '../../domain/entity/admin_club_entity.dart';
 import '../../domain/entity/admin_failure.dart';
 import '../../domain/entity/availability_entity.dart';
@@ -19,8 +20,8 @@ class AdminRepository implements IAdminRepository {
 
   final SupabaseClient _client;
 
-  /// Смещение Москвы (клубы работают в фиксированной TZ без перехода на лето).
-  static const Duration _tz = Duration(hours: 3);
+  /// Таймзона, если у клуба она почему-то не пришла: клубы в Перми.
+  static const String _defaultTimezone = 'Asia/Yekaterinburg';
 
   // -- чтение ---------------------------------------------------------------
 
@@ -91,9 +92,12 @@ class AdminRepository implements IAdminRepository {
         .eq('is_active', true);
     final List<dynamic> rooms =
         await _client.from('booking_rooms').select('id,club_id');
+    // Админка правит базовую ступень тарифа (min_qty = 1); ступени «от N
+    // станций» задаются отдельно и здесь не затираются.
     final List<dynamic> prices = await _client
         .from('booking_prices')
-        .select('club_id,station_type,day_kind,price_per_hour');
+        .select('club_id,station_type,day_kind,price_per_hour')
+        .eq('min_qty', 1);
 
     // club_id -> {field -> цена}
     final Map<String, Map<PriceField, int>> byClub = <String, Map<PriceField, int>>{};
@@ -150,13 +154,22 @@ class AdminRepository implements IAdminRepository {
 
   @override
   Future<List<BookingRowEntity>> fetchRows() async {
-    final DateTime now = DateTime.now().toUtc().add(_tz);
-    final DateTime today = DateTime(now.year, now.month, now.day);
+    // Время брони показываем в таймзоне её клуба (booking_clubs.timezone),
+    // а не в зашитом смещении: иначе при смене таймзоны клуба всё «съезжает».
+    final List<dynamic> clubs =
+        await _client.from('booking_clubs').select('id,timezone');
+    final Map<String, Duration> tzByClub = <String, Duration>{
+      for (final dynamic c in clubs)
+        (c as Map<String, dynamic>)['id'] as String: ClubClock.offsetOf(
+            c['timezone'] as String? ?? _defaultTimezone),
+    };
+    final DateTime nowUtc = DateTime.now().toUtc();
 
     final List<dynamic> orders = await _client
         .from('booking_orders')
         .select(
           'id,club_id,client_name,client_phone,status,source,created_at,'
+          'prepay,comment,'
           'booking_packages(name),'
           'booking_order_items(starts_at,ends_at,booking_stations(type,room_id))',
         )
@@ -167,10 +180,14 @@ class AdminRepository implements IAdminRepository {
 
     final List<BookingRowEntity> out = <BookingRowEntity>[];
     for (final dynamic o in orders) {
+      final Map<String, dynamic> m = o as Map<String, dynamic>;
+      final Duration tz = tzByClub[m['club_id']] ??
+          ClubClock.offsetOf(_defaultTimezone);
+      final DateTime now = nowUtc.add(tz);
       final BookingRowEntity? row = BookingRowDto.fromOrderJson(
-        o as Map<String, dynamic>,
-        today: today,
-        tz: _tz,
+        m,
+        today: DateTime(now.year, now.month, now.day),
+        tz: tz,
       );
       if (row != null) out.add(row);
     }
@@ -225,7 +242,8 @@ class AdminRepository implements IAdminRepository {
         })
         .eq('club_id', clubId)
         .eq('station_type', k.type)
-        .eq('day_kind', k.day));
+        .eq('day_kind', k.day)
+        .eq('min_qty', 1));
   }
 
   @override

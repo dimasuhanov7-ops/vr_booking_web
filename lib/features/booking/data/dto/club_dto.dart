@@ -20,7 +20,7 @@ class ClubDto {
         id: json['id'] as String,
         slug: json['slug'] as String,
         name: json['name'] as String,
-        timezone: json['timezone'] as String? ?? 'Europe/Moscow',
+        timezone: json['timezone'] as String? ?? 'Asia/Yekaterinburg',
         openTime: _parseTime(json['open_time'] as String? ?? '11:00:00'),
         closeTime: _parseTime(json['close_time'] as String? ?? '23:00:00'),
         slotGapMinutes: (json['slot_gap_minutes'] as num?)?.toInt() ?? 0,

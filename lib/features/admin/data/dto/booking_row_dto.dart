@@ -91,6 +91,8 @@ abstract final class BookingRowDto {
       source: _source(json['source'] as String? ?? 'site'),
       packageName: pkg?['name'] as String?,
       isCancelled: status == 'cancelled',
+      prepay: (json['prepay'] as num?)?.toInt() ?? 0,
+      note: json['comment'] as String? ?? '',
       hourHeadsets: varies ? vrByHour : null,
       hourConsoles: varies ? psByHour : null,
     );

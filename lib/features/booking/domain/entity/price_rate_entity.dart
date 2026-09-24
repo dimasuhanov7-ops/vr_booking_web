@@ -22,12 +22,17 @@ enum DayKind {
 }
 
 /// Тариф: цена за час для типа станции в будни/выходные.
+///
+/// Тарифов одного типа может быть несколько — ступени «от [minQty] станций»
+/// (`booking_prices.min_qty`): действует ступень с наибольшим [minQty], который
+/// не больше числа станций этого типа в брони.
 class PriceRateEntity extends Equatable {
   /// Создаёт тариф.
   const PriceRateEntity({
     required this.stationType,
     required this.dayKind,
     required this.pricePerHour,
+    this.minQty = 1,
   });
 
   /// Тип станции.
@@ -39,6 +44,9 @@ class PriceRateEntity extends Equatable {
   /// Цена за час, ₽.
   final num pricePerHour;
 
+  /// С какого числа станций этого типа действует ступень.
+  final int minQty;
+
   @override
-  List<Object?> get props => <Object?>[stationType, dayKind, pricePerHour];
+  List<Object?> get props => <Object?>[stationType, dayKind, pricePerHour, minQty];
 }

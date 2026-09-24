@@ -3,8 +3,9 @@ import '../entity/club_entity.dart';
 /// Перевод между «настенным» временем клуба и абсолютным моментом (UTC).
 ///
 /// Клубы работают в фиксированных таймзонах без перехода на летнее время
-/// (Москва — постоянный UTC+3), поэтому достаточно фиксированного смещения.
-/// Для неизвестных таймзон используется смещение локали браузера.
+/// (Пермь — `Asia/Yekaterinburg`, постоянный UTC+5), поэтому достаточно
+/// фиксированного смещения. Для неизвестных таймзон используется смещение
+/// локали браузера.
 class ClubClock {
   /// Создаёт часы клуба.
   const ClubClock(this.club);
@@ -20,8 +21,11 @@ class ClubClock {
     'UTC': Duration.zero,
   };
 
-  Duration get _offset =>
-      _fixedOffsets[club.timezone] ?? DateTime.now().timeZoneOffset;
+  /// Смещение от UTC для IANA-таймзоны [timezone] (`booking_clubs.timezone`).
+  static Duration offsetOf(String timezone) =>
+      _fixedOffsets[timezone] ?? DateTime.now().timeZoneOffset;
+
+  Duration get _offset => offsetOf(club.timezone);
 
   /// Собирает абсолютный момент из даты и «настенного» времени суток клуба.
   DateTime toUtc(DateTime day, Duration timeOfDay) {
