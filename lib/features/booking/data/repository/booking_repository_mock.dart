@@ -150,12 +150,29 @@ class BookingRepositoryMock implements IBookingRepository {
     return _delay(busy);
   }
 
+  /// Демо-промокоды: как строки `booking_discounts`.
+  static const List<DiscountEntity> _promos = <DiscountEntity>[
+    DiscountEntity(
+        id: 'd1', code: 'VRPARTY', kind: DiscountKind.percent, value: 10, minStations: 2),
+    DiscountEntity(
+        id: 'd2', code: 'MINUS500', kind: DiscountKind.fixed, value: 500, minStations: 1),
+  ];
+
   @override
   Future<DiscountEntity?> resolveDiscount({
     String? code,
     required int stationCount,
-  }) async =>
-      null; // скидок пока нет
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final String c = (code ?? '').trim().toUpperCase();
+    if (c.isEmpty) return null; // автоскидок в демо нет
+    for (final DiscountEntity d in _promos) {
+      if (d.code != c) continue;
+      if (stationCount < d.minStations) throw DiscountMinStationsFailure(d.minStations);
+      return d;
+    }
+    throw const DiscountNotFoundFailure();
+  }
 
   @override
   Future<String> createReservation(ReservationRequestEntity request) async {

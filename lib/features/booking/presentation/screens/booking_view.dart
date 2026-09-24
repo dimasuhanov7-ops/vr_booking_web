@@ -28,6 +28,7 @@ import '../components/account_block.dart';
 import '../components/hall_plan.dart';
 import '../components/hall_selector.dart';
 import '../components/package_cards.dart';
+import '../components/promo_field.dart';
 import '../components/session_hours.dart';
 import '../components/slot_grid.dart';
 import '../components/success_view.dart';
@@ -634,6 +635,18 @@ class _FormBody extends StatelessWidget {
           onNameChanged: (String v) => bloc.add(BookingContactChanged(name: v)),
           onPhoneChanged: (String v) => bloc.add(BookingContactChanged(phone: v)),
           onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
+        ),
+        const SizedBox(height: 12),
+        PromoField(
+          input: state.promoInput,
+          promo: state.promo,
+          applies: state.promoApplies,
+          checking: state.promoChecking,
+          error: state.promoError,
+          accent: BookingColors.accentFor(state.club?.slug),
+          onChanged: (String v) => bloc.add(BookingPromoInputChanged(v)),
+          onSubmit: () => bloc.add(const BookingPromoSubmitted()),
+          onClear: () => bloc.add(const BookingPromoCleared()),
         ),
         const SizedBox(height: 12),
         const _ConsentNote(),

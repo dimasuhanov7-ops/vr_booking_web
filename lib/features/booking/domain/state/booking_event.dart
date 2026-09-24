@@ -161,6 +161,30 @@ class BookingContactChanged extends BookingEvent {
   List<Object?> get props => <Object?>[name, phone, people];
 }
 
+/// Ввод в поле промокода.
+class BookingPromoInputChanged extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPromoInputChanged(this.text);
+
+  /// Текст поля.
+  final String text;
+
+  @override
+  List<Object?> get props => <Object?>[text];
+}
+
+/// Проверить и применить промокод из поля.
+class BookingPromoSubmitted extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPromoSubmitted();
+}
+
+/// Убрать применённый промокод.
+class BookingPromoCleared extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPromoCleared();
+}
+
 /// Перечитать занятость в фоне, пока клиент выбирает время и станции.
 class BookingLiveTick extends BookingEvent {
   /// Создаёт событие.

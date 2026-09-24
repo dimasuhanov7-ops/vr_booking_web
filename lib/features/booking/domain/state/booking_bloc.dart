@@ -13,6 +13,7 @@ import '../entity/account_entity.dart';
 import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
 import '../entity/club_entity.dart';
+import '../entity/discount_entity.dart';
 import '../entity/hall_option_entity.dart';
 import '../entity/package_entity.dart';
 import '../entity/price_rate_entity.dart';
@@ -64,6 +65,9 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingContactChanged>(_onContactChanged);
     on<BookingAvailabilityRefreshed>(_onAvailabilityRefreshed);
     on<BookingLiveTick>(_onLiveTick);
+    on<BookingPromoInputChanged>(_onPromoInputChanged);
+    on<BookingPromoSubmitted>(_onPromoSubmitted);
+    on<BookingPromoCleared>(_onPromoCleared);
     on<BookingVisibilityChanged>(_onVisibilityChanged);
     on<BookingSubmitted>(_onSubmitted);
     on<BookingConflictResolved>(_onConflictResolved);
@@ -490,6 +494,8 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           clientPhone: state.clientPhone.trim(),
           peopleCount: int.tryParse(state.peopleInput.trim()),
           comment: null,
+          // Код уходит, только если хватает станций: иначе сервер откажет всей брони.
+          discountCode: state.promoApplies ? state.promo!.code : null,
           source: _source,
           packageId: state.packageApplies ? state.selectedPackageId : null,
         ),
@@ -873,12 +879,67 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     );
   }
 
-  QuoteEntity _quote(Map<int, Set<String>> hours) {
-    final ClubEntity? club = state.club;
-    final TimeSlotEntity? slot = state.slot;
+  void _onPromoInputChanged(
+    BookingPromoInputChanged event,
+    Emitter<BookingState> emit,
+  ) =>
+      emit(state.copyWith(promoInput: event.text, clearPromoError: true));
+
+  Future<void> _onPromoSubmitted(
+    BookingPromoSubmitted event,
+    Emitter<BookingState> emit,
+  ) async {
+    final String code = state.promoInput.trim();
+    if (code.isEmpty || state.promoChecking) return;
+    emit(state.copyWith(promoChecking: true, clearPromoError: true));
+    try {
+      final DiscountEntity? d = await _repository.resolveDiscount(
+        code: code,
+        // Порог «от N станций» проверяем сами (подсказкой), чтобы код можно
+        // было ввести и до выбора станций.
+        stationCount: 1 << 16,
+      );
+      if (d == null) {
+        emit(state.copyWith(
+          promoChecking: false,
+          promoError: 'Промокод не найден или больше не действует.',
+        ));
+        return;
+      }
+      final BookingState next = state.copyWith(promo: d, promoChecking: false);
+      emit(next.copyWith(quote: _quoteFor(next, next.pickedByHour)));
+    } on BookingFailure catch (e) {
+      emit(state.copyWith(promoChecking: false, promoError: e.message));
+    }
+  }
+
+  void _onPromoCleared(BookingPromoCleared event, Emitter<BookingState> emit) {
+    final BookingState next =
+        state.copyWith(clearPromo: true, clearPromoError: true, promoInput: '');
+    emit(next.copyWith(quote: _quoteFor(next, next.pickedByHour)));
+  }
+
+  QuoteEntity _quote(Map<int, Set<String>> hours) => _quoteFor(state, hours);
+
+  /// Итог для выбора [hours] в состоянии [base] (пакет и промокод — из него).
+  QuoteEntity _quoteFor(BookingState base, Map<int, Set<String>> hours) {
+    final QuoteEntity q = _quoteBeforePromo(base, hours);
+    final BookingState s = base.copyWith(pickedByHour: hours);
+    final DiscountEntity? promo = s.promo;
+    if (promo == null || !s.promoApplies || q.lines.isEmpty) return q;
+    final String label = 'Промокод ${promo.code ?? promo.title ?? ''}'.trim();
+    return switch (promo.kind) {
+      DiscountKind.percent => q.withPromo(percent: promo.value, label: label),
+      DiscountKind.fixed => q.withPromo(fixed: promo.value, label: label),
+    };
+  }
+
+  QuoteEntity _quoteBeforePromo(BookingState base, Map<int, Set<String>> hours) {
+    final ClubEntity? club = base.club;
+    final TimeSlotEntity? slot = base.slot;
     if (club == null || slot == null) return QuoteEntity.empty;
 
-    final BookingState s = state.copyWith(pickedByHour: hours);
+    final BookingState s = base.copyWith(pickedByHour: hours);
     final Set<String> all = s.pickedIds;
     if (all.isEmpty) return QuoteEntity.empty;
 
@@ -900,13 +961,13 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           if (s.pickedAt(h).contains(st.id))
             s.pickedAt(h).where((String id) => typeOf[id] == st.type).length,
       ],
-      rates: state.prices,
-      showRoomInLabel: state.hall?.isCombo ?? false,
+      rates: base.prices,
+      showRoomInLabel: base.hall?.isCombo ?? false,
     );
 
     // Пакет: одинаковый состав на весь сеанс и совпадение — фиксируем цену пакета.
-    final PackageEntity? pkg = state.selectedPackage;
-    if (pkg != null && state.durationMinutes == pkg.minutes && !s.hasHourOverrides) {
+    final PackageEntity? pkg = base.selectedPackage;
+    if (pkg != null && base.durationMinutes == pkg.minutes && !s.hasHourOverrides) {
       final int vr =
           picked.where((StationEntity st) => st.type != StationType.ps5).length;
       final int ps =
