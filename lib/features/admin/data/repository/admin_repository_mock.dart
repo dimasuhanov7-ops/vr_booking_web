@@ -122,6 +122,12 @@ class AdminRepositoryMock implements IAdminRepository {
   Future<bool> isStaff() async => true;
 
   @override
+  Stream<void> changes() => const Stream<void>.empty();
+
+  @override
+  Duration? get refreshInterval => null;
+
+  @override
   bool get canEditSchedule => true;
 
   @override

@@ -19,6 +19,14 @@ abstract interface class IAdminRepository {
   /// только читаются (RLS), поэтому в боевой сборке — нет.
   bool get canEditSchedule;
 
+  /// Сигналы «на сервере поменялись брони, закрытия или пауза приёма» —
+  /// по ним панель перечитывает данные (Supabase Realtime).
+  Stream<void> changes();
+
+  /// Как часто перечитывать брони на случай пропущенных событий Realtime;
+  /// `null` — не нужно (демо-данные живут только в памяти).
+  Duration? get refreshInterval;
+
   /// Клубы с залами и рабочими часами.
   Future<List<AdminClubEntity>> fetchClubs();
 

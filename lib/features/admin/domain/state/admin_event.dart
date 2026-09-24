@@ -14,6 +14,13 @@ class AdminStarted extends AdminEvent {
   const AdminStarted();
 }
 
+/// Перечитать брони и доступность: пришло событие Realtime или сработал
+/// резервный таймер.
+class AdminRefreshRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRefreshRequested();
+}
+
 /// Смена клуба.
 class AdminClubChanged extends AdminEvent {
   /// Создаёт событие.

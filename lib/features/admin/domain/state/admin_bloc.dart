@@ -1,6 +1,8 @@
 // Публичные именованные параметры конструктора BLoC — часть публичного API фичи.
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
@@ -25,6 +27,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       : _repository = repository,
         super(const AdminState()) {
     on<AdminStarted>(_onStarted);
+    on<AdminRefreshRequested>(_onRefreshRequested);
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
     on<AdminPriceChanged>(_onPriceChanged);
@@ -58,6 +61,86 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
 
   /// Новая запись уже уходит на сервер — повторное нажатие не создаёт дубль.
   bool _creatingBooking = false;
+
+  StreamSubscription<void>? _changesSub;
+  Timer? _debounce;
+  Timer? _poll;
+
+  @override
+  Future<void> close() async {
+    await _changesSub?.cancel();
+    _debounce?.cancel();
+    _poll?.cancel();
+    return super.close();
+  }
+
+  /// Подписка на изменения с сервера. Одна бронь — это заказ и несколько
+  /// позиций, то есть пачка событий подряд: перечитываем один раз после паузы.
+  void _watch() {
+    _changesSub ??= _repository.changes().listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 600), () {
+        if (!isClosed) add(const AdminRefreshRequested());
+      });
+    });
+    final Duration? every = _repository.refreshInterval;
+    if (every != null) {
+      _poll ??= Timer.periodic(every, (_) {
+        if (!isClosed) add(const AdminRefreshRequested());
+      });
+    }
+  }
+
+  /// Закрытия из БД — в две коллекции состояния: залы закрыты бессрочно,
+  /// окна привязаны к дате и переводятся в ключи «клуб-день-минуты».
+  static ({Set<String> halls, Set<String> slots}) _closureKeys(
+    AvailabilityEntity avail,
+  ) {
+    final DateTime today = _today();
+    final Set<String> halls = <String>{};
+    final Set<String> slots = <String>{};
+    for (final ClosureEntity c in avail.closures) {
+      if (c.isWholeHall) {
+        halls.add(c.hallId!);
+        continue;
+      }
+      if (c.day == null || c.fromMinutes == null) continue;
+      final int dayIndex = DateTime(c.day!.year, c.day!.month, c.day!.day)
+          .difference(today)
+          .inDays;
+      slots.add('${c.clubId}-$dayIndex-${c.fromMinutes}');
+    }
+    return (halls: halls, slots: slots);
+  }
+
+  Future<void> _onRefreshRequested(
+    AdminRefreshRequested event,
+    Emitter<AdminState> emit,
+  ) async {
+    if (state.status != AdminStatus.ready) return;
+    final List<BookingRowEntity> rows;
+    final AvailabilityEntity avail;
+    try {
+      rows = await _repository.fetchRows();
+      avail = await _repository.fetchAvailability();
+    } catch (_) {
+      // Фоновое обновление: при сбое оставляем то, что уже на экране.
+      return;
+    }
+    final ({Set<String> halls, Set<String> slots}) keys = _closureKeys(avail);
+    // Несохранённые правки (rowEdits) не трогаем — они лежат поверх rows.
+    emit(state.copyWith(
+      rows: rows,
+      cancelledRowIds: <String>{
+        for (final BookingRowEntity r in rows)
+          if (r.isCancelled) r.id,
+      },
+      intakeOpen: !avail.pausedClubIds.contains(state.clubId),
+      closedHallIds: keys.halls,
+      closedSlotKeys: keys.slots,
+      pausedClubIds: avail.pausedClubIds,
+    ));
+  }
 
   Future<void> _onStarted(AdminStarted event, Emitter<AdminState> emit) async {
     emit(state.copyWith(status: AdminStatus.loading));
@@ -96,22 +179,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final String clubId =
         hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
 
-    // Закрытия из БД раскладываем в две коллекции состояния: залы закрыты
-    // бессрочно, окна привязаны к дате и переводятся в ключи «клуб-день-минуты».
-    final DateTime today = _today();
-    final Set<String> closedHalls = <String>{};
-    final Set<String> closedSlots = <String>{};
-    for (final ClosureEntity c in avail.closures) {
-      if (c.isWholeHall) {
-        closedHalls.add(c.hallId!);
-        continue;
-      }
-      if (c.day == null || c.fromMinutes == null) continue;
-      final int dayIndex = DateTime(c.day!.year, c.day!.month, c.day!.day)
-          .difference(today)
-          .inDays;
-      closedSlots.add('${c.clubId}-$dayIndex-${c.fromMinutes}');
-    }
+    final ({Set<String> halls, Set<String> slots}) keys = _closureKeys(avail);
 
     emit(state.copyWith(
       status: AdminStatus.ready,
@@ -128,10 +196,11 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
           if (r.isCancelled) r.id,
       },
       intakeOpen: !avail.pausedClubIds.contains(clubId),
-      closedHallIds: closedHalls,
-      closedSlotKeys: closedSlots,
+      closedHallIds: keys.halls,
+      closedSlotKeys: keys.slots,
       pausedClubIds: avail.pausedClubIds,
     ));
+    _watch();
   }
 
   /// Сегодня без времени — база для [AdminState.availDay] и индексов дней.

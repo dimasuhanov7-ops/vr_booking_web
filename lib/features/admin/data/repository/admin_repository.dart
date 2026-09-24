@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../booking/domain/service/club_clock.dart';
@@ -33,6 +35,42 @@ class AdminRepository implements IAdminRepository {
   /// менять их из админки нельзя, только отменить бронь и создать новую.
   @override
   bool get canEditSchedule => false;
+
+  /// Таблицы, изменения которых панель ловит через Realtime. Их публикацию
+  /// включает миграция `online_booking_admin_realtime`; события приходят с
+  /// учётом RLS, то есть только сотрудникам.
+  static const List<String> _watchedTables = <String>[
+    'booking_orders',
+    'booking_order_items',
+    'booking_availability',
+    'booking_clubs',
+  ];
+
+  /// Websocket Realtime может молча отвалиться (сон ноутбука, смена сети) —
+  /// раз в минуту перечитываем брони на всякий случай.
+  @override
+  Duration? get refreshInterval => const Duration(minutes: 1);
+
+  @override
+  Stream<void> changes() {
+    late final RealtimeChannel channel;
+    final StreamController<void> out = StreamController<void>(
+      onCancel: () => unawaited(_client.removeChannel(channel)),
+    );
+    channel = _client.channel('admin-bookings');
+    for (final String table in _watchedTables) {
+      channel.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: table,
+        callback: (_) {
+          if (!out.isClosed) out.add(null);
+        },
+      );
+    }
+    channel.subscribe();
+    return out.stream;
+  }
 
   // -- чтение ---------------------------------------------------------------
 
