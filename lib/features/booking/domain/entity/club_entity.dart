@@ -24,7 +24,7 @@ class ClubEntity extends Equatable {
   /// Отображаемое название.
   final String name;
 
-  /// Таймзона клуба (IANA, например `Europe/Moscow`).
+  /// Таймзона клуба (IANA, например `Asia/Yekaterinburg` — Пермь).
   final String timezone;
 
   /// Время открытия приёма броней (локальное время клуба).

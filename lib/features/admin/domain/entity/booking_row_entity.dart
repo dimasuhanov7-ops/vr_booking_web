@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'promo_entity.dart';
+
 /// Статус записи.
 enum RecordStatus {
   /// Новая (заявка не обработана).
@@ -9,13 +11,21 @@ enum RecordStatus {
   confirmed,
 
   /// Оплачена.
-  paid;
+  paid,
+
+  /// Гость пришёл (`booking_orders.status = completed`).
+  visited,
+
+  /// Гость не пришёл (`no_show`).
+  noShow;
 
   /// Разбирает значение из мок-данных.
   static RecordStatus fromRaw(String raw) => switch (raw) {
         'new' => RecordStatus.newRequest,
         'confirmed' => RecordStatus.confirmed,
         'paid' => RecordStatus.paid,
+        'visited' => RecordStatus.visited,
+        'no_show' => RecordStatus.noShow,
         _ => RecordStatus.newRequest,
       };
 
@@ -24,6 +34,8 @@ enum RecordStatus {
         RecordStatus.newRequest => 'новая',
         RecordStatus.confirmed => 'подтверждена',
         RecordStatus.paid => 'оплачена',
+        RecordStatus.visited => 'пришёл',
+        RecordStatus.noShow => 'не пришёл',
       };
 }
 
@@ -76,6 +88,7 @@ class BookingRowEntity extends Equatable {
     this.note = '',
     this.hourHeadsets,
     this.hourConsoles,
+    this.promo,
   });
 
   /// Идентификатор.
@@ -131,6 +144,9 @@ class BookingRowEntity extends Equatable {
 
   /// PS5 по часам брони. `null` — одинаково весь сеанс.
   final List<int>? hourConsoles;
+
+  /// Промокод, с которым оформлена бронь (`booking_orders.discount_id`).
+  final PromoEntity? promo;
 
   /// Конец, минут от полуночи.
   int get endMinutes => startMinutes + durationMinutes;
@@ -195,6 +211,7 @@ class BookingRowEntity extends Equatable {
 
   /// Копия с изменениями (используется при правке брони в админке).
   BookingRowEntity copyWith({
+    RecordStatus? status,
     String? clientName,
     String? phone,
     int? startMinutes,
@@ -218,7 +235,7 @@ class BookingRowEntity extends Equatable {
         consoles: consoles ?? this.consoles,
         clientName: clientName ?? this.clientName,
         phone: phone ?? this.phone,
-        status: status,
+        status: status ?? this.status,
         source: source,
         packageName: packageName,
         isCancelled: isCancelled,
@@ -226,6 +243,7 @@ class BookingRowEntity extends Equatable {
         note: note ?? this.note,
         hourHeadsets: clearHourly ? null : (hourHeadsets ?? this.hourHeadsets),
         hourConsoles: clearHourly ? null : (hourConsoles ?? this.hourConsoles),
+        promo: promo,
       );
 
   @override
@@ -248,5 +266,6 @@ class BookingRowEntity extends Equatable {
         note,
         hourHeadsets,
         hourConsoles,
+        promo,
       ];
 }

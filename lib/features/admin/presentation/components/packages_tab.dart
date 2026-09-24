@@ -132,6 +132,7 @@ class _PackCard extends StatelessWidget {
     return Opacity(
       opacity: pack.isEnabled ? 1 : 0.55,
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: pack.isEnabled ? AdminColors.tile : AdminColors.tileMuted,

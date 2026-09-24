@@ -8,8 +8,9 @@ import '../../domain/state/admin_bloc.dart';
 import '../admin_format.dart';
 import '../admin_theme.dart';
 import 'admin_atoms.dart';
+import 'promos_card.dart';
 
-/// Вкладка «Цены» — редактирование тарифов и превью длительности.
+/// Вкладка «Цены» — редактирование тарифов, превью длительности и промокоды.
 class PricesTab extends StatelessWidget {
   /// Создаёт вкладку.
   const PricesTab({required this.state, required this.accent, super.key});
@@ -57,6 +58,8 @@ class PricesTab extends StatelessWidget {
         _DurationPreview(
           price: state.priceOf(state.clubHalls.first.id),
         ),
+        const SizedBox(height: 14),
+        PromosCard(state: state, accent: accent),
       ],
     );
   }

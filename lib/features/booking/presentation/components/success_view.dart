@@ -123,7 +123,7 @@ class SuccessView extends StatelessWidget {
                   Text('На $peopleLabel — по одному человеку на шлем или PS5, можно меняться внутри компании.',
                       style: const TextStyle(fontSize: 13, color: BookingColors.textMuted)),
                 ]),
-                if (quote.hasDiscount) ...<Widget>[
+                if (quote.discountAmount > 0 && quote.discountLabel.isNotEmpty) ...<Widget>[
                   _dash(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -138,6 +138,29 @@ class SuccessView extends StatelessWidget {
                                   color: BookingColors.accentTintFor(club.slug))),
                         ),
                         Text('−${BookingFormat.money(quote.discountAmount)}',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: BookingColors.accentTintFor(club.slug))),
+                      ],
+                    ),
+                  ),
+                ],
+                if (quote.hasPromo) ...<Widget>[
+                  _dash(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    color: accent.withValues(alpha: 0.12),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(quote.promoLabel,
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: BookingColors.accentTintFor(club.slug))),
+                        ),
+                        Text('−${BookingFormat.money(quote.promoAmount)}',
                             style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,

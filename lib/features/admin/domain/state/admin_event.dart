@@ -14,6 +14,19 @@ class AdminStarted extends AdminEvent {
   const AdminStarted();
 }
 
+/// Перечитать брони и доступность: пришло событие Realtime или сработал
+/// резервный таймер.
+class AdminRefreshRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRefreshRequested();
+}
+
+/// Загрузить журнал действий (открыта вкладка «Журнал» или «Обновить»).
+class AdminAuditRequested extends AdminEvent {
+  /// Создаёт событие.
+  const AdminAuditRequested();
+}
+
 /// Смена клуба.
 class AdminClubChanged extends AdminEvent {
   /// Создаёт событие.
@@ -144,6 +157,57 @@ class AdminNewPackageChanged extends AdminEvent {
 class AdminNewPackageSubmitted extends AdminEvent {
   /// Создаёт событие.
   const AdminNewPackageSubmitted();
+}
+
+/// Включить / выключить промокод.
+class AdminPromoToggled extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoToggled(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Удалить промокод.
+class AdminPromoDeleted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminPromoDeleted(this.promoId);
+
+  /// Идентификатор промокода.
+  final String promoId;
+
+  @override
+  List<Object?> get props => <Object?>[promoId];
+}
+
+/// Правка формы нового промокода.
+class AdminNewPromoChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoChanged({this.code, this.kind, this.value, this.minStations});
+
+  /// Код.
+  final String? code;
+
+  /// Процент или сумма.
+  final PromoKind? kind;
+
+  /// Процент или ₽.
+  final int? value;
+
+  /// От скольких станций.
+  final int? minStations;
+
+  @override
+  List<Object?> get props => <Object?>[code, kind, value, minStations];
+}
+
+/// Завести промокод из формы.
+class AdminNewPromoSubmitted extends AdminEvent {
+  /// Создаёт событие.
+  const AdminNewPromoSubmitted();
 }
 
 /// Переключить приём заявок.
@@ -313,6 +377,57 @@ class AdminRowEdited extends AdminEvent {
 class AdminRowEditReset extends AdminEvent {
   /// Создаёт событие.
   const AdminRowEditReset(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
+/// Изменилась строка поиска брони.
+class AdminSearchChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchChanged(this.query);
+
+  /// Имя или телефон (часть).
+  final String query;
+
+  @override
+  List<Object?> get props => <Object?>[query];
+}
+
+/// Открыть бронь из результатов поиска: переключает клуб и день.
+class AdminSearchResultOpened extends AdminEvent {
+  /// Создаёт событие.
+  const AdminSearchResultOpened(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
+/// Отметить визит гостя: ждём / пришёл / не пришёл.
+class AdminVisitMarked extends AdminEvent {
+  /// Создаёт событие.
+  const AdminVisitMarked(this.rowId, this.status);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  /// `confirmed`, `visited` или `noShow`.
+  final RecordStatus status;
+
+  @override
+  List<Object?> get props => <Object?>[rowId, status];
+}
+
+/// Сохранить правки карточки брони на сервер.
+class AdminRowSaved extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowSaved(this.rowId);
 
   /// Идентификатор записи.
   final String rowId;

@@ -1,29 +1,36 @@
 // Публичные именованные параметры конструктора BLoC — часть публичного API фичи.
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../../app/config/booking_config.dart';
 import '../entity/admin_club_entity.dart';
 import '../entity/admin_failure.dart';
+import '../entity/audit_entry_entity.dart';
 import '../entity/availability_entity.dart';
 import '../entity/booking_row_entity.dart';
 import '../entity/hall_price_entity.dart';
 import '../entity/package_entity.dart';
+import '../entity/promo_entity.dart';
 import '../repository/i_admin_repository.dart';
 
 part 'admin_event.dart';
 part 'admin_state.dart';
 
 /// Управляет состоянием админки: клуб, вкладка, правки цен/пакетов/доступности,
-/// фильтры журнала, отмены. Всё локально — на сервер ничего не уходит.
+/// фильтры журнала, отмены, карточка брони и новая запись. Правки применяются
+/// к состоянию сразу и пишутся через [IAdminRepository].
 class AdminBloc extends Bloc<AdminEvent, AdminState> {
   /// Создаёт BLoC.
   AdminBloc({required IAdminRepository repository})
       : _repository = repository,
         super(const AdminState()) {
     on<AdminStarted>(_onStarted);
+    on<AdminRefreshRequested>(_onRefreshRequested);
+    on<AdminAuditRequested>(_onAuditRequested);
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
     on<AdminPriceChanged>(_onPriceChanged);
@@ -32,6 +39,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminPackageDeleted>(_onPackageDeleted);
     on<AdminNewPackageChanged>(_onNewPackageChanged);
     on<AdminNewPackageSubmitted>(_onNewPackageSubmitted);
+    on<AdminPromoToggled>(_onPromoToggled);
+    on<AdminPromoDeleted>(_onPromoDeleted);
+    on<AdminNewPromoChanged>(_onNewPromoChanged);
+    on<AdminNewPromoSubmitted>(_onNewPromoSubmitted);
     on<AdminIntakeToggled>(_onIntakeToggled);
     on<AdminHallClosureToggled>(_onHallClosureToggled);
     on<AdminAvailDayChanged>(_onAvailDayChanged);
@@ -43,6 +54,10 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminRowClosed>(_onRowClosed);
     on<AdminRowEdited>(_onRowEdited);
     on<AdminRowEditReset>(_onRowEditReset);
+    on<AdminRowSaved>(_onRowSaved);
+    on<AdminVisitMarked>(_onVisitMarked);
+    on<AdminSearchChanged>(_onSearchChanged);
+    on<AdminSearchResultOpened>(_onSearchResultOpened);
     on<AdminNewBookingOpened>(_onNewBookingOpened);
     on<AdminNewBookingClosed>(_onNewBookingClosed);
     on<AdminNewBookingChanged>(_onNewBookingChanged);
@@ -52,53 +67,155 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
 
   final IAdminRepository _repository;
 
-  Future<void> _onStarted(AdminStarted event, Emitter<AdminState> emit) async {
-    emit(state.copyWith(status: AdminStatus.loading));
-    final List<AdminClubEntity> clubs = await _repository.fetchClubs();
-    final List<HallPriceEntity> prices = await _repository.fetchPrices();
-    final List<PackageEntity> packages = await _repository.fetchPackages();
-    final List<BookingRowEntity> rows = await _repository.fetchRows();
-    final AvailabilityEntity avail = await _repository.fetchAvailability();
+  /// Новая запись уже уходит на сервер — повторное нажатие не создаёт дубль.
+  bool _creatingBooking = false;
 
-    final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
-    final String clubId =
-        hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
+  StreamSubscription<void>? _changesSub;
+  Timer? _debounce;
+  Timer? _poll;
 
-    // Закрытия из БД раскладываем в две коллекции состояния: залы закрыты
-    // бессрочно, окна привязаны к дате и переводятся в ключи «клуб-день-минуты».
+  @override
+  Future<void> close() async {
+    await _changesSub?.cancel();
+    _debounce?.cancel();
+    _poll?.cancel();
+    return super.close();
+  }
+
+  /// Подписка на изменения с сервера. Одна бронь — это заказ и несколько
+  /// позиций, то есть пачка событий подряд: перечитываем один раз после паузы.
+  void _watch() {
+    _changesSub ??= _repository.changes().listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 600), () {
+        if (!isClosed) add(const AdminRefreshRequested());
+      });
+    });
+    final Duration? every = _repository.refreshInterval;
+    if (every != null) {
+      _poll ??= Timer.periodic(every, (_) {
+        if (!isClosed) add(const AdminRefreshRequested());
+      });
+    }
+  }
+
+  /// Закрытия из БД — в две коллекции состояния: залы закрыты бессрочно,
+  /// окна привязаны к дате и переводятся в ключи «клуб-день-минуты».
+  static ({Set<String> halls, Set<String> slots}) _closureKeys(
+    AvailabilityEntity avail,
+  ) {
     final DateTime today = _today();
-    final Set<String> closedHalls = <String>{};
-    final Set<String> closedSlots = <String>{};
+    final Set<String> halls = <String>{};
+    final Set<String> slots = <String>{};
     for (final ClosureEntity c in avail.closures) {
       if (c.isWholeHall) {
-        closedHalls.add(c.hallId!);
+        halls.add(c.hallId!);
         continue;
       }
       if (c.day == null || c.fromMinutes == null) continue;
       final int dayIndex = DateTime(c.day!.year, c.day!.month, c.day!.day)
           .difference(today)
           .inDays;
-      closedSlots.add('${c.clubId}-$dayIndex-${c.fromMinutes}');
+      slots.add('${c.clubId}-$dayIndex-${c.fromMinutes}');
     }
+    return (halls: halls, slots: slots);
+  }
+
+  Future<void> _onRefreshRequested(
+    AdminRefreshRequested event,
+    Emitter<AdminState> emit,
+  ) async {
+    if (state.status != AdminStatus.ready) return;
+    final List<BookingRowEntity> rows;
+    final AvailabilityEntity avail;
+    try {
+      rows = await _repository.fetchRows();
+      avail = await _repository.fetchAvailability();
+    } catch (_) {
+      // Фоновое обновление: при сбое оставляем то, что уже на экране.
+      return;
+    }
+    final ({Set<String> halls, Set<String> slots}) keys = _closureKeys(avail);
+    // Несохранённые правки (rowEdits) не трогаем — они лежат поверх rows.
+    emit(state.copyWith(
+      rows: rows,
+      cancelledRowIds: <String>{
+        for (final BookingRowEntity r in rows)
+          if (r.isCancelled) r.id,
+      },
+      intakeOpen: !avail.pausedClubIds.contains(state.clubId),
+      closedHallIds: keys.halls,
+      closedSlotKeys: keys.slots,
+      pausedClubIds: avail.pausedClubIds,
+    ));
+  }
+
+  Future<void> _onStarted(AdminStarted event, Emitter<AdminState> emit) async {
+    emit(state.copyWith(status: AdminStatus.loading));
+    final List<AdminClubEntity> clubs;
+    final List<HallPriceEntity> prices;
+    final List<PackageEntity> packages;
+    final List<BookingRowEntity> rows;
+    final AvailabilityEntity avail;
+    try {
+      if (!await _repository.isStaff()) throw const AdminFailure.notStaff();
+      clubs = await _repository.fetchClubs();
+      prices = await _repository.fetchPrices();
+      packages = await _repository.fetchPackages();
+      rows = await _repository.fetchRows();
+      avail = await _repository.fetchAvailability();
+      if (clubs.isEmpty) {
+        throw const AdminFailure('В базе нет активных клубов.');
+      }
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(
+        status: AdminStatus.error,
+        loadError: e.message,
+        loadNeedsReauth: e.needsReauth,
+      ));
+      return;
+    } catch (_) {
+      emit(state.copyWith(
+        status: AdminStatus.error,
+        loadError: 'Не удалось загрузить данные. Проверьте связь и попробуйте ещё раз.',
+        loadNeedsReauth: false,
+      ));
+      return;
+    }
+
+    // Промокоды — не повод не пустить в панель: без них просто пустой список.
+    List<PromoEntity> promos = const <PromoEntity>[];
+    try {
+      promos = await _repository.fetchPromos();
+    } catch (_) {}
+
+    final bool hasClub = clubs.any((AdminClubEntity c) => c.id == state.clubId);
+    final String clubId =
+        hasClub ? state.clubId : (clubs.isEmpty ? state.clubId : clubs.first.id);
+
+    final ({Set<String> halls, Set<String> slots}) keys = _closureKeys(avail);
 
     emit(state.copyWith(
       status: AdminStatus.ready,
+      scheduleEditable: _repository.canEditSchedule,
       clubId: hasClub ? null : (clubs.isEmpty ? null : clubs.first.id),
       clubs: clubs,
       prices: <String, HallPriceEntity>{
         for (final HallPriceEntity p in prices) p.hallId: p,
       },
       packages: packages,
+      promos: promos,
       rows: rows,
       cancelledRowIds: <String>{
         for (final BookingRowEntity r in rows)
           if (r.isCancelled) r.id,
       },
       intakeOpen: !avail.pausedClubIds.contains(clubId),
-      closedHallIds: closedHalls,
-      closedSlotKeys: closedSlots,
+      closedHallIds: keys.halls,
+      closedSlotKeys: keys.slots,
       pausedClubIds: avail.pausedClubIds,
     ));
+    _watch();
   }
 
   /// Сегодня без времени — база для [AdminState.availDay] и индексов дней.
@@ -111,7 +228,9 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   Future<void> _persist(Future<void> Function() action, Emitter<AdminState> emit) async {
     try {
       await action();
-      if (state.saveError != null) emit(state.copyWith(clearSaveError: true));
+      if (state.saveError != null || state.saveNotice != null) {
+        emit(state.copyWith(clearSaveError: true, clearSaveNotice: true));
+      }
     } on AdminFailure catch (e) {
       // Репозиторий уже перевёл ошибку на язык сотрудника — в том числе
       // отличил протухшую сессию от обрыва связи.
@@ -139,8 +258,30 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     ));
   }
 
-  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) =>
-      emit(state.copyWith(tab: event.tab));
+  void _onTabChanged(AdminTabChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(tab: event.tab, clearSaveNotice: true));
+    // Журнал не держим живым: перечитываем при каждом открытии вкладки.
+    if (event.tab == AdminTab.log) add(const AdminAuditRequested());
+  }
+
+  Future<void> _onAuditRequested(
+    AdminAuditRequested event,
+    Emitter<AdminState> emit,
+  ) async {
+    if (state.auditLoading) return;
+    emit(state.copyWith(auditLoading: true, clearAuditError: true));
+    try {
+      final List<AuditEntryEntity> entries = await _repository.fetchAuditLog();
+      emit(state.copyWith(auditEntries: entries, auditLoading: false));
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(auditLoading: false, auditError: e.message));
+    } catch (_) {
+      emit(state.copyWith(
+        auditLoading: false,
+        auditError: 'Не удалось загрузить журнал. Проверьте связь.',
+      ));
+    }
+  }
 
   Future<void> _onPriceChanged(
     AdminPriceChanged event,
@@ -201,12 +342,32 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     AdminPackageDeleted event,
     Emitter<AdminState> emit,
   ) async {
+    final List<PackageEntity> before = state.packages;
     emit(state.copyWith(
-      packages: state.packages
+      packages: before
           .where((PackageEntity p) => p.id != event.packageId)
           .toList(growable: false),
     ));
-    await _persist(() => _repository.deletePackage(event.packageId), emit);
+    bool? deleted;
+    await _persist(() async {
+      deleted = await _repository.deletePackage(event.packageId);
+    }, emit);
+    if (deleted == true) return;
+    if (deleted == null) {
+      // Запись не прошла (ошибку уже показал _persist) — пакет возвращаем.
+      emit(state.copyWith(packages: before));
+      return;
+    }
+    // По пакету уже есть брони — сервер его выключил, а не удалил: возвращаем
+    // в список выключенным, чтобы сотрудник видел, что произошло.
+    emit(state.copyWith(
+      packages: before
+          .map((PackageEntity p) =>
+              p.id == event.packageId ? p.copyWith(isEnabled: false) : p)
+          .toList(growable: false),
+      saveNotice: 'Пакет уже бронировали, поэтому он выключен, а не удалён: '
+          'в виджете его больше нет, старые брони его сохраняют.',
+    ));
   }
 
   void _onNewPackageChanged(
@@ -291,6 +452,144 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       newPackage: NewPackageDraft(
         hallId: hallId,
         message: 'Пакет «${created.name}» добавлен в «${hall.name}».',
+      ),
+    ));
+  }
+
+  Future<void> _onPromoToggled(
+    AdminPromoToggled event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    PromoEntity? changed;
+    emit(state.copyWith(
+      promos: before.map((PromoEntity p) {
+        if (p.id != event.promoId) return p;
+        return changed = p.copyWith(isActive: !p.isActive);
+      }).toList(growable: false),
+    ));
+    if (changed == null) return;
+    bool ok = false;
+    await _persist(() async {
+      await _repository.setPromoActive(changed!.id, active: changed!.isActive);
+      ok = true;
+    }, emit);
+    if (!ok) emit(state.copyWith(promos: before));
+  }
+
+  Future<void> _onPromoDeleted(
+    AdminPromoDeleted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final List<PromoEntity> before = state.promos;
+    emit(state.copyWith(
+      promos: before
+          .where((PromoEntity p) => p.id != event.promoId)
+          .toList(growable: false),
+    ));
+    bool? deleted;
+    await _persist(() async {
+      deleted = await _repository.deletePromo(event.promoId);
+    }, emit);
+    if (deleted == true) return;
+    if (deleted == null) {
+      emit(state.copyWith(promos: before));
+      return;
+    }
+    emit(state.copyWith(
+      promos: before
+          .map((PromoEntity p) =>
+              p.id == event.promoId ? p.copyWith(isActive: false) : p)
+          .toList(growable: false),
+      saveNotice: 'По промокоду уже есть брони, поэтому он выключен, а не '
+          'удалён: клиенты его больше не применят, старые брони сохранят скидку.',
+    ));
+  }
+
+  void _onNewPromoChanged(AdminNewPromoChanged event, Emitter<AdminState> emit) {
+    emit(state.copyWith(
+      newPromo: state.newPromo.copyWith(
+        code: event.code,
+        kind: event.kind,
+        value: event.value,
+        minStations: event.minStations,
+        message: '',
+        isError: false,
+      ),
+    ));
+  }
+
+  /// Буквы (латиница, кириллица), цифры, дефис и подчёркивание.
+  static final RegExp _promoCodeChars = RegExp(r'^[A-ZА-ЯЁ0-9_-]+$');
+
+  Future<void> _onNewPromoSubmitted(
+    AdminNewPromoSubmitted event,
+    Emitter<AdminState> emit,
+  ) async {
+    final NewPromoDraft d = state.newPromo;
+    if (d.submitting) return;
+    final String code = d.normalizedCode;
+
+    String? error;
+    if (code.length < 3 || code.length > 32) {
+      error = 'Код — от 3 до 32 символов.';
+    } else if (!_promoCodeChars.hasMatch(code)) {
+      error = 'В коде только буквы, цифры, «-» и «_», без пробелов.';
+    } else if (state.promos.any((PromoEntity p) => p.code.toUpperCase() == code)) {
+      error = 'Промокод $code уже есть.';
+    } else if (d.kind == PromoKind.percent && (d.value < 1 || d.value > 100)) {
+      error = 'Процент — от 1 до 100.';
+    } else if (d.value < 1) {
+      error = 'Укажите сумму скидки.';
+    } else if (d.minStations < 1) {
+      error = 'Минимум — одна станция.';
+    }
+    if (error != null) {
+      emit(state.copyWith(newPromo: d.copyWith(message: error, isError: true)));
+      return;
+    }
+
+    emit(state.copyWith(newPromo: d.copyWith(submitting: true, message: '')));
+    final PromoEntity draft = PromoEntity(
+      id: 'new',
+      code: code,
+      kind: d.kind,
+      value: d.value,
+      minStations: d.minStations,
+    );
+    final String id;
+    try {
+      id = await _repository.createPromo(draft);
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(message: e.message, isError: true, submitting: false),
+      ));
+      return;
+    } catch (_) {
+      emit(state.copyWith(
+        newPromo: d.copyWith(
+          message: 'Не удалось сохранить промокод. Проверьте связь и права.',
+          isError: true,
+          submitting: false,
+        ),
+      ));
+      return;
+    }
+    final PromoEntity created = PromoEntity(
+      id: id,
+      code: code,
+      kind: draft.kind,
+      value: draft.value,
+      minStations: draft.minStations,
+    );
+    emit(state.copyWith(
+      promos: <PromoEntity>[...state.promos, created]
+        ..sort((PromoEntity a, PromoEntity b) => a.code.compareTo(b.code)),
+      newPromo: NewPromoDraft(
+        kind: d.kind,
+        value: d.value,
+        message: 'Промокод $code (${created.effectLabel}) добавлен — '
+            'клиенты могут вводить его в виджете.',
       ),
     ));
   }
@@ -406,25 +705,51 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   void _onRowClosed(AdminRowClosed event, Emitter<AdminState> emit) =>
       emit(state.copyWith(clearOpenRow: true));
 
-  /// Правка брони живёт только в состоянии (оверлей [AdminState.rowEdits]);
-  /// на сервер не уходит — обновление броней в `AdminRepository` пока не
-  /// реализовано (см. `design/ADMIN_DESIGN_SPEC.md` §8).
+  void _onSearchChanged(AdminSearchChanged event, Emitter<AdminState> emit) =>
+      emit(state.copyWith(searchQuery: event.query));
+
+  void _onSearchResultOpened(
+    AdminSearchResultOpened event,
+    Emitter<AdminState> emit,
+  ) {
+    final BookingRowEntity? row = state.rowById(event.rowId);
+    if (row == null) return;
+    // Бронь могла найтись в другом клубе — переключаемся на него и на её день
+    // (прошедший день сетка не показывает, карточка откроется всё равно).
+    emit(state.copyWith(
+      clubId: row.clubId,
+      intakeOpen: !state.pausedClubIds.contains(row.clubId),
+      filterDay: row.dayIndex >= 0 ? row.dayIndex : state.filterDay,
+      openRowId: row.id,
+      searchQuery: '',
+      clearNewBooking: true,
+      clearNewBookingMonth: true,
+    ));
+  }
+
+  /// Правка брони копится в оверлее [AdminState.rowEdits] и уходит на сервер
+  /// по «Сохранить» ([AdminRowSaved]).
+  ///
+  /// Время и состав принимаются, только если [AdminState.scheduleEditable]:
+  /// в боевой сборке позиции брони сотруднику лишь читаются (RLS), и такая
+  /// правка всё равно не сохранилась бы.
   void _onRowEdited(AdminRowEdited event, Emitter<AdminState> emit) {
     final BookingRowEntity? base = state.rowById(event.rowId);
     if (base == null) return;
+    final bool schedule = state.scheduleEditable;
     BookingRowEntity edited = base.copyWith(
       clientName: event.clientName,
       phone: event.phone,
-      startMinutes: event.startMinutes,
-      durationMinutes: event.durationMinutes,
-      headsets: event.headsets,
-      consoles: event.consoles,
+      startMinutes: schedule ? event.startMinutes : null,
+      durationMinutes: schedule ? event.durationMinutes : null,
+      headsets: schedule ? event.headsets : null,
+      consoles: schedule ? event.consoles : null,
       prepay: event.prepay,
       note: event.note,
-      clearHourly: event.clearHourly,
+      clearHourly: schedule && event.clearHourly,
     );
     // Смена длительности — сбрасываем разбивку по часам.
-    if (event.durationMinutes != null) {
+    if (schedule && event.durationMinutes != null) {
       edited = edited.copyWith(clearHourly: true);
     }
     // Держим сеанс в рабочих часах клуба.
@@ -443,6 +768,110 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final Map<String, BookingRowEntity> next =
         Map<String, BookingRowEntity>.of(state.rowEdits)..remove(event.rowId);
     emit(state.copyWith(rowEdits: next));
+  }
+
+  Future<void> _onVisitMarked(
+    AdminVisitMarked event,
+    Emitter<AdminState> emit,
+  ) async {
+    final BookingRowEntity? base =
+        state.rows.where((BookingRowEntity r) => r.id == event.rowId).firstOrNull;
+    if (base == null || state.isCancelled(base.id) || base.status == event.status) {
+      return;
+    }
+    List<BookingRowEntity> withStatus(RecordStatus s) => state.rows
+        .map((BookingRowEntity r) => r.id == base.id ? r.copyWith(status: s) : r)
+        .toList(growable: false);
+    Map<String, BookingRowEntity> editsWith(RecordStatus s) =>
+        <String, BookingRowEntity>{
+          for (final MapEntry<String, BookingRowEntity> e in state.rowEdits.entries)
+            e.key: e.key == base.id ? e.value.copyWith(status: s) : e.value,
+        };
+
+    emit(state.copyWith(rows: withStatus(event.status), rowEdits: editsWith(event.status)));
+    bool saved = false;
+    await _persist(() async {
+      await _repository.setOrderVisit(base.id, status: event.status);
+      saved = true;
+    }, emit);
+    if (!saved) {
+      emit(state.copyWith(rows: withStatus(base.status), rowEdits: editsWith(base.status)));
+    }
+  }
+
+  Future<void> _onRowSaved(AdminRowSaved event, Emitter<AdminState> emit) async {
+    final BookingRowEntity? edited = state.rowEdits[event.rowId];
+    if (edited == null) return;
+
+    // Те же рамки, что у CHECK-ограничений booking_orders.
+    final String name = edited.clientName.trim();
+    final String phone = edited.phone.trim();
+    if (name.length < 2 || name.length > 120) {
+      emit(state.copyWith(saveError: 'Имя гостя — от 2 до 120 символов.'));
+      return;
+    }
+    if (phone.length < 5 || phone.length > 30) {
+      emit(state.copyWith(saveError: 'Телефон — от 5 до 30 символов.'));
+      return;
+    }
+
+    final BookingRowEntity? base =
+        state.rows.where((BookingRowEntity r) => r.id == edited.id).firstOrNull;
+    final bool moved = base != null && _scheduleChanged(base, edited);
+
+    bool saved = false;
+    await _persist(() async {
+      // Сначала время и состав: если станций не хватит, контакты не трогаем.
+      if (moved) {
+        await _repository.rescheduleOrder(
+          orderId: edited.id,
+          clubId: edited.clubId,
+          hallId: edited.hallId,
+          day: _today().add(Duration(days: edited.dayIndex)),
+          startMinutes: edited.startMinutes,
+          headsetsByHour: <int>[
+            for (int h = 0; h < edited.hourCount; h++) edited.headsetsAt(h),
+          ],
+          consolesByHour: <int>[
+            for (int h = 0; h < edited.hourCount; h++) edited.consolesAt(h),
+          ],
+        );
+      }
+      await _repository.updateOrderDetails(
+        orderId: edited.id,
+        clientName: name,
+        phone: phone,
+        prepay: edited.prepay,
+        note: edited.note.trim(),
+      );
+      saved = true;
+    }, emit);
+    if (!saved) return;
+
+    // Пока шло сохранение, карточку могли править дальше — такие правки
+    // оставляем в оверлее, сохранённое становится новой базой записи.
+    final Map<String, BookingRowEntity> edits =
+        Map<String, BookingRowEntity>.of(state.rowEdits);
+    if (edits[edited.id] == edited) edits.remove(edited.id);
+    emit(state.copyWith(
+      rows: state.rows
+          .map((BookingRowEntity r) => r.id == edited.id ? edited : r)
+          .toList(growable: false),
+      rowEdits: edits,
+    ));
+  }
+
+  /// Поменялись ли время, длительность или состав по часам.
+  static bool _scheduleChanged(BookingRowEntity a, BookingRowEntity b) {
+    if (a.startMinutes != b.startMinutes || a.durationMinutes != b.durationMinutes) {
+      return true;
+    }
+    for (int h = 0; h < b.hourCount; h++) {
+      if (a.headsetsAt(h) != b.headsetsAt(h) || a.consolesAt(h) != b.consolesAt(h)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // -- новая запись ------------------------------------------------------
@@ -560,14 +989,14 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   ) =>
       emit(state.copyWith(newBookingMonth: DateTime(event.month.year, event.month.month)));
 
-  /// Создание брони из админки — локально (в `AdminRepository` метод создания
-  /// пока не реализован, см. `design/ADMIN_DESIGN_SPEC.md` §8).
-  void _onNewBookingSubmitted(
+  /// Создание брони из админки: проверка ёмкости по часам, затем
+  /// [IAdminRepository.createBooking] (конкретные станции подбирает репозиторий).
+  Future<void> _onNewBookingSubmitted(
     AdminNewBookingSubmitted event,
     Emitter<AdminState> emit,
-  ) {
+  ) async {
     final NewBookingDraft? d = state.newBooking;
-    if (d == null) return;
+    if (d == null || _creatingBooking) return;
 
     String? error;
     if (d.name.trim().length < 2) {
@@ -598,8 +1027,42 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       return;
     }
 
+    // Пустой телефон в БД не пройдёт CHECK (5–30 символов) — пишем пометку.
+    final String phone =
+        d.phone.trim().isEmpty ? 'телефон не указан' : d.phone.trim();
+    emit(state.copyWith(
+        newBooking: d.copyWith(message: 'Сохраняю запись…', submitting: true)));
+    _creatingBooking = true;
+    final String id;
+    try {
+      id = await _repository.createBooking(
+        clubId: state.clubId,
+        hallId: d.hallId,
+        day: _today().add(Duration(days: d.dayIndex)),
+        startMinutes: d.startMinutes,
+        headsetsByHour: <int>[for (int h = 0; h < d.hourCount; h++) d.headsetsAt(h)],
+        consolesByHour: <int>[for (int h = 0; h < d.hourCount; h++) d.consolesAt(h)],
+        clientName: d.name.trim(),
+        phone: phone,
+        note: d.note.trim(),
+      );
+    } on AdminFailure catch (e) {
+      emit(state.copyWith(
+          newBooking:
+              state.newBooking?.copyWith(message: e.message, submitting: false)));
+      return;
+    } catch (_) {
+      emit(state.copyWith(
+        newBooking: state.newBooking?.copyWith(
+            message: 'Не удалось сохранить запись. Проверьте связь и попробуйте ещё раз.',
+            submitting: false),
+      ));
+      return;
+    } finally {
+      _creatingBooking = false;
+    }
+
     final bool varies = d.variesByHour;
-    final String id = 'c${DateTime.now().millisecondsSinceEpoch}';
     final BookingRowEntity row = BookingRowEntity(
       id: id,
       clubId: state.clubId,
@@ -616,8 +1079,9 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
           ? <int>[for (int h = 0; h < d.hourCount; h++) d.consolesAt(h)]
           : null,
       clientName: d.name.trim(),
-      phone: d.phone.trim().isEmpty ? 'телефон не указан' : d.phone.trim(),
-      status: RecordStatus.newRequest,
+      phone: phone,
+      // booking_create_order создаёт бронь сразу подтверждённой.
+      status: RecordStatus.confirmed,
       source: RecordSource.admin,
       prepay: d.prepay,
       note: d.note.trim(),
@@ -630,6 +1094,21 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       clearNewBooking: true,
       clearNewBookingMonth: true,
     ));
+
+    // Бронь уже создана; предоплату пишем отдельно. Если не выйдет — запись
+    // остаётся, сотрудник увидит ошибку и сохранит предоплату из карточки.
+    if (d.prepay > 0) {
+      await _persist(
+        () => _repository.updateOrderDetails(
+          orderId: id,
+          clientName: row.clientName,
+          phone: row.phone,
+          prepay: row.prepay,
+          note: row.note,
+        ),
+        emit,
+      );
+    }
   }
 
   static String _plural(int n, String one, String few, String many) {

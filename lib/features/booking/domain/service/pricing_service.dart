@@ -10,19 +10,26 @@ class PricingService {
   const PricingService();
 
   /// Цена одной станции за сеанс [minutes] минут в дату [startsAtUtc].
+  ///
+  /// [qty] — сколько станций того же типа в брони в это время: по нему
+  /// выбирается ступень тарифа, как в `booking_station_price` на сервере.
   num priceOf({
     required ClubEntity club,
     required StationEntity station,
     required DateTime startsAtUtc,
     required int minutes,
     required List<PriceRateEntity> rates,
+    int qty = 1,
   }) {
     final DayKind kind = DayKind.of(ClubClock(club).toWall(startsAtUtc));
-    final PriceRateEntity? rate = rates
-        .where((PriceRateEntity r) =>
-            r.stationType == station.type && r.dayKind == kind)
-        .cast<PriceRateEntity?>()
-        .firstWhere((PriceRateEntity? r) => true, orElse: () => null);
+    final int q = qty < 1 ? 1 : qty;
+    PriceRateEntity? rate;
+    for (final PriceRateEntity r in rates) {
+      if (r.stationType != station.type || r.dayKind != kind || r.minQty > q) {
+        continue;
+      }
+      if (rate == null || r.minQty > rate.minQty) rate = r;
+    }
     if (rate == null) return 0;
     return (rate.pricePerHour * minutes / 60).round();
   }
@@ -31,12 +38,17 @@ class PricingService {
   ///
   /// [minutesOf] возвращает суммарное время станции за сеанс — так одна бронь
   /// может держать станцию не весь сеанс (12 шлемов в первый час, 6 во второй).
+  ///
+  /// [qtyByHourOf] — для каждого часа, в котором станция занята, число станций
+  /// того же типа в этом часе. С ним цена считается почасово по ступеням
+  /// тарифа; без него — по одной ступени на всё время станции.
   QuoteEntity quote({
     required ClubEntity club,
     required List<StationEntity> stations,
     required DateTime startsAtUtc,
     required int Function(StationEntity station) minutesOf,
     required List<PriceRateEntity> rates,
+    List<int> Function(StationEntity station)? qtyByHourOf,
     bool showRoomInLabel = false,
     num discountPercent = 0,
     String discountLabel = '',
@@ -49,17 +61,28 @@ class PricingService {
               ? '${s.roomName} · $kind ${s.label}'
               : '$kind ${s.label}') +
           hoursTag;
-      return QuoteLineEntity(
-        stationId: s.id,
-        label: label,
-        price: priceOf(
-          club: club,
-          station: s,
-          startsAtUtc: startsAtUtc,
-          minutes: mins,
-          rates: rates,
-        ),
-      );
+      final num price = qtyByHourOf == null
+          ? priceOf(
+              club: club,
+              station: s,
+              startsAtUtc: startsAtUtc,
+              minutes: mins,
+              rates: rates,
+            )
+          : qtyByHourOf(s).fold<num>(
+              0,
+              (num sum, int qty) =>
+                  sum +
+                  priceOf(
+                    club: club,
+                    station: s,
+                    startsAtUtc: startsAtUtc,
+                    minutes: 60,
+                    rates: rates,
+                    qty: qty,
+                  ),
+            );
+      return QuoteLineEntity(stationId: s.id, label: label, price: price);
     }).toList(growable: false);
 
     final num gross = lines.fold<num>(0, (num a, QuoteLineEntity l) => a + l.price);

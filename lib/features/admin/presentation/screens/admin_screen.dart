@@ -3,10 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/state/admin_bloc.dart';
 import '../admin_theme.dart';
+import '../components/admin_atoms.dart';
 import '../components/admin_header.dart';
 import '../components/admin_tab_bar.dart';
 import '../components/availability_tab.dart';
 import '../components/booking_detail_drawer.dart';
+import '../components/log_tab.dart';
 import '../components/new_booking_drawer.dart';
 import '../components/packages_tab.dart';
 import '../components/prices_tab.dart';
@@ -36,10 +38,19 @@ class AdminScreen extends StatelessWidget {
         child: SafeArea(
           child: BlocBuilder<AdminBloc, AdminState>(
             builder: (BuildContext context, AdminState state) {
+              final AdminBloc bloc = context.read<AdminBloc>();
+              if (state.status == AdminStatus.error) {
+                return _LoadError(
+                  message: state.loadError ?? 'Не удалось загрузить данные.',
+                  onRetry: state.loadNeedsReauth
+                      ? null
+                      : () => bloc.add(const AdminStarted()),
+                  onLogout: onLogout,
+                );
+              }
               if (state.status == AdminStatus.loading || state.clubs.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final AdminBloc bloc = context.read<AdminBloc>();
               final Color accent = AdminColors.accentFor(state.accentSlug);
               // На телефоне поля по 20 px с каждой стороны заметно съедают
               // ширину таблиц и сетки занятости.
@@ -109,6 +120,25 @@ class AdminScreen extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 14),
                                     ],
+                                    if (state.saveError == null &&
+                                        state.saveNotice != null) ...<Widget>[
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: AdminColors.tile,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: AdminColors.borderInput),
+                                        ),
+                                        child: Text(state.saveNotice!,
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                color: AdminColors.textSoft)),
+                                      ),
+                                      const SizedBox(height: 14),
+                                    ],
                                     switch (state.tab) {
                                       AdminTab.prices =>
                                         PricesTab(state: state, accent: accent),
@@ -118,6 +148,7 @@ class AdminScreen extends StatelessWidget {
                                         AvailabilityTab(state: state, accent: accent),
                                       AdminTab.records =>
                                         RecordsTab(state: state, accent: accent),
+                                      AdminTab.log => LogTab(state: state),
                                     },
                                   ],
                                 ),
@@ -135,6 +166,57 @@ class AdminScreen extends StatelessWidget {
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Панель не загрузилась: нет связи, нет прав или аккаунт не сотрудник.
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.message, this.onRetry, this.onLogout});
+
+  final String message;
+
+  /// Повторить загрузку; `null` — не поможет (нужен другой аккаунт).
+  final VoidCallback? onRetry;
+
+  final VoidCallback? onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 15, height: 1.4, color: AdminColors.text),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: <Widget>[
+                  if (onRetry != null)
+                    AdminPrimaryButton(
+                      label: 'Повторить',
+                      accent: AdminColors.accentFor('v_ray'),
+                      onTap: onRetry!,
+                    ),
+                  if (onLogout != null)
+                    AdminGhostButton(label: 'Выйти', onTap: onLogout!),
+                ],
+              ),
+            ],
           ),
         ),
       ),

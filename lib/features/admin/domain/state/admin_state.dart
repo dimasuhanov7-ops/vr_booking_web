@@ -12,7 +12,10 @@ enum AdminTab {
   availability,
 
   /// Журнал записей.
-  records;
+  records,
+
+  /// Журнал действий сотрудников (`booking_audit_log`).
+  log;
 
   /// Подпись.
   String get label => switch (this) {
@@ -20,6 +23,7 @@ enum AdminTab {
         AdminTab.packages => 'Пакеты',
         AdminTab.availability => 'Доступность',
         AdminTab.records => 'Записи',
+        AdminTab.log => 'Журнал',
       };
 }
 
@@ -30,6 +34,9 @@ enum AdminStatus {
 
   /// Готово.
   ready,
+
+  /// Загрузить данные не удалось или доступа нет — см. [AdminState.loadError].
+  error,
 }
 
 /// Фильтр журнала по типу станций.
@@ -113,6 +120,71 @@ class NewPackageDraft extends Equatable {
       <Object?>[name, hallId, headsets, consoles, minutes, price, message];
 }
 
+/// Черновик нового промокода.
+class NewPromoDraft extends Equatable {
+  /// Создаёт черновик.
+  const NewPromoDraft({
+    this.code = '',
+    this.kind = PromoKind.percent,
+    this.value = 10,
+    this.minStations = 1,
+    this.message = '',
+    this.isError = false,
+    this.submitting = false,
+  });
+
+  /// Код.
+  final String code;
+
+  /// Процент или сумма.
+  final PromoKind kind;
+
+  /// Процент или ₽.
+  final int value;
+
+  /// От скольких станций действует.
+  final int minStations;
+
+  /// Сообщение под формой.
+  final String message;
+
+  /// [message] — ошибка (иначе подтверждение).
+  final bool isError;
+
+  /// Промокод уходит на сервер — кнопка заблокирована.
+  final bool submitting;
+
+  /// Код в том виде, в каком он сохранится.
+  String get normalizedCode => code.trim().toUpperCase();
+
+  /// Можно ли нажимать «Добавить».
+  bool get isValid => normalizedCode.length >= 3 && value > 0 && !submitting;
+
+  /// Копия с изменениями.
+  NewPromoDraft copyWith({
+    String? code,
+    PromoKind? kind,
+    int? value,
+    int? minStations,
+    String? message,
+    bool? isError,
+    bool? submitting,
+  }) =>
+      NewPromoDraft(
+        code: code ?? this.code,
+        kind: kind ?? this.kind,
+        value: value ?? this.value,
+        minStations: minStations ?? this.minStations,
+        message: message ?? this.message,
+        isError: isError ?? this.isError,
+        submitting: submitting ?? this.submitting,
+      );
+
+  @override
+  List<Object?> get props =>
+      <Object?>[code, kind, value, minStations, message, isError, submitting];
+}
+
 /// Черновик новой брони, создаваемой сотрудником в админке.
 class NewBookingDraft extends Equatable {
   /// Создаёт черновик.
@@ -130,6 +202,7 @@ class NewBookingDraft extends Equatable {
     this.prepay = 0,
     this.note = '',
     this.message = '',
+    this.submitting = false,
   });
 
   /// Зал.
@@ -170,6 +243,9 @@ class NewBookingDraft extends Equatable {
 
   /// Сообщение под формой (ошибка / подсказка).
   final String message;
+
+  /// Запись уже уходит на сервер: кнопка неактивна.
+  final bool submitting;
 
   /// Число часовых отрезков.
   int get hourCount => (durationMinutes / 60).round().clamp(1, 12);
@@ -216,6 +292,7 @@ class NewBookingDraft extends Equatable {
     int? prepay,
     String? note,
     String? message,
+    bool? submitting,
   }) =>
       NewBookingDraft(
         hallId: hallId ?? this.hallId,
@@ -235,6 +312,7 @@ class NewBookingDraft extends Equatable {
         prepay: prepay ?? this.prepay,
         note: note ?? this.note,
         message: message ?? this.message,
+        submitting: submitting ?? this.submitting,
       );
 
   @override
@@ -252,6 +330,7 @@ class NewBookingDraft extends Equatable {
         prepay,
         note,
         message,
+        submitting,
       ];
 }
 
@@ -268,6 +347,8 @@ class AdminState extends Equatable {
     this.clubs = const <AdminClubEntity>[],
     this.prices = const <String, HallPriceEntity>{},
     this.packages = const <PackageEntity>[],
+    this.promos = const <PromoEntity>[],
+    this.newPromo = const NewPromoDraft(),
     this.rows = const <BookingRowEntity>[],
     this.rowEdits = const <String, BookingRowEntity>{},
     this.cancelledRowIds = const <String>{},
@@ -283,7 +364,15 @@ class AdminState extends Equatable {
     this.filterHallId = '',
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
+    this.searchQuery = '',
+    this.auditEntries = const <AuditEntryEntity>[],
+    this.auditLoading = false,
+    this.auditError,
     this.saveError,
+    this.saveNotice,
+    this.loadError,
+    this.loadNeedsReauth = false,
+    this.scheduleEditable = true,
   });
 
   /// Статус загрузки.
@@ -303,6 +392,12 @@ class AdminState extends Equatable {
 
   /// Пакеты (всех клубов).
   final List<PackageEntity> packages;
+
+  /// Промокоды (общие для всех клубов).
+  final List<PromoEntity> promos;
+
+  /// Черновик нового промокода.
+  final NewPromoDraft newPromo;
 
   /// Записи (всех клубов), как пришли с сервера + созданные в этой сессии.
   final List<BookingRowEntity> rows;
@@ -351,8 +446,39 @@ class AdminState extends Equatable {
   /// Черновик нового пакета.
   final NewPackageDraft newPackage;
 
+  /// Строка поиска брони по имени или телефону (вкладка «Записи»).
+  final String searchQuery;
+
+  /// Журнал действий (вкладка «Журнал»), новые сверху.
+  final List<AuditEntryEntity> auditEntries;
+
+  /// Журнал загружается.
+  final bool auditLoading;
+
+  /// Почему журнал не загрузился.
+  final String? auditError;
+
+  /// Записи журнала выбранного клуба и общие (без клуба).
+  List<AuditEntryEntity> get clubAuditEntries => auditEntries
+      .where((AuditEntryEntity e) => e.clubId == null || e.clubId == clubId)
+      .toList(growable: false);
+
   /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
   final String? saveError;
+
+  /// Пояснение к сохранению, которое не ошибка (например, пакет выключен
+  /// вместо удаления). Показывается нейтральной плашкой.
+  final String? saveNotice;
+
+  /// Почему не загрузилась панель (при [AdminStatus.error]).
+  final String? loadError;
+
+  /// Помочь может только повторный вход (нет прав / сессия истекла).
+  final bool loadNeedsReauth;
+
+  /// Можно ли править время и состав брони (в боевой сборке — нет, см.
+  /// `IAdminRepository.canEditSchedule`).
+  final bool scheduleEditable;
 
   /// Горизонт дней для ленты «Доступности».
   static const int horizonDays = 14;
@@ -418,6 +544,40 @@ class AdminState extends Equatable {
 
   /// Есть ли несохранённая правка у записи.
   bool isEdited(String id) => rowEdits.containsKey(id);
+
+  /// Брони всех клубов, найденные по [searchQuery]: сначала ближайшие
+  /// будущие, затем прошедшие от недавних к давним. Не больше 30.
+  List<BookingRowEntity> get searchResults {
+    if (searchQuery.trim().isEmpty) return const <BookingRowEntity>[];
+    final List<BookingRowEntity> found = effectiveRows
+        .where((BookingRowEntity r) => matchesSearch(r, searchQuery))
+        .toList();
+    int rank(BookingRowEntity r) => r.dayIndex >= 0 ? 0 : 1;
+    found.sort((BookingRowEntity a, BookingRowEntity b) {
+      final int byRank = rank(a).compareTo(rank(b));
+      if (byRank != 0) return byRank;
+      final int byDay = rank(a) == 0
+          ? a.dayIndex.compareTo(b.dayIndex)
+          : b.dayIndex.compareTo(a.dayIndex);
+      return byDay != 0 ? byDay : a.startMinutes.compareTo(b.startMinutes);
+    });
+    return found.take(30).toList(growable: false);
+  }
+
+  /// Подходит ли бронь под запрос: часть имени или не меньше трёх цифр
+  /// телефона. «8 912…» и «+7 912…» считаются одним номером.
+  static bool matchesSearch(BookingRowEntity r, String query) {
+    final String q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    if (r.clientName.toLowerCase().contains(q)) return true;
+    final String qd = q.replaceAll(RegExp(r'\D'), '');
+    if (qd.length < 3) return false;
+    final String pd = r.phone.replaceAll(RegExp(r'\D'), '');
+    if (pd.contains(qd)) return true;
+    return qd.length >= 4 &&
+        (qd.startsWith('8') || qd.startsWith('7')) &&
+        pd.contains(qd.substring(1));
+  }
 
   /// Открытая запись (с учётом правок).
   BookingRowEntity? get openRow => openRowId == null ? null : rowById(openRowId!);
@@ -515,6 +675,8 @@ class AdminState extends Equatable {
     List<AdminClubEntity>? clubs,
     Map<String, HallPriceEntity>? prices,
     List<PackageEntity>? packages,
+    List<PromoEntity>? promos,
+    NewPromoDraft? newPromo,
     List<BookingRowEntity>? rows,
     Map<String, BookingRowEntity>? rowEdits,
     Set<String>? cancelledRowIds,
@@ -533,8 +695,18 @@ class AdminState extends Equatable {
     String? filterHallId,
     AdminTypeFilter? filterType,
     NewPackageDraft? newPackage,
+    String? searchQuery,
+    List<AuditEntryEntity>? auditEntries,
+    bool? auditLoading,
+    String? auditError,
+    bool clearAuditError = false,
     String? saveError,
     bool clearSaveError = false,
+    String? saveNotice,
+    bool clearSaveNotice = false,
+    String? loadError,
+    bool? loadNeedsReauth,
+    bool? scheduleEditable,
   }) {
     return AdminState(
       status: status ?? this.status,
@@ -543,6 +715,8 @@ class AdminState extends Equatable {
       clubs: clubs ?? this.clubs,
       prices: prices ?? this.prices,
       packages: packages ?? this.packages,
+      promos: promos ?? this.promos,
+      newPromo: newPromo ?? this.newPromo,
       rows: rows ?? this.rows,
       rowEdits: rowEdits ?? this.rowEdits,
       cancelledRowIds: cancelledRowIds ?? this.cancelledRowIds,
@@ -559,7 +733,15 @@ class AdminState extends Equatable {
       filterHallId: filterHallId ?? this.filterHallId,
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
+      searchQuery: searchQuery ?? this.searchQuery,
+      auditEntries: auditEntries ?? this.auditEntries,
+      auditLoading: auditLoading ?? this.auditLoading,
+      auditError: clearAuditError ? null : (auditError ?? this.auditError),
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
+      saveNotice: clearSaveNotice ? null : (saveNotice ?? this.saveNotice),
+      loadError: loadError ?? this.loadError,
+      loadNeedsReauth: loadNeedsReauth ?? this.loadNeedsReauth,
+      scheduleEditable: scheduleEditable ?? this.scheduleEditable,
     );
   }
 
@@ -571,6 +753,8 @@ class AdminState extends Equatable {
         clubs,
         prices,
         packages,
+        promos,
+        newPromo,
         rows,
         rowEdits,
         cancelledRowIds,
@@ -586,6 +770,14 @@ class AdminState extends Equatable {
         filterHallId,
         filterType,
         newPackage,
+        searchQuery,
+        auditEntries,
+        auditLoading,
+        auditError,
         saveError,
+        saveNotice,
+        loadError,
+        loadNeedsReauth,
+        scheduleEditable,
       ];
 }
