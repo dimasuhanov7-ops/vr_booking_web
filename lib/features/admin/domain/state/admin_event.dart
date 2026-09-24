@@ -321,6 +321,18 @@ class AdminRowEditReset extends AdminEvent {
   List<Object?> get props => <Object?>[rowId];
 }
 
+/// Сохранить правки карточки брони на сервер.
+class AdminRowSaved extends AdminEvent {
+  /// Создаёт событие.
+  const AdminRowSaved(this.rowId);
+
+  /// Идентификатор записи.
+  final String rowId;
+
+  @override
+  List<Object?> get props => <Object?>[rowId];
+}
+
 /// Открыть drawer «Новая запись».
 class AdminNewBookingOpened extends AdminEvent {
   /// Создаёт событие.

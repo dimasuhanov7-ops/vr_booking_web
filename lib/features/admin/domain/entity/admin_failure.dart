@@ -11,6 +11,12 @@ class AdminFailure implements Exception {
       : message = 'Сессия истекла или доступ отозван. Войдите заново.',
         needsReauth = true;
 
+  /// Вход выполнен, но аккаунта нет среди сотрудников (`booking_staff`).
+  const AdminFailure.notStaff()
+      : message = 'Этот аккаунт не подключён к админке. Попросите владельца '
+            'добавить его в сотрудники или войдите под другим.',
+        needsReauth = true;
+
   /// Сообщение для показа в шапке вкладки.
   final String message;
 

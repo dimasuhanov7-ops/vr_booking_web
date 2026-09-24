@@ -30,6 +30,9 @@ enum AdminStatus {
 
   /// Готово.
   ready,
+
+  /// Загрузить данные не удалось или доступа нет — см. [AdminState.loadError].
+  error,
 }
 
 /// Фильтр журнала по типу станций.
@@ -284,6 +287,9 @@ class AdminState extends Equatable {
     this.filterType = AdminTypeFilter.all,
     this.newPackage = const NewPackageDraft(),
     this.saveError,
+    this.loadError,
+    this.loadNeedsReauth = false,
+    this.scheduleEditable = true,
   });
 
   /// Статус загрузки.
@@ -353,6 +359,16 @@ class AdminState extends Equatable {
 
   /// Текст ошибки сохранения (последняя неудачная запись), `null` — ок.
   final String? saveError;
+
+  /// Почему не загрузилась панель (при [AdminStatus.error]).
+  final String? loadError;
+
+  /// Помочь может только повторный вход (нет прав / сессия истекла).
+  final bool loadNeedsReauth;
+
+  /// Можно ли править время и состав брони (в боевой сборке — нет, см.
+  /// `IAdminRepository.canEditSchedule`).
+  final bool scheduleEditable;
 
   /// Горизонт дней для ленты «Доступности».
   static const int horizonDays = 14;
@@ -535,6 +551,9 @@ class AdminState extends Equatable {
     NewPackageDraft? newPackage,
     String? saveError,
     bool clearSaveError = false,
+    String? loadError,
+    bool? loadNeedsReauth,
+    bool? scheduleEditable,
   }) {
     return AdminState(
       status: status ?? this.status,
@@ -560,6 +579,9 @@ class AdminState extends Equatable {
       filterType: filterType ?? this.filterType,
       newPackage: newPackage ?? this.newPackage,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
+      loadError: loadError ?? this.loadError,
+      loadNeedsReauth: loadNeedsReauth ?? this.loadNeedsReauth,
+      scheduleEditable: scheduleEditable ?? this.scheduleEditable,
     );
   }
 
@@ -587,5 +609,8 @@ class AdminState extends Equatable {
         filterType,
         newPackage,
         saveError,
+        loadError,
+        loadNeedsReauth,
+        scheduleEditable,
       ];
 }

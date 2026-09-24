@@ -23,6 +23,17 @@ class AdminRepository implements IAdminRepository {
   /// Таймзона, если у клуба она почему-то не пришла: клубы в Перми.
   static const String _defaultTimezone = 'Asia/Yekaterinburg';
 
+  // -- доступ ---------------------------------------------------------------
+
+  @override
+  Future<bool> isStaff() =>
+      _guard(() async => await _client.rpc<bool>('booking_is_staff') == true);
+
+  /// Позиции брони (время, станции) сотруднику по RLS только читаются —
+  /// менять их из админки нельзя, только отменить бронь и создать новую.
+  @override
+  bool get canEditSchedule => false;
+
   // -- чтение ---------------------------------------------------------------
 
   @override
@@ -280,10 +291,21 @@ class AdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<void> deletePackage(String packageId) async {
-    await _guard(
-        () => _client.from('booking_packages').delete().eq('id', packageId));
-  }
+  Future<bool> deletePackage(String packageId) => _guard(() async {
+        try {
+          await _client.from('booking_packages').delete().eq('id', packageId);
+          return true;
+        } on PostgrestException catch (e) {
+          // 23503 — на пакет ссылаются брони (booking_orders.package_id):
+          // удалить нельзя, выключаем, чтобы он пропал из виджета.
+          if (e.code != '23503') rethrow;
+          await _client.from('booking_packages').update(<String, dynamic>{
+            'is_active': false,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', packageId);
+          return false;
+        }
+      });
 
   @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {
@@ -291,6 +313,182 @@ class AdminRepository implements IAdminRepository {
           'status': cancelled ? 'cancelled' : 'confirmed',
         }).eq('id', orderId));
   }
+
+  @override
+  Future<void> updateOrderDetails({
+    required String orderId,
+    required String clientName,
+    required String phone,
+    required int prepay,
+    required String note,
+  }) async {
+    final List<dynamic> updated = await _guard(() => _client
+        .from('booking_orders')
+        .update(<String, dynamic>{
+          'client_name': clientName,
+          'client_phone': phone,
+          'prepay': prepay,
+          'comment': note.isEmpty ? null : note,
+        })
+        .eq('id', orderId)
+        .select('id'));
+    // RLS не даёт ошибку, а просто не обновляет строку — проверяем явно.
+    if (updated.isEmpty) throw const AdminFailure.auth();
+  }
+
+  @override
+  Future<String> createBooking({
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+    required String clientName,
+    required String phone,
+    required String note,
+  }) =>
+      _guard(() async {
+        final Map<String, dynamic> club = await _client
+            .from('booking_clubs')
+            .select('timezone')
+            .eq('id', clubId)
+            .single();
+        final Duration tz =
+            ClubClock.offsetOf(club['timezone'] as String? ?? _defaultTimezone);
+        final int hours = headsetsByHour.length;
+        final DateTime from = DateTime.utc(day.year, day.month, day.day)
+            .add(Duration(minutes: startMinutes))
+            .subtract(tz);
+        final DateTime to = from.add(Duration(hours: hours));
+
+        final List<dynamic> stationRows = await _client
+            .from('booking_stations')
+            .select('id,type')
+            .eq('room_id', hallId)
+            .eq('is_active', true)
+            .order('sort_order', ascending: true);
+        final List<({String id, bool ps5})> stations = <({String id, bool ps5})>[
+          for (final dynamic s in stationRows)
+            (
+              id: (s as Map<String, dynamic>)['id'] as String,
+              ps5: s['type'] == 'ps5',
+            ),
+        ];
+
+        final List<dynamic> busyRows = stations.isEmpty
+            ? const <dynamic>[]
+            : await _client
+                .from('booking_order_items')
+                .select('station_id,starts_at,ends_at')
+                .inFilter('station_id',
+                    stations.map((({String id, bool ps5}) s) => s.id).toList())
+                .eq('is_active', true)
+                .lt('starts_at', to.toIso8601String())
+                .gt('ends_at', from.toIso8601String());
+        final List<({String id, DateTime start, DateTime end})> busy =
+            <({String id, DateTime start, DateTime end})>[
+          for (final dynamic b in busyRows)
+            (
+              id: (b as Map<String, dynamic>)['station_id'] as String,
+              start: DateTime.parse(b['starts_at'] as String),
+              end: DateTime.parse(b['ends_at'] as String),
+            ),
+        ];
+
+        // Подбираем станции по часам. Сначала те же, что в прошлом часе:
+        // гостю не нужно пересаживаться, а отрезков брони выходит меньше.
+        final List<List<String>> perHour = <List<String>>[];
+        List<String> prev = const <String>[];
+        for (int h = 0; h < hours; h++) {
+          final DateTime a = from.add(Duration(hours: h));
+          final DateTime b = a.add(const Duration(hours: 1));
+          List<String> pick({required bool ps5, required int need}) {
+            final List<String> free = <String>[
+              for (final ({String id, bool ps5}) s in stations)
+                if (s.ps5 == ps5 &&
+                    !busy.any((({String id, DateTime start, DateTime end}) x) =>
+                        x.id == s.id && x.start.isBefore(b) && x.end.isAfter(a)))
+                  s.id,
+            ];
+            if (free.length < need) {
+              throw AdminFailure('${h + 1}-й час: свободно только '
+                  '${free.length} ${ps5 ? 'PS5' : 'шлемов'}.');
+            }
+            return <String>[
+              ...free.where(prev.contains),
+              ...free.where((String id) => !prev.contains(id)),
+            ].take(need).toList();
+          }
+
+          final List<String> ids = <String>[
+            ...pick(ps5: false, need: headsetsByHour[h]),
+            ...pick(ps5: true, need: consolesByHour[h]),
+          ];
+          perHour.add(ids);
+          prev = ids;
+        }
+
+        // Подряд идущие часы с одинаковым составом — один отрезок (p_segments).
+        final List<Map<String, dynamic>> segments = <Map<String, dynamic>>[];
+        int runStart = 0;
+        for (int h = 1; h <= hours; h++) {
+          if (h < hours && _sameIds(perHour[h - 1], perHour[h])) continue;
+          if (perHour[runStart].isNotEmpty) {
+            segments.add(<String, dynamic>{
+              'station_ids': perHour[runStart],
+              'starts_at': from.add(Duration(hours: runStart)).toIso8601String(),
+              'ends_at': from.add(Duration(hours: h)).toIso8601String(),
+            });
+          }
+          runStart = h;
+        }
+        if (segments.isEmpty) {
+          throw const AdminFailure('Добавьте хотя бы один шлем или одну PS5.');
+        }
+
+        try {
+          // От сотрудника RPC не применяет лимиты и паузу приёма, source=staff.
+          return await _client.rpc<String>(
+            'booking_create_order',
+            params: <String, dynamic>{
+              'p_club_id': clubId,
+              'p_client_name': clientName,
+              'p_client_phone': phone,
+              'p_segments': segments,
+              'p_comment': note.isEmpty ? null : note,
+              'p_source': 'staff',
+            },
+          );
+        } on PostgrestException catch (e) {
+          throw _bookingError(e) ?? e;
+        }
+      });
+
+  /// Понятный сотруднику текст для отказа `booking_create_order`, либо `null`.
+  static AdminFailure? _bookingError(PostgrestException e) {
+    if (e.code == '23P01') {
+      return const AdminFailure(
+          'Эти станции только что заняли. Обновите страницу и выберите снова.');
+    }
+    final String m = e.message;
+    if (m.contains('SLOT_CLOSED')) {
+      return const AdminFailure('Это время закрыто на вкладке «Доступность».');
+    }
+    if (m.contains('STARTS_IN_PAST')) {
+      return const AdminFailure('Это время уже прошло.');
+    }
+    if (m.contains('OUTSIDE_WORKING_HOURS')) {
+      return const AdminFailure('Сеанс выходит за часы работы клуба.');
+    }
+    if (m.contains('BAD_DURATION')) {
+      return const AdminFailure('Такой сеанс сервер не принимает: не длиннее 5 часов.');
+    }
+    return null;
+  }
+
+  static bool _sameIds(List<String> a, List<String> b) =>
+      a.length == b.length && a.every(b.contains);
 
   @override
   Future<void> setIntakeOpen(String clubId, {required bool open}) async {

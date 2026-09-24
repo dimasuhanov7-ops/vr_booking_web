@@ -139,9 +139,11 @@ class BookingDetailDrawer extends StatelessWidget {
             children: <Widget>[
               const Expanded(child: AdminLabel('Редактирование')),
               if (edited)
-                Text('изменено, сохранено',
+                const Text('есть несохранённые правки',
                     style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700, color: tint)),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AdminColors.warn)),
             ],
           ),
           const SizedBox(height: 12),
@@ -157,50 +159,60 @@ class BookingDetailDrawer extends StatelessWidget {
             keyboardType: TextInputType.phone,
             onChanged: (String v) => edit(phone: v),
           ),
-          const SizedBox(height: 13),
-          _TimeField(
-            minutes: row.startMinutes,
-            onChanged: (int m) => edit(startMinutes: m),
-          ),
-          const SizedBox(height: 13),
-          _ChipGroup(
-            label: 'Длительность',
-            options: <(String, int)>[
-              for (final int m in AdminState.durations) ('${m ~/ 60} ч', m),
-            ],
-            value: row.durationMinutes,
-            accent: accent,
-            onSelected: (int m) => edit(durationMinutes: m),
-          ),
-          if (row.variesByHour) ...<Widget>[
+          if (!state.scheduleEditable) ...<Widget>[
             const SizedBox(height: 13),
             const Text(
-              'Состав меняется по часам. Здесь можно задать один состав на весь '
-              'сеанс — разбивку по часам меняйте через «Новую запись».',
-              style: TextStyle(fontSize: 12, color: AdminColors.warn),
+              'Время и состав брони здесь не меняются. Чтобы перенести сеанс или '
+              'поменять станции, отмените бронь и создайте новую через «Новую запись».',
+              style: TextStyle(fontSize: 12, color: AdminColors.textMuted),
             ),
           ],
-          const SizedBox(height: 13),
-          _ChipGroup(
-            label: row.variesByHour ? 'Шлемов (весь сеанс)' : 'Шлемов',
-            options: <(String, int)>[
-              for (int i = 0; i <= hall.headsets; i++) ('$i', i),
-            ],
-            value: row.variesByHour ? row.maxHeadsets : row.headsets,
-            accent: accent,
-            onSelected: (int v) => edit(headsets: v, clearHourly: true),
-          ),
-          if (hall.consoles > 0) ...<Widget>[
+          if (state.scheduleEditable) ...<Widget>[
+            const SizedBox(height: 13),
+            _TimeField(
+              minutes: row.startMinutes,
+              onChanged: (int m) => edit(startMinutes: m),
+            ),
             const SizedBox(height: 13),
             _ChipGroup(
-              label: row.variesByHour ? 'PS5 (весь сеанс)' : 'PS5',
+              label: 'Длительность',
               options: <(String, int)>[
-                for (int i = 0; i <= hall.consoles; i++) ('$i', i),
+                for (final int m in AdminState.durations) ('${m ~/ 60} ч', m),
               ],
-              value: row.variesByHour ? row.maxConsoles : row.consoles,
+              value: row.durationMinutes,
               accent: accent,
-              onSelected: (int v) => edit(consoles: v, clearHourly: true),
+              onSelected: (int m) => edit(durationMinutes: m),
             ),
+            if (row.variesByHour) ...<Widget>[
+              const SizedBox(height: 13),
+              const Text(
+                'Состав меняется по часам. Здесь можно задать один состав на весь '
+                'сеанс — разбивку по часам меняйте через «Новую запись».',
+                style: TextStyle(fontSize: 12, color: AdminColors.warn),
+              ),
+            ],
+            const SizedBox(height: 13),
+            _ChipGroup(
+              label: row.variesByHour ? 'Шлемов (весь сеанс)' : 'Шлемов',
+              options: <(String, int)>[
+                for (int i = 0; i <= hall.headsets; i++) ('$i', i),
+              ],
+              value: row.variesByHour ? row.maxHeadsets : row.headsets,
+              accent: accent,
+              onSelected: (int v) => edit(headsets: v, clearHourly: true),
+            ),
+            if (hall.consoles > 0) ...<Widget>[
+              const SizedBox(height: 13),
+              _ChipGroup(
+                label: row.variesByHour ? 'PS5 (весь сеанс)' : 'PS5',
+                options: <(String, int)>[
+                  for (int i = 0; i <= hall.consoles; i++) ('$i', i),
+                ],
+                value: row.variesByHour ? row.maxConsoles : row.consoles,
+                accent: accent,
+                onSelected: (int v) => edit(consoles: v, clearHourly: true),
+              ),
+            ],
           ],
           const SizedBox(height: 13),
           AdminNumberField(
@@ -221,18 +233,27 @@ class BookingDetailDrawer extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: _WideButton(
+                  label: 'Сохранить',
+                  enabled: edited,
+                  accent: accent,
+                  onTap: () => bloc.add(AdminRowSaved(row.id)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _WideButton(
                   label: 'Вернуть исходные',
                   enabled: edited,
                   onTap: () => bloc.add(AdminRowEditReset(row.id)),
                 ),
               ),
-              const SizedBox(width: 8),
-              _WideButton(
-                label: cancelled ? 'Вернуть бронь' : 'Отменить бронь',
-                danger: !cancelled,
-                onTap: () => bloc.add(AdminRowCancelToggled(row.id)),
-              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          _WideButton(
+            label: cancelled ? 'Вернуть бронь' : 'Отменить бронь',
+            danger: !cancelled,
+            onTap: () => bloc.add(AdminRowCancelToggled(row.id)),
           ),
         ],
       ),
@@ -450,6 +471,7 @@ class _WideButton extends StatelessWidget {
     required this.onTap,
     this.enabled = true,
     this.danger = false,
+    this.accent,
   });
 
   final String label;
@@ -457,13 +479,19 @@ class _WideButton extends StatelessWidget {
   final bool enabled;
   final bool danger;
 
+  /// Залить акцентом (главное действие).
+  final Color? accent;
+
   @override
   Widget build(BuildContext context) {
+    final bool filled = accent != null && enabled;
     final Color fg = !enabled
         ? const Color(0xFF4A4C55)
-        : danger
-            ? AdminColors.danger
-            : AdminColors.textSoft;
+        : filled
+            ? AdminColors.bg
+            : danger
+                ? AdminColors.danger
+                : AdminColors.textSoft;
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(12),
@@ -472,9 +500,17 @@ class _WideButton extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: danger && enabled ? AdminColors.dangerBg : Colors.transparent,
+          color: filled
+              ? accent
+              : danger && enabled
+                  ? AdminColors.dangerBg
+                  : Colors.transparent,
           border: Border.all(
-            color: danger && enabled ? AdminColors.dangerBorder : AdminColors.borderInput,
+            color: filled
+                ? accent!
+                : danger && enabled
+                    ? AdminColors.dangerBorder
+                    : AdminColors.borderInput,
           ),
         ),
         child: Text(label,

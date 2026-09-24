@@ -111,10 +111,41 @@ class AdminRepositoryMock implements IAdminRepository {
   Future<void> updatePackage(PackageEntity package) async {}
 
   @override
-  Future<void> deletePackage(String packageId) async {}
+  Future<bool> deletePackage(String packageId) async => true;
 
   @override
   Future<void> setOrderCancelled(String orderId, {required bool cancelled}) async {}
+
+  // В демо сотрудник — любой, а время и состав брони можно «править»: всё
+  // живёт в состоянии BLoC, сервера нет.
+  @override
+  Future<bool> isStaff() async => true;
+
+  @override
+  bool get canEditSchedule => true;
+
+  @override
+  Future<void> updateOrderDetails({
+    required String orderId,
+    required String clientName,
+    required String phone,
+    required int prepay,
+    required String note,
+  }) async {}
+
+  @override
+  Future<String> createBooking({
+    required String clubId,
+    required String hallId,
+    required DateTime day,
+    required int startMinutes,
+    required List<int> headsetsByHour,
+    required List<int> consolesByHour,
+    required String clientName,
+    required String phone,
+    required String note,
+  }) async =>
+      'c${DateTime.now().millisecondsSinceEpoch}';
 
   // Демо-режим: доступность стартует пустой, а правки живут в состоянии BLoC —
   // как и раньше. Сервера здесь нет, сохранять некуда.
