@@ -105,7 +105,7 @@ void main() {
       durationMinutes: 60,
     );
     final DateTime earliest =
-        DateTime.now().toUtc().add(SlotGeneratorService.bookingLead);
+        DateTime.now().toUtc().add(Duration(minutes: _vray.leadMinutes));
     expect(slots.every((s) => !s.startsAt.isBefore(earliest)), isTrue);
   });
 }

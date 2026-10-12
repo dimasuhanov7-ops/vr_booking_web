@@ -121,6 +121,11 @@ abstract interface class IAdminRepository {
     required List<int> consolesByHour,
   });
 
+  /// Настройки онлайн-записи клуба: пауза между сеансами, за сколько минут
+  /// закрывается запись, на сколько дней вперёд открыта, длительности и
+  /// ссылка на политику конфиденциальности.
+  Future<void> saveClubSettings(AdminClubEntity club);
+
   /// Приём онлайн-броней клуба (пауза).
   Future<void> setIntakeOpen(String clubId, {required bool open});
 

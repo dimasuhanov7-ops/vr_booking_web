@@ -64,15 +64,15 @@ class AccountBlock extends StatelessWidget {
     final int n = myBookings.length;
     final String title = _loggedIn
         ? (account!.name.isNotEmpty ? '${account!.name} · ${account!.phone}' : account!.phone)
-        : 'Вход по номеру телефона';
+        : 'Мои брони на этом устройстве';
     final String sub = _loggedIn
         ? (n > 0
-            ? '$n ${BookingFormat.plural(n, 'бронь', 'брони', 'броней')} на этом номере · контакты заполнены'
-            : 'Броней пока нет · контакты заполнены')
-        : 'Мы запомним вас и покажем ваши брони при следующем визите.';
+            ? '$n ${BookingFormat.plural(n, 'бронь', 'брони', 'броней')} с этого устройства · контакты заполнены'
+            : 'С этого устройства броней нет · контакты заполнены')
+        : 'Брони, сделанные в этом браузере, видны здесь — их можно отменить.';
     final String primaryLabel = _loggedIn
         ? (listOpen ? 'Скрыть брони' : 'Мои брони')
-        : 'Войти по номеру';
+        : 'Найти';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,7 +98,7 @@ class AccountBlock extends StatelessWidget {
                   children: <Widget>[
                     Expanded(child: _ghostButton(primaryLabel, onPrimary, expand: true)),
                     const SizedBox(width: 8),
-                    _ghostButton('Выйти', onLogout, muted: true),
+                    _ghostButton('Забыть номер', onLogout, muted: true),
                   ],
                 )
               else
@@ -160,7 +160,9 @@ class AccountBlock extends StatelessWidget {
 
   Widget _bookingList() {
     if (myBookings.isEmpty) {
-      return const Text('Пока нет ни одной брони на этом номере.',
+      return const Text(
+          'В этом браузере броней на этот номер не было. Бронировали с другого '
+          'телефона или компьютера — откройте форму там или позвоните в клуб.',
           style: TextStyle(fontSize: 13, color: BookingColors.textMuted));
     }
     return Column(
@@ -279,7 +281,9 @@ class _LoginPanelState extends State<_LoginPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('Введите телефон — покажем ваши брони и заполним контакты за вас.',
+          const Text(
+              'Введите телефон — покажем брони, сделанные в этом браузере, и '
+              'заполним контакты. Брони с другого устройства здесь не видны.',
               style: TextStyle(fontSize: 13, color: BookingColors.textMuted)),
           const SizedBox(height: 10),
           Row(
@@ -314,7 +318,7 @@ class _LoginPanelState extends State<_LoginPanel> {
                     borderRadius: BorderRadius.circular(12),
                     color: _valid ? widget.accent : BookingColors.border,
                   ),
-                  child: Text('Войти',
+                  child: Text('Показать',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,

@@ -150,7 +150,7 @@ class _NewBookingDrawerState extends State<NewBookingDrawer> {
             label: 'Длительность',
             accent: accent,
             options: <(String, bool, VoidCallback)>[
-              for (final int m in AdminState.durations)
+              for (final int m in state.staffDurations)
                 ('${m ~/ 60} ч', m == d.durationMinutes, () => change(durationMinutes: m)),
             ],
           ),

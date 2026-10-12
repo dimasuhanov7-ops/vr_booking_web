@@ -7,8 +7,6 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 
-import '../../../../app/config/booking_config.dart';
-
 import '../entity/account_entity.dart';
 import '../entity/booking_failure.dart';
 import '../entity/busy_interval_entity.dart';
@@ -45,6 +43,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     String? lockedClubSlug,
     DateTime? initialDate,
     int? initialDurationMinutes,
+    Map<String, String> utm = const <String, String>{},
   })  : _repository = repository,
         _account = accountStore,
         _slots = slotGenerator,
@@ -53,6 +52,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         _lockedClubSlug = lockedClubSlug,
         _pendingDate = initialDate,
         _pendingDuration = initialDurationMinutes,
+        _utm = utm,
         super(const BookingState()) {
     on<BookingStarted>(_onStarted);
     on<BookingClubSelected>(_onClubSelected);
@@ -84,6 +84,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<BookingAccountLoggedOut>(_onAccountLoggedOut);
     on<BookingAccountListToggled>(_onAccountListToggled);
     on<BookingCancelRequested>(_onCancelRequested);
+    on<BookingPerHourToggled>(_onPerHourToggled);
   }
 
   final IBookingRepository _repository;
@@ -92,15 +93,15 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   final PricingService _pricing;
   final String _source;
 
+  /// UTM-метки из адреса виджета — уходят в бронь как есть.
+  final Map<String, String> _utm;
+
   /// Slug клуба из `?club=` — селектор клуба скрыт, клуб выбирается сразу.
   final String? _lockedClubSlug;
 
   /// Предвыбор из `?date=` / `?duration=` — применяется один раз при выборе клуба.
   DateTime? _pendingDate;
   int? _pendingDuration;
-
-  /// Допустимые длительности сеанса, минут.
-  static const List<int> durations = BookingConfig.sessionDurations;
 
   /// Как часто перечитывать занятость, пока клиент выбирает время и станции:
   /// чужую бронь лучше увидеть до отправки, а не получить конфликт после.
@@ -255,8 +256,13 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     BookingClubSelected event,
     Emitter<BookingState> emit,
   ) async {
-    final DateTime date = _pendingDate ?? state.date ?? _today();
-    final int duration = _pendingDuration ?? state.durationMinutes;
+    final DateTime today = _today(event.club);
+    final DateTime last = today.add(Duration(days: event.club.horizonDays));
+    DateTime date = _pendingDate ?? state.date ?? today;
+    // Дата из ссылки или от другого клуба может не попасть в окно записи.
+    if (date.isBefore(today) || date.isAfter(last)) date = today;
+    final int duration =
+        event.club.nearestDuration(_pendingDuration ?? state.durationMinutes);
     _pendingDate = null;
     _pendingDuration = null;
 
@@ -351,6 +357,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   ) async {
     emit(state.copyWith(
       durationMinutes: event.minutes,
+      perHourMode: false,
       clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
@@ -382,6 +389,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     emit(state.copyWith(
       durationMinutes: pkg.minutes,
       selectedPackageId: pkg.id,
+      perHourMode: false,
       clearPicks: true,
       takenIds: const <String>{},
       conflictShown: false,
@@ -466,26 +474,24 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final int h = event.hour.clamp(0, state.hourCount - 1);
     final bool picked = state.pickedAt(h).contains(event.stationId);
     // Добавлять можно только свободную; убирать — всегда.
-    if (!picked && !state.isFreeAt(h, event.stationId)) return;
-    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
+    if (!picked && !_freeFor(h, event.stationId)) return;
     final Set<String> cur = Set<String>.of(state.pickedAt(h));
     if (!cur.remove(event.stationId)) cur.add(event.stationId);
-    next[h] = cur;
-    emit(_withHours(next));
+    emit(_withHours(_put(h, cur)));
   }
 
   void _onQuickPicked(BookingQuickPicked event, Emitter<BookingState> emit) {
     final int h = event.hour.clamp(0, state.hourCount - 1);
-    final List<StationEntity> free = state.freeHallStationsAt(h);
+    final List<StationEntity> free =
+        _flat ? state.freeHallStations : state.freeHallStationsAt(h);
     final int n = event.count < 0 ? free.length : event.count.clamp(0, free.length);
-    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
     // Компактно: компания садится одним рядом или залом, а не вразброс
     // (в «Весь клуб» раньше 4 шлема делились 2+2 между залами).
-    next[h] = const StationPickerService()
+    final Set<String> cur = const StationPickerService()
         .compact(free, n)
         .map((StationEntity s) => s.id)
         .toSet();
-    emit(_withHours(next));
+    emit(_withHours(_put(h, cur)));
   }
 
   void _onStationsPicked(
@@ -496,13 +502,11 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final Set<String> cur = Set<String>.of(state.pickedAt(h));
     if (event.pick) {
       // Как и при поштучном выборе: добавить можно только свободные.
-      cur.addAll(event.stationIds.where((String id) => state.isFreeAt(h, id)));
+      cur.addAll(event.stationIds.where((String id) => _freeFor(h, id)));
     } else {
       cur.removeAll(event.stationIds);
     }
-    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
-    next[h] = cur;
-    emit(_withHours(next));
+    emit(_withHours(_put(h, cur)));
   }
 
   void _onSelectionCleared(
@@ -519,9 +523,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       return;
     }
     final int h = event.hour!.clamp(0, state.hourCount - 1);
-    final Map<int, Set<String>> next = _cloneHours(state.pickedByHour);
-    next[h] = <String>{};
-    emit(_withHours(next));
+    emit(_withHours(_put(h, <String>{})));
   }
 
   void _onHourCopied(BookingHourCopied event, Emitter<BookingState> emit) {
@@ -542,6 +544,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       clientName: event.name ?? state.clientName,
       clientPhone: event.phone ?? state.clientPhone,
       peopleInput: event.people ?? state.peopleInput,
+      comment: event.comment ?? state.comment,
     ));
   }
 
@@ -571,18 +574,21 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           clientName: state.clientName.trim(),
           clientPhone: state.clientPhone.trim(),
           peopleCount: int.tryParse(state.peopleInput.trim()),
-          comment: null,
+          comment: state.comment.trim().isEmpty ? null : state.comment.trim(),
           // Код уходит, только если хватает станций: иначе сервер откажет всей брони.
           discountCode: state.promoApplies ? state.promo!.code : null,
           source: _source,
           packageId: state.quote.packageId,
+          utm: _utm,
         ),
       );
-      _rememberBooking(orderId, club, slot);
+      final num? net = await _serverTotal(orderId);
+      _rememberBooking(orderId, club, slot, net: net);
       emit(state.copyWith(
         status: BookingStatus.ready,
         view: BookingStage.done,
         createdOrderId: orderId,
+        confirmedNet: net,
         account: _account != null
             ? AccountEntity(
                 phone: state.clientPhone.trim(), name: state.clientName.trim())
@@ -596,9 +602,26 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     }
   }
 
+  /// Итог брони от сервера. Бронь уже создана, поэтому сбой или долгий ответ
+  /// здесь не должны мешать: тогда в чеке остаётся сумма, посчитанная виджетом.
+  Future<num?> _serverTotal(String orderId) async {
+    try {
+      return await _repository
+          .fetchOrderTotal(orderId: orderId, clientPhone: state.clientPhone.trim())
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Пишет клиента и бронь в локальное хранилище (`localStorage`).
   /// Не должно ронять бронь — любая ошибка форматирования/хранилища глотается.
-  void _rememberBooking(String orderId, ClubEntity club, TimeSlotEntity slot) {
+  void _rememberBooking(
+    String orderId,
+    ClubEntity club,
+    TimeSlotEntity slot, {
+    num? net,
+  }) {
     final IAccountStore? store = _account;
     if (store == null) return;
     try {
@@ -611,7 +634,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       final DateTime to = ClubClock(club).toWall(slot.endsAt);
       String two(int v) => v.toString().padLeft(2, '0');
       final String day = '${_dow(from.weekday)}, ${from.day} ${_mon(from.month)}';
-      final String rub = _rubles(state.quote.net.round());
+      final String rub = _rubles((net ?? state.quote.net).round());
 
       store.addBooking(SavedBookingEntity(
         orderId: orderId,
@@ -736,6 +759,27 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     } on BookingFailure catch (e) {
       emit(state.copyWith(status: BookingStatus.ready, errorMessage: e.message));
     }
+  }
+
+  /// «Разный состав по часам»: включить — показать план по часам; выключить —
+  /// вернуться к одному составу на весь сеанс (берём состав первого часа).
+  void _onPerHourToggled(
+    BookingPerHourToggled event,
+    Emitter<BookingState> emit,
+  ) {
+    if (!state.showHourPlan) {
+      emit(state.copyWith(perHourMode: true));
+      return;
+    }
+    final Set<String> first = state
+        .pickedAt(0)
+        .where((String id) => state.isFree(id))
+        .toSet();
+    final BookingState flat = state.copyWith(perHourMode: false);
+    final Map<int, Set<String>> hours = <int, Set<String>>{0: first};
+    emit(first.isEmpty
+        ? flat.copyWith(clearPicks: true, quote: QuoteEntity.empty)
+        : flat.copyWith(pickedByHour: hours, quote: _quoteFor(flat, hours)));
   }
 
   Future<void> _handleConflict(Emitter<BookingState> emit) async {
@@ -909,6 +953,20 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       if (list != null && list.isNotEmpty) out[clubs[i].id] = list;
     }
     return out;
+  }
+
+  /// Выбор одним планом на весь сеанс (план по часам не показан).
+  bool get _flat => !state.showHourPlan;
+
+  /// Свободна ли станция для выбора в час [h]: в общем плане — на весь сеанс.
+  bool _freeFor(int h, String id) =>
+      _flat ? state.isFree(id) : state.isFreeAt(h, id);
+
+  /// Новый выбор по часам после правки часа [h]. В общем плане правка
+  /// относится ко всему сеансу — остальные часы наследуют её от 0-го.
+  Map<int, Set<String>> _put(int h, Set<String> cur) {
+    if (_flat) return <int, Set<String>>{0: cur};
+    return _cloneHours(state.pickedByHour)..[h] = cur;
   }
 
   /// Глубокая копия карты выбора по часам.
@@ -1102,8 +1160,10 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     return options;
   }
 
-  DateTime _today() {
-    final DateTime n = DateTime.now();
+  /// Сегодня по часам клуба: клиент может смотреть из другого пояса, а в
+  /// полночь по Москве в Перми уже следующий день.
+  DateTime _today(ClubEntity club) {
+    final DateTime n = ClubClock(club).nowWall();
     return DateTime(n.year, n.month, n.day);
   }
 }

@@ -12,6 +12,8 @@ class ContactForm extends StatelessWidget {
     required this.phone,
     required this.people,
     required this.pickedCount,
+    this.comment = '',
+    this.onCommentChanged,
     required this.onNameChanged,
     required this.onPhoneChanged,
     required this.onPeopleChanged,
@@ -38,6 +40,15 @@ class ContactForm extends StatelessWidget {
 
   /// Колбэк числа людей.
   final ValueChanged<String> onPeopleChanged;
+
+  /// Пожелания к брони.
+  final String comment;
+
+  /// Колбэк пожеланий; `null` — поле не показываем.
+  final ValueChanged<String>? onCommentChanged;
+
+  /// Сколько символов пожеланий принимает сервер — с запасом под обрезку.
+  static const int commentLimit = 300;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +81,19 @@ class ContactForm extends StatelessWidget {
           ],
           onChanged: onPeopleChanged,
         ),
+        if (onCommentChanged != null) ...<Widget>[
+          const SizedBox(height: 10),
+          _Field(
+            label: 'Пожелания — необязательно',
+            hint: 'День рождения, возраст детей, во что хотите поиграть',
+            initial: comment,
+            maxLines: 3,
+            formatters: <TextInputFormatter>[
+              LengthLimitingTextInputFormatter(commentLimit),
+            ],
+            onChanged: onCommentChanged!,
+          ),
+        ],
       ],
     );
   }
@@ -83,6 +107,7 @@ class _Field extends StatefulWidget {
     required this.onChanged,
     this.keyboardType,
     this.formatters,
+    this.maxLines = 1,
   });
 
   final String label;
@@ -91,6 +116,7 @@ class _Field extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? formatters;
+  final int maxLines;
 
   @override
   State<_Field> createState() => _FieldState();
@@ -134,6 +160,8 @@ class _FieldState extends State<_Field> {
           keyboardType: widget.keyboardType,
           inputFormatters: widget.formatters,
           onChanged: widget.onChanged,
+          minLines: 1,
+          maxLines: widget.maxLines,
           style: const TextStyle(fontSize: 16, color: BookingColors.text),
           decoration: InputDecoration(
             isDense: true,

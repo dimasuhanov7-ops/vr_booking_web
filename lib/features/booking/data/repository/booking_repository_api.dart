@@ -162,12 +162,28 @@ class BookingRepositoryApi implements IBookingRepository {
           'comment': request.comment,
           'source': request.source,
           'package_id': request.packageId,
+          if (request.utm.isNotEmpty) 'utm': request.utm,
         });
         final Object? id = body['order_id'];
         if (id is! String) {
           throw const BookingUnexpectedFailure('Некорректный ответ сервера');
         }
         return id;
+      });
+
+  @override
+  Future<num?> fetchOrderTotal({
+    required String orderId,
+    required String clientPhone,
+  }) =>
+      _guard(() async {
+        final Map<String, dynamic> body =
+            await _post('/reservations/receipt', <String, dynamic>{
+          'order_id': orderId,
+          'client_phone': clientPhone,
+        });
+        final Object? net = body['net'];
+        return net is num ? net : num.tryParse('${net ?? ''}');
       });
 
   @override
@@ -231,7 +247,7 @@ class BookingRepositoryApi implements IBookingRepository {
       'SLOT_CLOSED' => const BookingSlotClosedFailure(),
       'OUTSIDE_WORKING_HOURS' ||
       'STARTS_IN_PAST' ||
-      'TOO_LATE_TO_BOOK' ||
+      'TOO_FAR_AHEAD' ||
       'BAD_DURATION' ||
       'PACKAGE_MISMATCH' ||
       'PACKAGE_NOT_FOUND' =>

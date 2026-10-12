@@ -254,6 +254,9 @@ class AdminRepositoryMock implements IAdminRepository {
       _delay(const AvailabilityEntity());
 
   @override
+  Future<void> saveClubSettings(AdminClubEntity club) async {}
+
+  @override
   Future<void> setIntakeOpen(String clubId, {required bool open}) async {}
 
   @override

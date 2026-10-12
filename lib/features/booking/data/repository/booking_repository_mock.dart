@@ -192,6 +192,14 @@ class BookingRepositoryMock implements IBookingRepository {
     return id;
   }
 
+  /// Демо не считает цену на «сервере» — чек остаётся с суммой виджета.
+  @override
+  Future<num?> fetchOrderTotal({
+    required String orderId,
+    required String clientPhone,
+  }) async =>
+      null;
+
   @override
   Future<void> cancelReservation({
     required String orderId,

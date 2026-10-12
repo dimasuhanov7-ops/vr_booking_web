@@ -55,7 +55,8 @@ class AdminRepository implements IAdminRepository {
   Future<List<AdminClubEntity>> fetchClubs() async {
     final List<dynamic> clubs = await _client
         .from('booking_clubs')
-        .select('id,slug,name,open_time,close_time,slot_gap_minutes')
+        .select('id,slug,name,open_time,close_time,slot_gap_minutes,'
+            'lead_minutes,horizon_days,durations,privacy_url')
         .eq('is_active', true)
         .order('sort_order', ascending: true);
     final List<dynamic> rooms = await _client
@@ -106,6 +107,10 @@ class AdminRepository implements IAdminRepository {
         closeMinutes: close,
         gapMinutes: (m['slot_gap_minutes'] as num?)?.toInt() ?? 0,
         halls: byClub[m['id']] ?? const <AdminHallEntity>[],
+        leadMinutes: (m['lead_minutes'] as num?)?.toInt() ?? 30,
+        horizonDays: (m['horizon_days'] as num?)?.toInt() ?? 30,
+        durations: _durations(m['durations']),
+        privacyUrl: m['privacy_url'] as String? ?? '',
       );
     }).toList(growable: false);
   }
@@ -249,7 +254,7 @@ class AdminRepository implements IAdminRepository {
         .from('booking_orders')
         .select(
           'id,club_id,client_name,client_phone,status,source,created_at,comment,prepay,'
-          'discount_id,'
+          'discount_id,utm,'
           'booking_packages(name),'
           'booking_discounts(code,title,kind,value),'
           'booking_order_items(starts_at,ends_at,booking_stations(type,room_id))',
@@ -694,6 +699,31 @@ class AdminRepository implements IAdminRepository {
             .select('id');
         _ensureChanged(rows);
       });
+
+  @override
+  Future<void> saveClubSettings(AdminClubEntity club) => _guard(() async {
+        final List<dynamic> rows = await _client
+            .from('booking_clubs')
+            .update(<String, dynamic>{
+              'slot_gap_minutes': club.gapMinutes,
+              'lead_minutes': club.leadMinutes,
+              'horizon_days': club.horizonDays,
+              'durations': club.durations,
+              'privacy_url':
+                  club.privacyUrl.trim().isEmpty ? null : club.privacyUrl.trim(),
+            })
+            .eq('id', club.id)
+            .select('id');
+        _ensureChanged(rows);
+      });
+
+  /// Длительности клуба из базы; мусор — значения по умолчанию.
+  static List<int> _durations(Object? raw) {
+    if (raw is! List<dynamic>) return AdminClubEntity.defaultDurations;
+    final List<int> out = raw.whereType<num>().map((num v) => v.toInt()).toSet().toList()
+      ..sort();
+    return out.isEmpty ? AdminClubEntity.defaultDurations : out;
+  }
 
   @override
   Future<void> setIntakeOpen(String clubId, {required bool open}) =>

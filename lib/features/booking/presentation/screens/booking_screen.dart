@@ -87,7 +87,7 @@ class _BookingScreenState extends State<BookingScreen> {
         clubSlug: state.club?.slug ?? '',
         stationCount: state.pickedIds.length,
         minutes: state.durationMinutes,
-        amount: state.quote.gross,
+        amount: state.confirmedNet ?? state.quote.net,
       );
     }
   }

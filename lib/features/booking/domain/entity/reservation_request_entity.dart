@@ -38,6 +38,7 @@ class ReservationRequestEntity extends Equatable {
     this.comment,
     this.source = 'site',
     this.packageId,
+    this.utm = const <String, String>{},
   });
 
   /// Клуб брони.
@@ -73,6 +74,9 @@ class ReservationRequestEntity extends Equatable {
   /// Выбранный пакет, если применён.
   final String? packageId;
 
+  /// UTM-метки рекламы, с которой пришёл клиент (`utm_source` и т.п.).
+  final Map<String, String> utm;
+
   /// Все станции брони (объединение отрезков) — для репозиториев, которым
   /// достаточно плоского списка.
   List<String> get allStationIds => <String>{
@@ -92,5 +96,6 @@ class ReservationRequestEntity extends Equatable {
         comment,
         source,
         packageId,
+        utm,
       ];
 }

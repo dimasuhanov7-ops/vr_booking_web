@@ -8,12 +8,6 @@ class SlotGeneratorService {
   /// Создаёт сервис.
   const SlotGeneratorService();
 
-  /// За сколько до начала сеанса закрывается запись.
-  ///
-  /// Зашито и в БД: `booking_create_order` отвечает `TOO_LATE_TO_BOOK`
-  /// (миграция `20260910083531_online_booking_lead_time`). Менять вместе.
-  static const Duration bookingLead = Duration(minutes: 30);
-
   /// Генерирует старты сеансов на дату [day].
   ///
   /// Первый старт — в момент открытия клуба, дальше с часовым шагом
@@ -21,7 +15,8 @@ class SlotGeneratorService {
   /// целиком помещается до закрытия. Сетка стартов одна и та же для часа и для
   /// четырёх: сеанс на 2 часа можно начать в 12:10, а не только в 11:00 и 13:10.
   /// Занятость проверяется отдельно — на весь сеанс, а не на один час.
-  /// Слоты, до начала которых меньше [bookingLead], отбрасываются.
+  /// Слоты, до начала которых меньше `club.leadMinutes`, отбрасываются —
+  /// сервер такую бронь не примет (`TOO_LATE_TO_BOOK`).
   /// [now] — для тестов, по умолчанию текущее время.
   List<TimeSlotEntity> generateSlots({
     required ClubEntity club,
@@ -30,7 +25,9 @@ class SlotGeneratorService {
     DateTime? now,
   }) {
     final ClubClock clock = ClubClock(club);
-    final DateTime cutoff = (now ?? DateTime.now()).toUtc().add(bookingLead);
+    final DateTime cutoff = (now ?? DateTime.now())
+        .toUtc()
+        .add(Duration(minutes: club.leadMinutes));
     final Duration session = Duration(minutes: durationMinutes);
     final Duration step = Duration(minutes: 60 + club.slotGapMinutes);
 
@@ -39,7 +36,7 @@ class SlotGeneratorService {
 
     while (cursor + session <= club.closeTime) {
       final DateTime startUtc = clock.toUtc(day, cursor);
-      // Ровно за 30 минут ещё можно — как и на сервере (start < now + 30 мин).
+      // Ровно за leadMinutes ещё можно — как и на сервере (start < now + lead).
       if (!startUtc.isBefore(cutoff)) {
         slots.add(TimeSlotEntity(startsAt: startUtc, endsAt: startUtc.add(session)));
       }

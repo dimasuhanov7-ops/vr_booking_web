@@ -40,6 +40,16 @@ abstract interface class IBookingRepository {
   /// Бросает [SlotAlreadyTakenFailure] при конфликте (`23P01`).
   Future<String> createReservation(ReservationRequestEntity request);
 
+  /// Итог брони к оплате, посчитанный сервером, — по той же паре
+  /// (id брони, телефон), что и отмена. `null`, если бэкенд не умеет.
+  ///
+  /// Виджет считает цену сам, чтобы показывать её до отправки, но в чеке
+  /// после брони показывает сумму сервера: она и попадёт в админку.
+  Future<num?> fetchOrderTotal({
+    required String orderId,
+    required String clientPhone,
+  });
+
   /// Отменить бронь клиента по паре (id брони, телефон).
   ///
   /// Доступа к аккаунту у клиента нет, поэтому подтверждением служит его

@@ -245,6 +245,9 @@ class _MinutesPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Пакет бывает только на длительность, которую клиент видит в виджете.
+    final List<int> options =
+        context.select((AdminBloc b) => b.state.clientDurations);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -258,7 +261,7 @@ class _MinutesPicker extends StatelessWidget {
           spacing: 6,
           runSpacing: 6,
           children: <Widget>[
-            for (final int m in AdminState.durations)
+            for (final int m in options)
               AdminPill(
                 label: '${m ~/ 60} ч',
                 selected: m == value,

@@ -102,7 +102,7 @@ function reservationError(err: { code?: string; message?: string }): Response {
   if (msg.includes("DISCOUNT_NOT_FOUND")) return json({ error: "DISCOUNT_NOT_FOUND" }, 422);
   if (msg.includes("RATE_LIMITED")) return json({ error: "RATE_LIMITED" }, 429);
   if (msg.includes("TOO_MANY_ACTIVE")) return json({ error: "TOO_MANY_ACTIVE" }, 429);
-  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "TOO_LATE_TO_BOOK", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH", "INTAKE_CLOSED", "SLOT_CLOSED"]) {
+  for (const e of ["OUTSIDE_WORKING_HOURS", "STARTS_IN_PAST", "TOO_LATE_TO_BOOK", "TOO_FAR_AHEAD", "BAD_DURATION", "BAD_PHONE", "NO_STATIONS", "STATION_NOT_IN_CLUB", "CLUB_NOT_FOUND", "PACKAGE_NOT_FOUND", "PACKAGE_MISMATCH", "INTAKE_CLOSED", "SLOT_CLOSED"]) {
     if (msg.includes(e)) return json({ error: e }, 422);
   }
   return json({ error: "UNEXPECTED", detail: msg }, 500);
@@ -125,7 +125,10 @@ async function handle(req: Request): Promise<Response> {
     if (req.method === "GET" && path === "/clubs") {
       const { data, error } = await db
         .from("booking_clubs")
-        .select("id,slug,name,timezone,open_time,close_time,slot_gap_minutes,sort_order")
+        .select(
+          "id,slug,name,timezone,open_time,close_time,slot_gap_minutes,sort_order," +
+            "intake_open,lead_minutes,horizon_days,durations,privacy_url",
+        )
         .eq("is_active", true)
         .order("sort_order")
         .order("name");
@@ -244,9 +247,34 @@ async function handle(req: Request): Promise<Response> {
         p_comment: b.comment ?? null,
         p_source: b.source ?? "site",
         p_package_id: b.package_id ?? null,
+        // Ключи и длину чистит сама база; не объект — не передаём вовсе.
+        p_utm: b.utm && typeof b.utm === "object" && !Array.isArray(b.utm)
+          ? b.utm
+          : null,
       });
       if (error) return reservationError(error);
       return json({ order_id: data as string }, 201);
+    }
+
+    // ---- POST /reservations/receipt ----
+    // Итог брони, посчитанный базой (booking_order_amounts), — для чека в
+    // виджете. Доступ — та же пара (id, телефон), что и для отмены.
+    if (req.method === "POST" && path === "/reservations/receipt") {
+      const b = await req.json();
+      if (!b.order_id || !b.client_phone) {
+        return json({ error: "ORDER_NOT_FOUND" }, 404);
+      }
+      const { data, error } = await db.rpc("booking_order_receipt", {
+        p_order_id: b.order_id,
+        p_client_phone: b.client_phone,
+      });
+      if (error) {
+        if ((error.message ?? "").includes("ORDER_NOT_FOUND")) {
+          return json({ error: "ORDER_NOT_FOUND" }, 404);
+        }
+        return json({ error: "UNEXPECTED", detail: error.message }, 500);
+      }
+      return json({ net: Number(data) });
     }
 
     // ---- POST /reservations/cancel ----

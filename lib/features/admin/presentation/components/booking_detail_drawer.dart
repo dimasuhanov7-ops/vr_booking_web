@@ -120,6 +120,7 @@ class BookingDetailDrawer extends StatelessWidget {
               _chip(state.club.name),
               for (final BookingRowEntity r in parts) _chip(hallName(r.hallId)),
               _chip('источник: ${row.source.label}'),
+              if (row.utmLabel.isNotEmpty) _chip('реклама: ${row.utmLabel}'),
             ],
           ),
           const SizedBox(height: 16),
@@ -519,7 +520,7 @@ class _RescheduleState extends State<_Reschedule> {
         _ChipGroup(
           label: 'Длительность',
           options: <(String, int)>[
-            for (final int m in AdminState.durations) ('${m ~/ 60} ч', m),
+            for (final int m in state.staffDurations) ('${m ~/ 60} ч', m),
           ],
           value: _duration,
           accent: widget.accent,

@@ -477,8 +477,15 @@ class AdminState extends Equatable {
   /// Горизонт дней для календаря новой брони (длиннее публичного — см. конфиг).
   static const int calendarDays = BookingConfig.staffHorizonDays;
 
-  /// Длительности сеанса (минуты), общие с виджетом бронирования.
-  static const List<int> durations = BookingConfig.sessionDurations;
+  /// Длительности, которые видит клиент выбранного клуба (настройка
+  /// «Онлайн-запись»). Пакеты бывают только на них.
+  List<int> get clientDurations =>
+      clubs.isEmpty ? AdminClubEntity.defaultDurations : club.durations;
+
+  /// Длительности для записи сотрудником: клиентские плюс обычные 1–5 ч —
+  /// по телефону клуб записывает и на то, чего нет в виджете.
+  List<int> get staffDurations =>
+      <int>{...AdminClubEntity.defaultDurations, ...clientDurations}.toList()..sort();
 
   /// Выбранный клуб.
   AdminClubEntity get club =>

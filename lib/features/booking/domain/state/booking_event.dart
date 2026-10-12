@@ -177,7 +177,7 @@ class BookingHourCopied extends BookingEvent {
 /// Изменены контактные данные.
 class BookingContactChanged extends BookingEvent {
   /// Создаёт событие.
-  const BookingContactChanged({this.name, this.phone, this.people});
+  const BookingContactChanged({this.name, this.phone, this.people, this.comment});
 
   /// Имя.
   final String? name;
@@ -188,8 +188,17 @@ class BookingContactChanged extends BookingEvent {
   /// Число людей.
   final String? people;
 
+  /// Пожелания к брони.
+  final String? comment;
+
   @override
-  List<Object?> get props => <Object?>[name, phone, people];
+  List<Object?> get props => <Object?>[name, phone, people, comment];
+}
+
+/// Переключатель «Разный состав по часам» для многочасового сеанса.
+class BookingPerHourToggled extends BookingEvent {
+  /// Создаёт событие.
+  const BookingPerHourToggled();
 }
 
 /// Ввод в поле промокода.

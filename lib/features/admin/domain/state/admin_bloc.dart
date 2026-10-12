@@ -55,6 +55,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminNewPromoChanged>(_onNewPromoChanged);
     on<AdminNewPromoSubmitted>(_onNewPromoSubmitted);
     on<AdminIntakeToggled>(_onIntakeToggled);
+    on<AdminClubSettingsChanged>(_onClubSettingsChanged);
     on<AdminHallClosureToggled>(_onHallClosureToggled);
     on<AdminAvailDayChanged>(_onAvailDayChanged);
     on<AdminSlotClosureToggled>(_onSlotClosureToggled);
@@ -413,8 +414,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       }
     }
     if (p.headsets + p.consoles < 1) return 'Нужно хотя бы одно устройство.';
-    if (!AdminState.durations.contains(p.minutes)) {
-      return 'Длительность — целыми часами, от 1 до 5.';
+    if (!state.clientDurations.contains(p.minutes)) {
+      return 'Такой длительности нет в настройках записи клуба.';
     }
     if (hall != null &&
         (p.headsets > hall.headsets || p.consoles > hall.consoles)) {
@@ -515,8 +516,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       error = hall.consoles > 0
           ? 'В «${hall.name}» только ${hall.consoles} PS5.'
           : 'В «${hall.name}» нет PS5.';
-    } else if (!AdminState.durations.contains(d.minutes)) {
-      error = 'Длительность — целыми часами, от 1 до 5.';
+    } else if (!state.clientDurations.contains(d.minutes)) {
+      error = 'Такой длительности нет в настройках записи клуба.';
     }
 
     if (error != null) {
@@ -722,6 +723,46 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       () => _repository.setIntakeOpen(clubId, open: open),
       emit,
     );
+  }
+
+  void _onClubSettingsChanged(
+    AdminClubSettingsChanged event,
+    Emitter<AdminState> emit,
+  ) {
+    if (state.clubs.isEmpty) return;
+    final AdminClubEntity cur = state.club;
+    List<int>? durations;
+    final int? toggle = event.toggleDuration;
+    if (toggle != null) {
+      final Set<int> set = cur.durations.toSet();
+      if (!set.remove(toggle)) set.add(toggle);
+      if (set.isEmpty) {
+        emit(state.copyWith(
+            saveError: 'Оставьте клиентам хотя бы одну длительность сеанса.'));
+        return;
+      }
+      durations = set.toList()..sort();
+    }
+    final AdminClubEntity next = cur.copyWith(
+      gapMinutes: event.gapMinutes,
+      leadMinutes: event.leadMinutes,
+      horizonDays: event.horizonDays,
+      durations: durations,
+      privacyUrl: event.privacyUrl,
+    );
+    emit(state.copyWith(
+      clubs: <AdminClubEntity>[
+        for (final AdminClubEntity c in state.clubs) c.id == cur.id ? next : c,
+      ],
+      clearSaveError: true,
+    ));
+    final String key = 'club-settings-${cur.id}';
+    // Недописанную ссылку не сохраняем — дождёмся адреса целиком.
+    if (!AdminClubEntity.isValidPrivacyUrl(next.privacyUrl)) {
+      _dropSave(key);
+      return;
+    }
+    _saveLater(key, () => _repository.saveClubSettings(next));
   }
 
   Future<void> _onHallClosureToggled(

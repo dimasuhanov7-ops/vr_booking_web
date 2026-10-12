@@ -17,4 +17,8 @@ abstract final class Nav {
   /// Новой, а не текущей: виджет живёт в iframe, и увести его со страницы
   /// значило бы потерять заполненную форму. На не-web — no-op.
   static void openExternal(String url) => impl.openExternal(url);
+
+  /// Скачать текстовый файл (например, `.ics` для календаря). На не-web — no-op.
+  static void downloadText(String fileName, String mime, String content) =>
+      impl.downloadText(fileName, mime, content);
 }

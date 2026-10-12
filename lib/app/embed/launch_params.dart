@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../../features/booking/domain/state/booking_bloc.dart';
-import '../config/booking_config.dart';
 
 /// Разбор query-параметров запуска виджета.
 ///
@@ -16,6 +14,7 @@ class LaunchParams {
     this.source = 'site',
     this.initialDate,
     this.initialDurationMinutes,
+    this.utm = const <String, String>{},
   });
 
   /// Читает параметры из адресной строки (на не-web всегда пусто).
@@ -29,6 +28,7 @@ class LaunchParams {
       source: _source(p),
       initialDate: _date(p['date']),
       initialDurationMinutes: _duration(p['duration']),
+      utm: utmFrom(p),
     );
   }
 
@@ -42,11 +42,27 @@ class LaunchParams {
   /// Источник брони для `booking_orders.source`: `site` | `vk`.
   final String source;
 
-  /// Предвыбранная дата (`?date=YYYY-MM-DD`), если валидна и в горизонте записи.
+  /// Предвыбранная дата (`?date=YYYY-MM-DD`), если валидна и не в прошлом.
+  /// Окно записи клуба проверяет BLoC: оно задаётся в админке.
   final DateTime? initialDate;
 
-  /// Предвыбранная длительность (`?duration=` в минутах), если из [BookingBloc.durations].
+  /// Предвыбранная длительность (`?duration=` в минутах, кратно часу).
+  /// Если у клуба такой нет, BLoC возьмёт ближайшую из настройки клуба.
   final int? initialDurationMinutes;
+
+  /// UTM-метки (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
+  /// `utm_term`). Сайт передаёт в адрес виджета метки своей страницы —
+  /// см. `docs/SITE_EMBED.md`.
+  final Map<String, String> utm;
+
+  /// Ключи UTM, которые принимает и сервер.
+  static const List<String> utmKeys = <String>[
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+  ];
 
   /// Slug'и `effect` / `vray` (и полные) -> канонический slug таблицы `booking_clubs`.
   static String? _clubSlug(String? raw) {
@@ -75,12 +91,21 @@ class LaunchParams {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);
     if (day.isBefore(today)) return null;
-    if (day.difference(today).inDays > BookingConfig.bookingHorizonDays) return null;
     return day;
   }
 
   static int? _duration(String? raw) {
     final int? m = int.tryParse(raw ?? '');
-    return BookingBloc.durations.contains(m) ? m : null;
+    if (m == null || m < 60 || m > 480 || m % 60 != 0) return null;
+    return m;
   }
+
+  /// UTM-метки из query: только [utmKeys], без пустых, не длиннее 100 символов.
+  static Map<String, String> utmFrom(Map<String, String> p) => <String, String>{
+        for (final String k in utmKeys)
+          if ((p[k] ?? '').trim().isNotEmpty)
+            k: p[k]!.trim().length > 100
+                ? p[k]!.trim().substring(0, 100)
+                : p[k]!.trim(),
+      };
 }

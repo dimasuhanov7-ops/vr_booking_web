@@ -54,6 +54,9 @@ class BookingState extends Equatable {
     this.clientName = '',
     this.clientPhone = '',
     this.peopleInput = '',
+    this.comment = '',
+    this.perHourMode = false,
+    this.confirmedNet,
     this.quote = QuoteEntity.empty,
     this.account,
     this.savedBookings = const <SavedBookingEntity>[],
@@ -158,6 +161,21 @@ class BookingState extends Equatable {
 
   /// Ввод числа людей (строка).
   final String peopleInput;
+
+  /// Пожелания клиента к брони (день рождения, возраст детей…).
+  final String comment;
+
+  /// Клиент сам включил «Разный состав по часам». Без этого многочасовой
+  /// сеанс выбирается одним планом на весь сеанс — так проще.
+  final bool perHourMode;
+
+  /// Итог к оплате, посчитанный сервером после брони. `null` — сервер не
+  /// ответил, в чеке остаётся сумма виджета.
+  final num? confirmedNet;
+
+  /// Показывать ли план по часам: включил клиент или выбор уже разный по часам
+  /// (например, после конфликта часть мест осталась не на весь сеанс).
+  bool get showHourPlan => multiHour && (perHourMode || hasHourOverrides);
 
   /// Итоговый расчёт.
   final QuoteEntity quote;
@@ -478,6 +496,9 @@ class BookingState extends Equatable {
     String? clientName,
     String? clientPhone,
     String? peopleInput,
+    String? comment,
+    bool? perHourMode,
+    num? confirmedNet,
     QuoteEntity? quote,
     AccountEntity? account,
     List<SavedBookingEntity>? savedBookings,
@@ -525,6 +546,9 @@ class BookingState extends Equatable {
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
       peopleInput: peopleInput ?? this.peopleInput,
+      comment: comment ?? this.comment,
+      perHourMode: perHourMode ?? this.perHourMode,
+      confirmedNet: confirmedNet ?? this.confirmedNet,
       quote: quote ?? this.quote,
       account: clearAccount ? null : (account ?? this.account),
       savedBookings: savedBookings ?? this.savedBookings,
@@ -565,6 +589,9 @@ class BookingState extends Equatable {
         clientName,
         clientPhone,
         peopleInput,
+        comment,
+        perHourMode,
+        confirmedNet,
         quote,
         account,
         savedBookings,

@@ -1,19 +1,19 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/widgets.dart';
 
 import '../app/config/booking_config.dart';
-import '../features/admin/data/repository/admin_repository.dart';
-import '../features/admin/data/repository/admin_repository_mock.dart';
 import '../features/admin/domain/repository/i_admin_repository.dart';
 import '../features/booking/data/account_store.dart';
-import '../features/booking/data/repository/booking_repository.dart';
 import '../features/booking/data/repository/booking_repository_api.dart';
 import '../features/booking/data/repository/booking_repository_mock.dart';
 import '../features/booking/domain/repository/i_account_store.dart';
 import '../features/booking/domain/repository/i_booking_repository.dart';
+import 'supabase_module.dart' deferred as sb;
 
 /// Простейший контейнер зависимостей уровня приложения.
 ///
 /// Для одной фичи полноценный DI-фреймворк избыточен: держим синглтоны здесь.
+/// Supabase SDK и админка — в отложенной библиотеке [sb]: публичный виджет в
+/// api-режиме их не скачивает, и первая загрузка на сайте легче.
 class Injection {
   Injection._();
 
@@ -22,20 +22,18 @@ class Injection {
 
   IBookingRepository? _bookingRepository;
   IAdminRepository? _adminRepository;
+  bool _moduleLoaded = false;
 
-  /// Инициализирует Supabase SDK, когда он нужен:
-  /// - публичный виджет ходит в PostgREST/RPC напрямую (не mock, не api), либо
-  /// - открыта админка (`?admin=1`) — ей нужен Supabase Auth и запись в БД.
+  /// Загружает отложенную часть и инициализирует Supabase SDK, когда он нужен:
+  /// - открыта админка (`?admin=1`) — ей нужен Supabase Auth и запись в БД, либо
+  /// - публичный виджет ходит в PostgREST/RPC напрямую (не mock, не api).
   Future<void> init({bool adminMode = false}) async {
-    if (BookingConfig.useMock) return;
-    final bool needed = adminMode || !BookingConfig.useApi;
-    if (!needed) return;
-    await Supabase.initialize(
-      url: BookingConfig.supabaseUrl,
-      // Ключ анонимный/публикуемый — предназначен для клиентского бандла.
-      // ignore: deprecated_member_use
-      anonKey: BookingConfig.supabaseAnonKey,
-    );
+    final bool needsModule =
+        adminMode || (!BookingConfig.useMock && !BookingConfig.useApi);
+    if (!needsModule) return;
+    await sb.loadLibrary();
+    _moduleLoaded = true;
+    if (!BookingConfig.useMock) await sb.initSupabase();
   }
 
   /// Репозиторий бронирования — выбор источника по конфигу сборки:
@@ -51,18 +49,32 @@ class Injection {
         apiKey: BookingConfig.bookingApiKey,
       );
     }
-    return BookingRepository(Supabase.instance.client);
+    _requireModule();
+    return sb.supabaseBookingRepository();
   }
 
   /// Репозиторий админки: реальный (Supabase) при входе сотрудника,
-  /// in-memory — в демо-сборке.
-  IAdminRepository get adminRepository => _adminRepository ??=
-      BookingConfig.useMock
-          ? const AdminRepositoryMock()
-          : AdminRepository(Supabase.instance.client);
+  /// in-memory — в демо-сборке. Только после `init(adminMode: true)`.
+  IAdminRepository get adminRepository {
+    _requireModule();
+    return _adminRepository ??= sb.adminRepository();
+  }
+
+  /// Корневой экран админки. Только после `init(adminMode: true)`.
+  Widget adminHome() {
+    _requireModule();
+    return sb.adminHome();
+  }
 
   /// Локальное хранилище клиента (`localStorage`).
   IAccountStore get accountStore => _accountStore ??= const AccountStore();
 
   IAccountStore? _accountStore;
+
+  void _requireModule() {
+    if (!_moduleLoaded) {
+      throw StateError('Injection.init(adminMode: true) не вызван: '
+          'админка и Supabase загружаются отдельно.');
+    }
+  }
 }

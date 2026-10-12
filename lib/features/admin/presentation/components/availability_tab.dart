@@ -119,6 +119,8 @@ class AvailabilityTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
+        _BookingSettingsCard(club: state.club, accent: accent),
+        const SizedBox(height: 14),
         AdminCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -403,5 +405,141 @@ class _SlotCell extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// «Онлайн-запись»: настройки, которые раньше были зашиты в код виджета.
+///
+/// Сохраняются через пару секунд после изменения, как цены. Сервер проверяет
+/// брони по тем же значениям, поэтому обойти их из браузера нельзя.
+class _BookingSettingsCard extends StatelessWidget {
+  const _BookingSettingsCard({required this.club, required this.accent});
+
+  final AdminClubEntity club;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final AdminBloc bloc = context.read<AdminBloc>();
+    final bool urlOk = AdminClubEntity.isValidPrivacyUrl(club.privacyUrl);
+
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const AdminCardTitle(
+            'Онлайн-запись',
+            subtitle: 'Как клиенты записываются через сайт и ВК. Сотрудников '
+                'эти ограничения не касаются.',
+          ),
+          const SizedBox(height: 16),
+          _row(
+            'Длительности сеанса',
+            'Какие варианты видит клиент. Пакеты — только на них.',
+            <Widget>[
+              for (final int m in AdminClubEntity.allowedDurations)
+                AdminPill(
+                  label: '${m ~/ 60} ч',
+                  selected: club.durations.contains(m),
+                  accent: accent,
+                  compact: true,
+                  onTap: () => bloc.add(AdminClubSettingsChanged(toggleDuration: m)),
+                ),
+            ],
+          ),
+          _row(
+            'Запись закрывается',
+            'За сколько до начала сеанса виджет перестаёт его предлагать.',
+            <Widget>[
+              for (final int m in _with(AdminClubEntity.leadOptions, club.leadMinutes))
+                AdminPill(
+                  label: m == 0 ? 'к началу' : 'за ${_minutes(m)}',
+                  selected: m == club.leadMinutes,
+                  accent: accent,
+                  compact: true,
+                  onTap: () => bloc.add(AdminClubSettingsChanged(leadMinutes: m)),
+                ),
+            ],
+          ),
+          _row(
+            'Запись открыта вперёд',
+            'На сколько дней вперёд можно выбрать дату.',
+            <Widget>[
+              for (final int d in _with(AdminClubEntity.horizonOptions, club.horizonDays))
+                AdminPill(
+                  label: '$d дн.',
+                  selected: d == club.horizonDays,
+                  accent: accent,
+                  compact: true,
+                  onTap: () => bloc.add(AdminClubSettingsChanged(horizonDays: d)),
+                ),
+            ],
+          ),
+          _row(
+            'Перерыв между сеансами',
+            'Сеансы начинаются раз в час плюс перерыв: при 10 мин — 11:00, 12:10, 13:20…',
+            <Widget>[
+              for (final int m in _with(AdminClubEntity.gapOptions, club.gapMinutes))
+                AdminPill(
+                  label: m == 0 ? 'без перерыва' : '$m мин',
+                  selected: m == club.gapMinutes,
+                  accent: accent,
+                  compact: true,
+                  onTap: () => bloc.add(AdminClubSettingsChanged(gapMinutes: m)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          AdminTextInput(
+            key: ValueKey<String>('privacy-${club.id}'),
+            label: 'Ссылка на политику конфиденциальности',
+            hint: 'https://${club.slug == 'v_ray' ? 'vrayarena.ru' : 'effectvr.ru'}/privacy',
+            value: club.privacyUrl,
+            keyboardType: TextInputType.url,
+            onChanged: (String v) =>
+                bloc.add(AdminClubSettingsChanged(privacyUrl: v.trim())),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            urlOk
+                ? 'Показывается под формой брони рядом с согласием на обработку '
+                    'данных. Пусто — только текст согласия, без ссылки.'
+                : 'Нужен полный адрес страницы, начиная с https:// — пока он не '
+                    'введён, ссылка не сохраняется.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: urlOk ? AdminColors.textMuted : AdminColors.warn,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String title, String hint, List<Widget> pills) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(title,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(hint,
+                style: const TextStyle(
+                    fontSize: 12, height: 1.35, color: AdminColors.textMuted)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: pills),
+          ],
+        ),
+      );
+
+  /// Варианты плюс текущее значение, если его задали иначе (например, в базе).
+  static List<int> _with(List<int> options, int current) =>
+      (<int>{...options, current}.toList()..sort());
+
+  static String _minutes(int m) {
+    if (m % 60 == 0) return '${m ~/ 60} ч';
+    return '$m мин';
   }
 }

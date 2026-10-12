@@ -1,13 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../../app/embed/nav.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../domain/entity/club_entity.dart';
 import '../../domain/entity/hall_option_entity.dart';
 import '../../domain/entity/quote_entity.dart';
 import '../../domain/entity/time_slot_entity.dart';
+import '../booking_calendar.dart';
 import '../booking_format.dart';
 
 /// Экран успешной брони — чек с деталями.
+///
+/// Текст чека можно выделить и скопировать, а бронь — добавить в календарь:
+/// других напоминаний клиенту пока нет.
 class SuccessView extends StatelessWidget {
   /// Создаёт экран успеха.
   const SuccessView({
@@ -20,6 +27,7 @@ class SuccessView extends StatelessWidget {
     required this.peopleLabel,
     required this.contact,
     required this.onRestart,
+    this.serverNet,
     super.key,
   });
 
@@ -50,14 +58,26 @@ class SuccessView extends StatelessWidget {
   /// «Забронировать ещё сеанс».
   final VoidCallback onRestart;
 
+  /// Итог, посчитанный сервером. Если есть — в чеке именно он: эта сумма
+  /// и попадёт в админку. `null` — сервер не ответил, показываем свою.
+  final num? serverNet;
+
+  /// Сумма к оплате в чеке.
+  num get total => serverNet ?? quote.net;
+
+  /// Сервер насчитал не столько, сколько виджет показывал до брони.
+  bool get _totalCorrected =>
+      serverNet != null && serverNet!.round() != quote.net.round();
+
   @override
   Widget build(BuildContext context) {
     final Color accent = BookingColors.accentFor(club.slug);
-    final String no = 'VR-${orderId.replaceAll(RegExp('[^0-9a-fA-F]'), '').substring(0, 6).toUpperCase()}';
+    final String no = number(orderId);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 30),
-      child: Column(
+      child: SelectionArea(
+       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
@@ -190,13 +210,31 @@ class SuccessView extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Text(BookingFormat.money(quote.net),
+                      Text(BookingFormat.money(total),
                           style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
+                if (_totalCorrected)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Text(
+                      'Сумма уточнена по тарифу клуба на момент брони.',
+                      style: TextStyle(fontSize: 12, color: BookingColors.textMuted),
+                    ),
+                  ),
               ],
             ),
+          ),
+          const SizedBox(height: 14),
+          _Actions(
+            accent: accent,
+            onGoogle: kIsWeb ? () => Nav.openExternal(_event(no).googleUrl) : null,
+            onIcs: kIsWeb
+                ? () => Nav.downloadText(
+                    'vr-$no.ics', 'text/calendar;charset=utf-8', _event(no).ics)
+                : null,
+            onCopy: () => _copy(context, no),
           ),
           const SizedBox(height: 14),
           Container(
@@ -206,7 +244,9 @@ class SuccessView extends StatelessWidget {
               border: Border.all(color: BookingColors.border),
             ),
             child: Text(
-              'Придите за 10 минут до начала — инструктаж и настройка шлемов входят в сеанс. Контакт для связи: $contact.',
+              'Придите за 10 минут до начала — инструктаж и настройка шлемов входят в сеанс. '
+              'Сохраните бронь в календарь или скриншотом: подтверждение по SMS не придёт. '
+              'Контакт для связи: $contact.',
               style: const TextStyle(fontSize: 13, height: 1.5, color: BookingColors.textMuted),
             ),
           ),
@@ -232,8 +272,47 @@ class SuccessView extends StatelessWidget {
             ),
           ),
         ],
+       ),
       ),
     );
+  }
+
+  /// Короткий номер брони для клиента и стойки: `VR-1A2B3C`.
+  static String number(String orderId) {
+    final String hex = orderId.replaceAll(RegExp('[^0-9a-fA-F]'), '');
+    return 'VR-${(hex.length >= 6 ? hex.substring(0, 6) : hex).toUpperCase()}';
+  }
+
+  String get _when =>
+      '${_cap(BookingFormat.dayLong(BookingFormat.wallDay(club, slot.startsAt)))}, '
+      '${BookingFormat.range(club, slot.startsAt, slot.endsAt)}';
+
+  BookingCalendarEvent _event(String no) => BookingCalendarEvent(
+        uid: orderId,
+        title: 'VR · ${club.name}',
+        details: 'Бронь $no: ${hall.name}, $peopleLabel. '
+            'К оплате на месте ${BookingFormat.money(total)}. '
+            'Придите за 10 минут до начала.',
+        location: club.name,
+        startsAtUtc: slot.startsAt.toUtc(),
+        endsAtUtc: slot.endsAt.toUtc(),
+      );
+
+  Future<void> _copy(BuildContext context, String no) async {
+    final String text = <String>[
+      'Бронь $no',
+      '${club.name} · ${hall.name}',
+      _when,
+      'К оплате на месте: ${BookingFormat.money(total)}',
+    ].join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('Бронь скопирована'),
+        behavior: SnackBarBehavior.floating,
+      ));
   }
 
   Widget _section(String label, List<Widget> children) => Padding(
@@ -255,6 +334,60 @@ class SuccessView extends StatelessWidget {
   Widget _dash() => const DashedDivider();
 
   static String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+}
+
+/// Кнопки под чеком: в календарь и скопировать.
+class _Actions extends StatelessWidget {
+  const _Actions({
+    required this.accent,
+    required this.onCopy,
+    this.onGoogle,
+    this.onIcs,
+  });
+
+  final Color accent;
+  final VoidCallback? onGoogle;
+  final VoidCallback? onIcs;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        if (onGoogle != null)
+          _chip(Icons.event_available_rounded, 'Google Календарь', onGoogle!),
+        if (onIcs != null)
+          _chip(Icons.calendar_month_rounded, 'Другой календарь (.ics)', onIcs!),
+        _chip(Icons.copy_rounded, 'Скопировать', onCopy),
+      ],
+    );
+  }
+
+  Widget _chip(IconData icon, String label, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: BookingColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 16, color: accent),
+              const SizedBox(width: 7),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: BookingColors.textSoft)),
+            ],
+          ),
+        ),
+      );
 }
 
 /// Пунктирный разделитель чека.

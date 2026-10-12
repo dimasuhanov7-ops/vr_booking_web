@@ -151,9 +151,26 @@ class BookingRepository implements IBookingRepository {
             'p_comment': request.comment,
             'p_source': request.source,
             'p_package_id': request.packageId,
+            if (request.utm.isNotEmpty) 'p_utm': request.utm,
           },
         );
         return orderId;
+      });
+
+  @override
+  Future<num?> fetchOrderTotal({
+    required String orderId,
+    required String clientPhone,
+  }) =>
+      _guard(() async {
+        final dynamic net = await _client.rpc<dynamic>(
+          'booking_order_receipt',
+          params: <String, dynamic>{
+            'p_order_id': orderId,
+            'p_client_phone': clientPhone,
+          },
+        );
+        return net is num ? net : num.tryParse('$net');
       });
 
   @override
@@ -209,6 +226,7 @@ class BookingRepository implements IBookingRepository {
     if (m.contains('OUTSIDE_WORKING_HOURS') ||
         m.contains('STARTS_IN_PAST') ||
         m.contains('TOO_LATE_TO_BOOK') ||
+        m.contains('TOO_FAR_AHEAD') ||
         m.contains('BAD_DURATION')) {
       return const BookingWindowFailure();
     }

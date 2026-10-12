@@ -223,6 +223,38 @@ class AdminNewPromoSubmitted extends AdminEvent {
   const AdminNewPromoSubmitted();
 }
 
+/// Изменить настройки онлайн-записи выбранного клуба. Поля, которых нет, не
+/// меняются; длительность из [toggleDuration] включается или выключается.
+class AdminClubSettingsChanged extends AdminEvent {
+  /// Создаёт событие.
+  const AdminClubSettingsChanged({
+    this.gapMinutes,
+    this.leadMinutes,
+    this.horizonDays,
+    this.toggleDuration,
+    this.privacyUrl,
+  });
+
+  /// Пауза между сеансами, минут.
+  final int? gapMinutes;
+
+  /// За сколько минут до начала закрывать запись.
+  final int? leadMinutes;
+
+  /// На сколько дней вперёд открывать запись.
+  final int? horizonDays;
+
+  /// Длительность (минуты), которую включить или выключить.
+  final int? toggleDuration;
+
+  /// Ссылка на политику конфиденциальности.
+  final String? privacyUrl;
+
+  @override
+  List<Object?> get props =>
+      <Object?>[gapMinutes, leadMinutes, horizonDays, toggleDuration, privacyUrl];
+}
+
 /// Переключить приём заявок.
 class AdminIntakeToggled extends AdminEvent {
   /// Создаёт событие.

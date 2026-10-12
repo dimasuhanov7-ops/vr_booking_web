@@ -19,10 +19,10 @@ const ClubEntity _vray = ClubEntity(
 final DateTime _day = DateTime(2026, 9, 10);
 
 /// Первый доступный старт по пермскому времени, если «сейчас» — [h]:[m] по Перми.
-int _firstHourAt(int h, int m) {
+int _firstHourAt(int h, int m, {ClubEntity club = _vray}) {
   final DateTime nowUtc = DateTime.utc(2026, 9, 10, h - 5, m);
   final List<TimeSlotEntity> slots = const SlotGeneratorService().generateSlots(
-    club: _vray,
+    club: club,
     day: _day,
     durationMinutes: 60,
     now: nowUtc,
@@ -42,6 +42,37 @@ void main() {
 
     test('ровно 13:30 — слот 14:00 ещё открыт (как на сервере)', () {
       expect(_firstHourAt(13, 30), 14);
+    });
+  });
+
+  group('время закрытия записи — настройка клуба', () {
+    const ClubEntity fast = ClubEntity(
+      id: 'club-vray',
+      slug: 'v_ray',
+      name: 'V-Ray',
+      timezone: 'Asia/Yekaterinburg',
+      openTime: Duration(hours: 11),
+      closeTime: Duration(hours: 23),
+      slotGapMinutes: 0,
+      leadMinutes: 10,
+    );
+    const ClubEntity slow = ClubEntity(
+      id: 'club-vray',
+      slug: 'v_ray',
+      name: 'V-Ray',
+      timezone: 'Asia/Yekaterinburg',
+      openTime: Duration(hours: 11),
+      closeTime: Duration(hours: 23),
+      slotGapMinutes: 0,
+      leadMinutes: 120,
+    );
+
+    test('за 10 минут: в 13:45 ещё можно на 14:00', () {
+      expect(_firstHourAt(13, 45, club: fast), 14);
+    });
+
+    test('за 2 часа: в 13:00 первый старт — 15:00', () {
+      expect(_firstHourAt(13, 0, club: slow), 15);
     });
   });
 }

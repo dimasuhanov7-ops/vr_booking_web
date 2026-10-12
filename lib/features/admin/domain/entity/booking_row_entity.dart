@@ -92,6 +92,7 @@ class BookingRowEntity extends Equatable {
     this.hourHeadsets,
     this.hourConsoles,
     this.promo,
+    this.utm = const <String, String>{},
     String? orderId,
   }) : orderId = orderId ?? id;
 
@@ -155,6 +156,15 @@ class BookingRowEntity extends Equatable {
 
   /// Промокод, с которым оформлена бронь (`booking_orders.discount_id`).
   final PromoEntity? promo;
+
+  /// UTM-метки рекламы, с которой пришёл клиент (`booking_orders.utm`).
+  final Map<String, String> utm;
+
+  /// «yandex / cpc / осень» — коротко для карточки. Пусто, если меток нет.
+  String get utmLabel => <String>[
+        for (final String k in <String>['utm_source', 'utm_medium', 'utm_campaign'])
+          if ((utm[k] ?? '').isNotEmpty) utm[k]!,
+      ].join(' / ');
 
   /// Конец, минут от полуночи.
   int get endMinutes => startMinutes + durationMinutes;
@@ -253,6 +263,7 @@ class BookingRowEntity extends Equatable {
         hourHeadsets: clearHourly ? null : (hourHeadsets ?? this.hourHeadsets),
         hourConsoles: clearHourly ? null : (hourConsoles ?? this.hourConsoles),
         promo: promo,
+        utm: utm,
       );
 
   @override
@@ -277,5 +288,6 @@ class BookingRowEntity extends Equatable {
         hourHeadsets,
         hourConsoles,
         promo,
+        utm,
       ];
 }

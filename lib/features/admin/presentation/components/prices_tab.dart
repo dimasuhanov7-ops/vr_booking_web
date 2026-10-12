@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../app/config/booking_config.dart';
 import '../../domain/entity/admin_club_entity.dart';
 import '../../domain/entity/hall_price_entity.dart';
 import '../../domain/state/admin_bloc.dart';
@@ -446,6 +445,8 @@ class _DurationPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final List<int> options =
+        context.select((AdminBloc b) => b.state.clientDurations);
     return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,7 +461,7 @@ class _DurationPreview extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: <Widget>[
-              for (final int m in BookingConfig.sessionDurations)
+              for (final int m in options)
                 Container(
                   constraints: const BoxConstraints(minWidth: 132),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

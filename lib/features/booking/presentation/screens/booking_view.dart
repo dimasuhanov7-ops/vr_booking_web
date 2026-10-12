@@ -159,6 +159,7 @@ class BookingView extends StatelessWidget {
           quote: state.quote,
           peopleLabel: _peopleLabel(state),
           contact: '${state.clientName}, ${state.clientPhone}',
+          serverNet: state.confirmedNet,
           onRestart: () =>
               context.read<BookingBloc>().add(const BookingResetRequested()),
         ),
@@ -488,7 +489,7 @@ class _FormBody extends StatelessWidget {
           child: DateField(
             date: state.date ?? DateTime.now(),
             accent: accent,
-            daysAhead: BookingConfig.bookingHorizonDays,
+            daysAhead: state.club?.horizonDays ?? 30,
             tariffNote: _weekend ? 'тариф выходного дня' : 'тариф будней',
             onSelected: (DateTime d) => bloc.add(BookingDateSelected(d)),
           ),
@@ -527,7 +528,7 @@ class _FormBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             DurationSelector(
-              options: BookingBloc.durations,
+              options: club.durations,
               selected: state.durationMinutes,
               accent: accent,
               onSelected: (int m) => bloc.add(BookingDurationSelected(m)),
@@ -640,7 +641,16 @@ class _FormBody extends StatelessWidget {
             'переключите длительность сеанса.'),
         const SizedBox(height: 12),
       ],
-      if (state.multiHour)
+      if (state.multiHour) ...<Widget>[
+        _PerHourSwitch(
+          on: state.showHourPlan,
+          accent: accent,
+          hours: state.hourCount,
+          onTap: () => bloc.add(const BookingPerHourToggled()),
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (state.showHourPlan)
         SessionHours(state: state, club: club, accent: accent)
       else
         HallPlan(
@@ -668,10 +678,13 @@ class _FormBody extends StatelessWidget {
           name: state.clientName,
           phone: state.clientPhone,
           people: state.peopleInput,
+          comment: state.comment,
           pickedCount: state.pickedIds.length,
           onNameChanged: (String v) => bloc.add(BookingContactChanged(name: v)),
           onPhoneChanged: (String v) => bloc.add(BookingContactChanged(phone: v)),
           onPeopleChanged: (String v) => bloc.add(BookingContactChanged(people: v)),
+          onCommentChanged: (String v) =>
+              bloc.add(BookingContactChanged(comment: v)),
         ),
         const SizedBox(height: 12),
         PromoField(
@@ -686,7 +699,9 @@ class _FormBody extends StatelessWidget {
           onClear: () => bloc.add(const BookingPromoCleared()),
         ),
         const SizedBox(height: 12),
-        const _ConsentNote(),
+        _ConsentNote(
+          privacyUrl: state.club?.privacyUrl ?? BookingConfig.privacyUrl,
+        ),
       ];
 
   /// Подсказка о пакете прямо над кнопкой «Забронировать»: пакет побольше
@@ -842,7 +857,7 @@ class _FormBody extends StatelessWidget {
             bloc.add(BookingClubSelected(other));
           },
         ),
-      if (s.durationMinutes != 60)
+      if (s.durationMinutes != 60 && (s.club?.durations.contains(60) ?? false))
         (
           label: 'Сеанс на 1 час — слотов больше',
           primary: false,
@@ -898,10 +913,13 @@ class _FormBody extends StatelessWidget {
 /// Уведомление об обработке персональных данных.
 ///
 /// Форма запрашивает имя и телефон — это персональные данные, и клиент должен
-/// понимать, что отправляет и куда. Ссылка появляется, только когда задан
-/// [BookingConfig.privacyUrl]: показывать битую ссылку хуже, чем никакой.
+/// понимать, что отправляет и куда. Ссылка — из настройки клуба в админке
+/// (или [BookingConfig.privacyUrl] сборки); без неё — только текст:
+/// показывать битую ссылку хуже, чем никакой.
 class _ConsentNote extends StatelessWidget {
-  const _ConsentNote();
+  const _ConsentNote({required this.privacyUrl});
+
+  final String privacyUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -914,7 +932,7 @@ class _ConsentNote extends StatelessWidget {
         'Нажимая «Забронировать», вы соглашаетесь на обработку имени и '
         'телефона — они нужны, чтобы подтвердить бронь и связаться с вами.';
 
-    if (BookingConfig.privacyUrl.isEmpty) {
+    if (privacyUrl.isEmpty) {
       return const Text(text, style: base);
     }
     return Text.rich(
@@ -929,10 +947,73 @@ class _ConsentNote extends StatelessWidget {
               decoration: TextDecoration.underline,
             ),
             recognizer: TapGestureRecognizer()
-              ..onTap = () => Nav.openExternal(BookingConfig.privacyUrl),
+              ..onTap = () => Nav.openExternal(privacyUrl),
           ),
           const TextSpan(text: '.'),
         ],
+      ),
+    );
+  }
+}
+
+/// Переключатель «Разный состав по часам» над планом зала.
+///
+/// По умолчанию многочасовой сеанс выбирается одним планом — так понятнее.
+/// Кому нужно «12 шлемов первый час, 6 второй», включают план по часам.
+class _PerHourSwitch extends StatelessWidget {
+  const _PerHourSwitch({
+    required this.on,
+    required this.accent,
+    required this.hours,
+    required this.onTap,
+  });
+
+  final bool on;
+  final Color accent;
+  final int hours;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: on ? accent.withValues(alpha: 0.6) : BookingColors.border),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              on ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+              size: 20,
+              color: on ? accent : BookingColors.textDim,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Разный состав по часам',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(
+                    on
+                        ? 'Выберите места отдельно на каждый из $hours часов.'
+                        : 'Если не все остаются на $hours ч — например, '
+                            'второй час играет только часть компании.',
+                    style: const TextStyle(
+                        fontSize: 12, height: 1.35, color: BookingColors.textDim),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

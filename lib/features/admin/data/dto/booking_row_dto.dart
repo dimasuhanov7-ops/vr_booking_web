@@ -127,7 +127,17 @@ abstract final class BookingRowDto {
       hourHeadsets: varies ? vrByHour : null,
       hourConsoles: varies ? psByHour : null,
       promo: _promo(json),
+      utm: _utm(json['utm']),
     );
+  }
+
+  /// UTM-метки брони; всё, что не строка, отбрасываем.
+  static Map<String, String> _utm(Object? raw) {
+    if (raw is! Map<String, dynamic>) return const <String, String>{};
+    return <String, String>{
+      for (final MapEntry<String, dynamic> e in raw.entries)
+        if (e.value is String && (e.value as String).isNotEmpty) e.key: e.value as String,
+    };
   }
 
   /// Скидка брони из вложенного `booking_discounts`. Пока у сотрудника нет
