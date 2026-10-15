@@ -20,17 +20,22 @@
 
   // ---- CanvasKit параллельно с main.dart.js ----
   // Штатно движок берётся за CanvasKit (2–3 МБ) только после main.dart.js.
-  // Браузеры на Chromium берут вариант chromium — выбираем тот же файл, что
-  // возьмёт движок: ошибка здесь — лишние мегабайты мимо кэша.
-  var chromium = /Chrome\/|Chromium\/|CriOS\/|Edg\//.test(navigator.userAgent);
+  // Папка — та же, что canvasKitBaseUrl в flutter_bootstrap.js (скрипт сборки
+  // подставляет engine-<ревизия>/ в оба файла).
+  var ENGINE = 'canvaskit/';
+  // Вариант chromium движок берёт там же, где он сам решает: есть
+  // ImageDecoder и Intl.v8BreakIterator с Intl.Segmenter. Признаки — те же,
+  // иначе preload скачает не тот файл, и это мегабайты мимо кэша.
+  var chromium = typeof ImageDecoder !== 'undefined' &&
+    (navigator.vendor === 'Google Inc.' || navigator.userAgent.indexOf('Edg/') >= 0) &&
+    typeof Intl.v8BreakIterator !== 'undefined' &&
+    typeof Intl.Segmenter !== 'undefined';
   var pre = document.createElement('link');
   pre.rel = 'preload';
   pre.as = 'fetch';
   pre.type = 'application/wasm';
   pre.crossOrigin = 'anonymous';
-  pre.href = chromium
-    ? 'canvaskit/chromium/canvaskit.wasm'
-    : 'canvaskit/canvaskit.wasm';
+  pre.href = ENGINE + (chromium ? 'chromium/canvaskit.wasm' : 'canvaskit.wasm');
   document.head.appendChild(pre);
 
   // ---- Заставка ----

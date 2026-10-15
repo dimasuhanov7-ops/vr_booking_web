@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 import 'app/booking_app.dart';
 import 'app/embed/launch_params.dart';
+import 'app/l10n/ru_localizations.dart';
 import 'di/injection.dart';
 
 /// Точка входа публичного виджета онлайн-бронирования VR-клубов.
@@ -23,7 +23,7 @@ Future<void> runBookingApp(LaunchParams params) async {
   SemanticsBinding.instance.ensureSemantics();
   _styleSystemBars();
   _installErrorScreen();
-  await initializeDateFormatting('ru');
+  RuLocalizations.initDateFormatting();
   await Injection.instance.init(adminMode: params.adminMode);
   runApp(BookingApp(params: params));
 }

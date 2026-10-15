@@ -25,7 +25,11 @@ FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh
 1. `flutter build web --release --dart-define=BOOKING_BACKEND=api`;
 2. копирует `web/_redirects`, `web/_headers`, `web/.htaccess` в `build/web/`
    (`flutter build web` сам не переносит файлы с префиксом `_` и `.`);
-3. пакует `build/vr_booking_web.zip` — его отдать тому, кто заливает сайт.
+3. переносит движок из `canvaskit/` в `engine-<12 знаков ревизии>/` и
+   подставляет этот путь в `flutter_bootstrap.js` и `boot.js`. Обычный
+   `flutter build web` без скрипта для выкладки **не годится**: без этого шага
+   загрузчик Flutter берёт движок с `www.gstatic.com`;
+4. пакует `build/vr_booking_web.zip` — его отдать тому, кто заливает сайт.
 
 Ключи API зашиты по умолчанию (`lib/app/config/booking_config.dart`):
 `BOOKING_API_BASE` → прод-функция, `BOOKING_API_KEY` → публичный anon-JWT
@@ -49,17 +53,18 @@ FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh
 
 ## 1a. Скорость загрузки (проверить на хостинге)
 
-Виджет — это движок Flutter: на первый заход браузер качает ~3,3 МБ в сжатом
-виде (CanvasKit ~2,2 МБ + приложение ~1,1 МБ). Повторные заходы берут всё из
-кэша. Поэтому решают три настройки сервера, а не размер бандла:
+Виджет — это движок Flutter: на первый заход Chrome качает ~2,5 МБ в сжатом
+виде (CanvasKit ~1,9 МБ + приложение ~0,65 МБ), Safari и Firefox — ~3,2 МБ
+(у них полный CanvasKit, ~2,5 МБ). Повторные заходы берут всё из кэша.
+Поэтому решают три настройки сервера, а не размер бандла:
 
 1. **Сжатие для `.wasm`, `.js` и шрифтов.** Это главное: несжатый
-   `canvaskit.wasm` — 7,2 МБ вместо 2,2 МБ. В `web/.htaccess` фильтры уже
+   `canvaskit.wasm` — 7,2 МБ вместо 2,5 МБ. В `web/.htaccess` фильтры уже
    перечислены (`mod_deflate` + `mod_brotli`), но модуль должен быть включён
    на хостинге. Проверка:
 
    ```bash
-   curl -sI -H 'Accept-Encoding: br, gzip' https://<адрес>/canvaskit/chromium/canvaskit.wasm | grep -i 'content-encoding\|content-length'
+   curl -sI -H 'Accept-Encoding: br, gzip' https://<адрес>/engine-<ревизия>/chromium/canvaskit.wasm | grep -i 'content-encoding\|content-length'
    ```
 
    Должно быть `content-encoding: br` (или `gzip`). Если заголовка нет —
@@ -68,13 +73,35 @@ FLUTTER=/c/vr_club_app/flutter/bin/flutter tool/build_web.sh
 2. **HTTP/2 или HTTP/3.** На HTTP/1.1 десяток файлов грузится в очередь.
    Проверка: `curl -sI --http2 https://<адрес>/ | head -1` — ожидается `HTTP/2`.
 
-3. **Кэш.** `canvaskit/*` — на год (`immutable`), входные файлы — `no-cache`.
-   Задано в `.htaccess`; проверить `cache-control` у `canvaskit.wasm`.
+3. **Кэш.** `engine-<ревизия>/*` — на год (`immutable`): новая версия Flutter
+   приходит по новому адресу. Файлы без версии в имени — `index.html`,
+   `flutter_bootstrap.js`, `boot.js`, `main.dart.js` и его части
+   `main.dart.js_N.part.js`, `flutter_service_worker.js` — `no-cache`.
+   Задано в `.htaccess`; проверить `cache-control` у `canvaskit.wasm` и
+   `main.dart.js`.
 
 Что уже сделано в самом бандле (2026-09-16): иконки вырезаются при сборке
 (−1,9 МБ), шрифт заменён на урезанный Inter с кириллицей (−340 КБ и больше
 никаких обращений к `fonts.gstatic.com`), CanvasKit качается параллельно с
 `main.dart.js`, на время загрузки показывается заставка вместо тёмного пятна.
+
+2026-10-15:
+- **Движок только со своего хостинга.** Раньше загрузчик Flutter брал CanvasKit
+  с `www.gstatic.com` (так по умолчанию), а `boot.js` параллельно качал
+  локальную копию, которая не использовалась, — в Chrome это ~1,9 МБ лишнего
+  трафика и зависимость от доступности Google. Теперь путь задан в
+  `web/flutter_bootstrap.js` (`canvasKitBaseUrl`), и `boot.js` выбирает
+  вариант движка по тем же признакам, что сам Flutter (раньше на iPhone в
+  Chrome заранее качался не тот файл).
+- **Только русская локализация.** Делегаты `flutter_localizations` и
+  `initializeDateFormatting()` тянули переводы и форматы дат всех ~80 языков;
+  теперь — `lib/app/l10n/ru_localizations.dart`.
+- **Админка и Supabase SDK — отдельным файлом** (`main.dart.js_1.part.js`),
+  клиенты сайта его не скачивают.
+- Итог по `main.dart.js` (brotli): 764 КБ → 654 КБ.
+- Сборку WebAssembly (`--wasm`) пробовали: в Chrome экономит ~240 КБ, но
+  требует `.mjs` с правильным MIME на хостинге и помечена Flutter как новая —
+  пока не используем.
 
 ## 2. Заливка на хостинг
 
@@ -111,11 +138,11 @@ location / {
     try_files $uri $uri/ /index.html;
 }
 
-# входные файлы — не кэшировать
-location ~* ^/(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|main\.dart\.js|version\.json)$ {
+# файлы без версии в имени — не кэшировать
+location ~* ^/(index\.html|flutter_bootstrap\.js|boot\.js|flutter_service_worker\.js|main\.dart\.js.*|version\.json)$ {
     add_header Cache-Control "no-cache";
 }
-# ресурсы с хэшем — надолго
+# движок (engine-<ревизия>/) и прочее — надолго
 location ~* \.(js|wasm|json|otf|ttf|png|jpg|jpeg|gif|svg|bin|symbols)$ {
     add_header Cache-Control "public, max-age=31536000, immutable";
 }
@@ -134,7 +161,7 @@ add_header Content-Security-Policy "frame-ancestors 'self' https://effectvr.ru h
 
 types { application/wasm wasm; }
 gzip on;
-gzip_types text/css application/javascript application/json image/svg+xml;
+gzip_types text/css application/javascript application/json image/svg+xml application/wasm font/ttf font/otf;
 ```
 
 > В nginx `add_header` внутри `location` **отменяет** заголовки из родительского
@@ -183,7 +210,8 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 Пересобрать (`tool/build_web.sh`) → перезалить содержимое `build/web`.
 `.htaccess`/nginx уже стоят `no-cache` на `main.dart.js` и `index.html`, так что
-у пользователей подхватится сразу.
+у пользователей подхватится сразу. Старые папки `engine-*` после обновления
+Flutter можно удалить с хостинга (новая сборка на них не ссылается).
 
 ## Файлы
 

@@ -5,15 +5,20 @@
   Cache-Control: no-cache
 /flutter_bootstrap.js
   Cache-Control: no-cache
+/boot.js
+  Cache-Control: no-cache
 /flutter_service_worker.js
   Cache-Control: no-cache
 /main.dart.js
   Cache-Control: no-cache
+/main.dart.js_*
+  Cache-Control: no-cache
 /version.json
   Cache-Control: no-cache
 
-# CanvasKit версионирован по пути — можно кэшировать надолго
-/canvaskit/*
+# Движок лежит в engine-<ревизия>/ (tool/build_web.*) — новая версия Flutter
+# приходит по новому адресу, поэтому кэш на год безопасен
+/engine-*
   Cache-Control: public, max-age=31536000, immutable
 
 # Ассеты Flutter (шрифты, манифесты) хэша в имени не имеют: год кэша означал бы,

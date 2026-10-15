@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../di/injection.dart';
 import '../features/booking/domain/state/booking_bloc.dart';
 import '../features/booking/presentation/screens/booking_screen.dart';
 import 'embed/launch_params.dart';
+import 'l10n/ru_localizations.dart';
 import 'theme/app_theme.dart';
 
 /// Корневой виджет приложения. Публичный виджет бронирования и служебная
@@ -24,13 +24,10 @@ class BookingApp extends StatelessWidget {
       title: params.adminMode ? 'Админка · Бронирование VR' : 'Бронирование VR',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      locale: const Locale('ru'),
-      supportedLocales: const <Locale>[Locale('ru'), Locale('en')],
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      // Только русский: стандартные делегаты тащат в бандл все языки.
+      locale: RuLocalizations.locale,
+      supportedLocales: const <Locale>[RuLocalizations.locale],
+      localizationsDelegates: RuLocalizations.delegates,
       home: params.adminMode
           ? Injection.instance.adminHome()
           : BlocProvider<BookingBloc>(
