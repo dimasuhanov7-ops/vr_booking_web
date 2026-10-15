@@ -31,6 +31,14 @@ import '../service/station_picker_service.dart';
 part 'booking_event.dart';
 part 'booking_state.dart';
 
+/// Заранее запрошенная занятость клуба на день.
+typedef _BusyAhead = ({
+  String clubId,
+  DateTime day,
+  DateTime at,
+  Future<List<BusyIntervalEntity>?> busy,
+});
+
 /// Управляет сценарием бронирования (клуб → зал/дата/время → станции → контакты).
 class BookingBloc extends Bloc<BookingEvent, BookingState> {
   /// Создаёт BLoC.
@@ -109,6 +117,28 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
   Timer? _live;
   bool _visible = true;
+
+  /// Занятость, запрошенная заранее при выборе клуба (см. [_onClubSelected]).
+  /// Используется один раз и только пока свежая — иначе запрос заново.
+  _BusyAhead? _busyAhead;
+
+  /// Сколько заранее запрошенная занятость считается свежей.
+  static const Duration _busyAheadTtl = Duration(seconds: 30);
+
+  /// Занятость клуба на день: заранее запрошенная, если она подходит, иначе
+  /// новый запрос.
+  Future<List<BusyIntervalEntity>> _busyFor(ClubEntity club, DateTime day) async {
+    final _BusyAhead? ahead = _busyAhead;
+    _busyAhead = null;
+    if (ahead != null &&
+        ahead.clubId == club.id &&
+        ahead.day == day &&
+        DateTime.now().difference(ahead.at) < _busyAheadTtl) {
+      final List<BusyIntervalEntity>? busy = await ahead.busy;
+      if (busy != null) return busy;
+    }
+    return _repository.fetchBusyIntervals(clubId: club.id, day: day);
+  }
 
   @override
   Future<void> close() {
@@ -282,18 +312,38 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       clearHall: true,
       clearPackage: true,
     ));
+    // Занятость на выбранную дату просим сразу, вместе со справочником: она
+    // зависит только от клуба и дня, а не от зала. Ошибку здесь не показываем —
+    // _reloadSchedule тогда просто запросит занятость ещё раз.
+    _busyAhead = (
+      clubId: event.club.id,
+      day: date,
+      at: DateTime.now(),
+      busy: _repository
+          .fetchBusyIntervals(clubId: event.club.id, day: date)
+          .then<List<BusyIntervalEntity>?>(
+            (List<BusyIntervalEntity> v) => v,
+            onError: (Object _) => null,
+          ),
+    );
     try {
-      final List<StationEntity> stations =
-          await _repository.fetchStations(event.club.id);
-      final List<PriceRateEntity> prices =
-          await _repository.fetchPrices(event.club.id);
+      // Запросы независимы — параллельно: сервер в Стокгольме, и из России
+      // каждый последовательный запрос добавлял сотни миллисекунд к старту.
+      final Future<List<StationEntity>> stationsF =
+          _repository.fetchStations(event.club.id);
+      final Future<List<PriceRateEntity>> pricesF =
+          _repository.fetchPrices(event.club.id);
       // Пакеты необязательны: если бэкенд их ещё не отдаёт — просто без пакетов.
-      List<PackageEntity> packages = const <PackageEntity>[];
-      try {
-        packages = await _repository.fetchPackages(event.club.id);
-      } on BookingFailure {
-        packages = const <PackageEntity>[];
-      }
+      final Future<List<PackageEntity>> packagesF = _repository
+          .fetchPackages(event.club.id)
+          .catchError(
+            (Object _) => const <PackageEntity>[],
+            test: (Object e) => e is BookingFailure,
+          );
+      await Future.wait<Object>(<Future<Object>>[stationsF, pricesF, packagesF]);
+      final List<StationEntity> stations = await stationsF;
+      final List<PriceRateEntity> prices = await pricesF;
+      final List<PackageEntity> packages = await packagesF;
       // Пока грузили, клиент мог выбрать другой клуб: чужой ответ не применяем,
       // иначе на экране окажутся залы и станции предыдущего клуба.
       if (state.club?.id != event.club.id) return;
@@ -884,10 +934,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
     emit(state.copyWith(status: BookingStatus.loading));
     try {
-      final List<BusyIntervalEntity> busy = await _repository.fetchBusyIntervals(
-        clubId: club.id,
-        day: date,
-      );
+      final List<BusyIntervalEntity> busy = await _busyFor(club, date);
       final List<TimeSlotEntity> slots = _slots.generateSlots(
         club: club,
         day: date,
