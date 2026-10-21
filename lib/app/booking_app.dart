@@ -13,7 +13,14 @@ import 'theme/app_theme.dart';
 /// (см. [LaunchParams] и `docs/EMBED.md`).
 class BookingApp extends StatelessWidget {
   /// Создаёт приложение.
-  const BookingApp({this.params = const LaunchParams(), super.key});
+  const BookingApp({
+    this.params = const LaunchParams(),
+    this.initialName,
+    super.key,
+  });
+
+  /// Имя клиента для формы (например, из профиля ВК).
+  final String? initialName;
 
   /// Параметры запуска (разобранный query-строкой URL).
   final LaunchParams params;
@@ -39,6 +46,7 @@ class BookingApp extends StatelessWidget {
                 initialDate: params.initialDate,
                 initialDurationMinutes: params.initialDurationMinutes,
                 utm: params.utm,
+                initialName: initialName,
               )..add(const BookingStarted()),
               child: const BookingScreen(),
             ),

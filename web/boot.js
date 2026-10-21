@@ -18,6 +18,56 @@
   });
   window.__vrBooking = { send: send };
 
+  // ---- VK Mini App ----
+  // ВК добавляет к адресу vk_app_id и др. (vk_user_id, vk_platform…). Тогда
+  // подключаем VK Bridge (web/vk-bridge.min.js, с нашего же адреса — политика
+  // безопасности чужие скрипты не пускает) и сразу говорим ВК, что приложение
+  // запущено: иначе мобильный ВК держит свою заставку и считает приложение
+  // зависшим. Имя из профиля — для формы; приходит асинхронно, Dart ждёт его
+  // не дольше пары секунд (см. EmbedChannel.vkUserName).
+  window.__vrBooking.isVk = /[?&]vk_app_id=/.test(location.search);
+  window.__vrBooking.vkName = null;
+  var vkNameWaiters = [];
+  function vkNameKnown(name) {
+    window.__vrBooking.vkName = name || '';
+    while (vkNameWaiters.length) vkNameWaiters.shift()(window.__vrBooking.vkName);
+  }
+  // Dart вызывает: колбэк получает имя (или '' — если имени нет).
+  window.__vrBooking.onVkName = function (cb) {
+    if (window.__vrBooking.vkName !== null) cb(window.__vrBooking.vkName);
+    else vkNameWaiters.push(cb);
+  };
+  if (window.__vrBooking.isVk) {
+    var vkScript = document.createElement('script');
+    vkScript.src = 'vk-bridge.min.js';
+    vkScript.onload = function () {
+      var bridge = window.vkBridge;
+      if (!bridge) return vkNameKnown('');
+      bridge.send('VKWebAppInit').catch(function () {});
+      // Тёмное оформление и под него — панель ВК (на части платформ не
+      // поддерживается: ошибку глушим).
+      bridge
+        .send('VKWebAppSetViewSettings', {
+          status_bar_style: 'light',
+          action_bar_color: '#08090A',
+          navigation_bar_color: '#08090A',
+        })
+        .catch(function () {});
+      bridge
+        .send('VKWebAppGetUserInfo')
+        .then(function (u) {
+          vkNameKnown(((u && u.first_name) || '').trim());
+        })
+        .catch(function () {
+          vkNameKnown('');
+        });
+    };
+    vkScript.onerror = function () {
+      vkNameKnown('');
+    };
+    document.head.appendChild(vkScript);
+  }
+
   // ---- CanvasKit параллельно с main.dart.js ----
   // Штатно движок берётся за CanvasKit (2–3 МБ) только после main.dart.js.
   // Папка — та же, что canvasKitBaseUrl в flutter_bootstrap.js (скрипт сборки

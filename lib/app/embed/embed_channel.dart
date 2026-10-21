@@ -21,6 +21,13 @@ abstract final class EmbedChannel {
   static void step(int number) =>
       impl.send('$_prefix:step', <String, Object?>{'step': number});
 
+  /// Имя из профиля ВК, если виджет открыт как VK Mini App. Ждёт ответа VK
+  /// Bridge не дольше [timeout]; `null` — не ВК, имени нет или ВК не ответил.
+  static Future<String?> vkUserName({
+    Duration timeout = const Duration(milliseconds: 1500),
+  }) =>
+      impl.vkUserName(timeout);
+
   /// Бронь успешно создана.
   static void success({
     required String orderId,

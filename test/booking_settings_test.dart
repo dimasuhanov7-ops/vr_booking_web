@@ -152,4 +152,14 @@ void main() {
     expect(e.ics, contains('TRIGGER:-PT2H'));
     expect(e.googleUrl, contains('dates=20261014T070000Z%2F20261014T090000Z'));
   });
+
+  test('имя из профиля ВК подставляется в форму', () async {
+    final BookingBloc bloc = BookingBloc(
+      repository: _Repo(),
+      lockedClubSlug: 'effect_vr',
+      initialName: '  Анна ',
+    );
+    expect(bloc.state.clientName, 'Анна');
+    await bloc.close();
+  });
 }

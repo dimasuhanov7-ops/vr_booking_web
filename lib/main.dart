@@ -3,6 +3,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'app/booking_app.dart';
+import 'app/embed/embed_channel.dart';
 import 'app/embed/launch_params.dart';
 import 'app/l10n/ru_localizations.dart';
 import 'di/injection.dart';
@@ -25,7 +26,10 @@ Future<void> runBookingApp(LaunchParams params) async {
   _installErrorScreen();
   RuLocalizations.initDateFormatting();
   await Injection.instance.init(adminMode: params.adminMode);
-  runApp(BookingApp(params: params));
+  // В ВК форму можно сразу заполнить именем из профиля. Вне ВК — мгновенный null.
+  final String? vkName =
+      params.adminMode ? null : await EmbedChannel.vkUserName();
+  runApp(BookingApp(params: params, initialName: vkName));
 }
 
 /// Системные панели под тёмный интерфейс.

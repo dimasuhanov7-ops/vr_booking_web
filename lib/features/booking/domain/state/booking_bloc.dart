@@ -52,6 +52,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     DateTime? initialDate,
     int? initialDurationMinutes,
     Map<String, String> utm = const <String, String>{},
+    String? initialName,
   })  : _repository = repository,
         _account = accountStore,
         _slots = slotGenerator,
@@ -61,7 +62,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         _pendingDate = initialDate,
         _pendingDuration = initialDurationMinutes,
         _utm = utm,
-        super(const BookingState()) {
+        super(BookingState(clientName: initialName?.trim() ?? '')) {
     on<BookingStarted>(_onStarted);
     on<BookingClubSelected>(_onClubSelected);
     on<BookingHallSelected>(_onHallSelected);
