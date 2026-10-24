@@ -12,9 +12,10 @@ import 'promos_card.dart';
 
 /// Вкладка «Цены» — тарифы клуба, ступени, превью длительности и промокоды.
 ///
-/// В БД цены заданы на клуб, а не на зал, поэтому карточка одна. Раньше
-/// показывалось по карточке на зал с одинаковыми полями: правка одной молча
-/// меняла другую, и было непонятно, что к чему относится.
+/// Тариф клуба один на все залы, у которых нет своей цены, — одна карточка
+/// (раньше было по карточке на зал с одинаковыми полями: правка одной молча
+/// меняла другую). Зал может перейти на свою цену шлема и PS5: для него ниже
+/// отдельная карточка с переключателем; его цены клубный тариф не меняет.
 class PricesTab extends StatelessWidget {
   /// Создаёт вкладку.
   const PricesTab({required this.state, required this.accent, super.key});
@@ -29,7 +30,13 @@ class PricesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AdminBloc bloc = context.read<AdminBloc>();
     final List<AdminHallEntity> halls = state.clubHalls;
-    final String hallId = halls.first.id;
+    // Залы на тарифе клуба; если все со своей ценой — показываем первый.
+    final List<AdminHallEntity> onClub = <AdminHallEntity>[
+      for (final AdminHallEntity h in halls)
+        if (!state.priceOf(h.id).custom) h,
+    ];
+    final AdminHallEntity base = onClub.isNotEmpty ? onClub.first : halls.first;
+    final String hallId = base.id;
     final HallPriceEntity price = state.priceOf(hallId);
 
     return Column(
@@ -38,7 +45,8 @@ class PricesTab extends StatelessWidget {
         _ClubPriceCard(
           clubId: state.clubId,
           clubName: state.club.name,
-          halls: halls,
+          halls: onClub.isNotEmpty ? onClub : halls,
+          allHalls: halls,
           price: price,
           accent: accent,
           onChanged: (PriceField f, int v) => bloc.add(
@@ -46,6 +54,20 @@ class PricesTab extends StatelessWidget {
           ),
           onTiers: (List<VrTierEntity> t) => bloc.add(AdminVrTiersChanged(t)),
         ),
+        // Своя цена зала — для каждого зала, кроме опорного карточки клуба.
+        for (final AdminHallEntity h in halls)
+          if (halls.length > 1 && h.id != hallId) ...<Widget>[
+            const SizedBox(height: 14),
+            _HallPriceCard(
+              hall: h,
+              price: state.priceOf(h.id),
+              accent: accent,
+              onToggle: () => bloc.add(AdminHallPricesCustomToggled(h.id)),
+              onChanged: (PriceField f, int v) => bloc.add(
+                AdminPriceChanged(hallId: h.id, field: f, value: v),
+              ),
+            ),
+          ],
         const SizedBox(height: 14),
         _DurationPreview(price: price),
         const SizedBox(height: 14),
@@ -60,6 +82,7 @@ class _ClubPriceCard extends StatelessWidget {
     required this.clubId,
     required this.clubName,
     required this.halls,
+    required this.allHalls,
     required this.price,
     required this.accent,
     required this.onChanged,
@@ -68,7 +91,12 @@ class _ClubPriceCard extends StatelessWidget {
 
   final String clubId;
   final String clubName;
+
+  /// Залы на тарифе клуба.
   final List<AdminHallEntity> halls;
+
+  /// Все залы клуба — подпись, если у части из них своя цена.
+  final List<AdminHallEntity> allHalls;
   final HallPriceEntity price;
   final Color accent;
   final void Function(PriceField, int) onChanged;
@@ -91,9 +119,11 @@ class _ClubPriceCard extends StatelessWidget {
         children: <Widget>[
           AdminCardTitle(
             'Тарифы $clubName',
-            subtitle: halls.length > 1
-                ? 'Одна цена для всех залов: ${halls.map(_hallLabel).join(' · ')}.'
-                : _hallLabel(halls.first),
+            subtitle: allHalls.length > halls.length
+                ? 'Для залов без своей цены: ${halls.map(_hallLabel).join(' · ')}.'
+                : halls.length > 1
+                    ? 'Одна цена для всех залов: ${halls.map(_hallLabel).join(' · ')}.'
+                    : _hallLabel(halls.first),
           ),
           const SizedBox(height: 16),
           Row(
@@ -159,6 +189,110 @@ class _ClubPriceCard extends StatelessWidget {
   static String _hallLabel(AdminHallEntity h) =>
       '${h.name} — ${AdminFormat.helmets(h.headsets)}'
       '${h.consoles > 0 ? ' и ${h.consoles} PS5' : ''}';
+}
+
+/// Своя цена зала: шлем и PS5 отдельно от тарифа клуба, одна цена без ступеней.
+class _HallPriceCard extends StatelessWidget {
+  const _HallPriceCard({
+    required this.hall,
+    required this.price,
+    required this.accent,
+    required this.onToggle,
+    required this.onChanged,
+  });
+
+  final AdminHallEntity hall;
+  final HallPriceEntity price;
+  final Color accent;
+  final VoidCallback onToggle;
+  final void Function(PriceField, int) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool on = price.custom;
+    final List<_PriceRow> rows = <_PriceRow>[
+      _PriceRow('VR-шлем', 'за 1 час, один шлем', PriceField.vrWeekday,
+          PriceField.vrWeekend),
+      if (hall.consoles > 0)
+        _PriceRow('PS5', 'за 1 час, одна приставка', PriceField.ps5Weekday,
+            PriceField.ps5Weekend),
+    ];
+
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: AdminCardTitle(
+                  '${hall.name} — своя цена',
+                  subtitle: on
+                      ? 'Цены ниже только для этого зала. Ступеней «от N шлемов» '
+                          'здесь нет — одна цена.'
+                      : 'Сейчас — по тарифу клуба. Включите, чтобы задать залу '
+                          'отдельные цены шлема${hall.consoles > 0 ? ' и PS5' : ''}.',
+                ),
+              ),
+              const SizedBox(width: 14),
+              AdminToggle(value: on, accent: accent, onTap: onToggle),
+            ],
+          ),
+          if (on) ...<Widget>[
+            const SizedBox(height: 16),
+            Row(
+              children: const <Widget>[
+                Expanded(child: SizedBox()),
+                SizedBox(width: 96, child: Center(child: AdminLabel('будни'))),
+                SizedBox(width: 10),
+                SizedBox(width: 96, child: Center(child: AdminLabel('выходные'))),
+              ],
+            ),
+            for (final _PriceRow r in rows)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(r.label,
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600)),
+                          Text(r.sub,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AdminColors.textFaint)),
+                        ],
+                      ),
+                    ),
+                    _PriceInput(
+                      key: ValueKey<String>('${hall.id}-${r.weekday.name}'),
+                      value: price.value(r.weekday),
+                      onChanged: (int v) => onChanged(r.weekday, v),
+                    ),
+                    const SizedBox(width: 10),
+                    _PriceInput(
+                      key: ValueKey<String>('${hall.id}-${r.weekend.name}'),
+                      value: price.value(r.weekend),
+                      onChanged: (int v) => onChanged(r.weekend, v),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            const Text(
+              'В режиме «Весь клуб» шлемы этого зала считаются по этой цене, '
+              'а ступени тарифа клуба — только по остальным залам.',
+              style: TextStyle(fontSize: 12, height: 1.4, color: AdminColors.textLabel),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// Ступени цены шлемов: «от N штук — другая цена за место».

@@ -139,6 +139,21 @@ class AdminRepositoryMock implements IAdminRepository {
   }) async {}
 
   @override
+  Future<void> saveHallPrice({
+    required String hallId,
+    required PriceField field,
+    required int value,
+  }) async {}
+
+  @override
+  Future<void> setHallPricesCustom({
+    required String hallId,
+    required bool custom,
+    required HallPriceEntity price,
+    required bool consoles,
+  }) async {}
+
+  @override
   Stream<void> watchChanges() => const Stream<void>.empty();
 
   @override

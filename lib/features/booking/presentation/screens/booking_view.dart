@@ -460,10 +460,31 @@ class _FormBody extends StatelessWidget {
 
   bool get _weekend => _dayKind == DayKind.weekend;
 
+  /// Собственная цена зала [roomId] для [type] в выбранный день, если есть.
+  PriceRateEntity? _own(StationType type, String roomId) {
+    for (final PriceRateEntity r in state.prices) {
+      if (r.roomId == roomId && r.stationType == type && r.dayKind == _dayKind) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /// Есть ли в зале станции типа [type].
+  bool _roomHas(String roomId, StationType type) => state.stations
+      .any((StationEntity s) => s.roomId == roomId && s.type == type);
+
   num _ratePerHour(StationType type) {
+    // Один зал — его собственная цена, если она есть.
+    final List<String> rooms = state.hall?.roomIds ?? const <String>[];
+    if (rooms.length == 1) {
+      final PriceRateEntity? own = _own(type, rooms.first);
+      if (own != null) return own.pricePerHour;
+    }
     num rate = 0;
     int tier = 0;
     for (final PriceRateEntity r in state.prices) {
+      if (r.roomId != null) continue;
       if (r.stationType != type || r.dayKind != _dayKind) continue;
       // Базовая цена — ступень с минимальным количеством.
       if (rate == 0 || r.minQty < tier) {
@@ -477,7 +498,7 @@ class _FormBody extends StatelessWidget {
   /// Ступени тарифа для типа станции по возрастанию количества.
   List<PriceRateEntity> _tiers(StationType type) => state.prices
       .where((PriceRateEntity r) =>
-          r.stationType == type && r.dayKind == _dayKind)
+          r.roomId == null && r.stationType == type && r.dayKind == _dayKind)
       .toList()
     ..sort((PriceRateEntity a, PriceRateEntity b) =>
         a.minQty.compareTo(b.minQty));
@@ -502,8 +523,21 @@ class _FormBody extends StatelessWidget {
     final bool showPs = state.hall == null || state.hall!.consoles > 0;
     // Тариф может идти ступенями: «до 6 шлемов одна цена, от 7 — другая».
     // Показываем все ступени: иначе клиент не поймёт, почему итог ниже.
-    final List<PriceRateEntity> vrTiers = _tiers(StationType.vrHeadset);
-    final List<PriceRateEntity> psTiers = showPs ? _tiers(StationType.ps5) : <PriceRateEntity>[];
+    // Тариф клуба показываем, если в выбранном варианте есть станции без
+    // собственной цены зала; цены залов — отдельными строками с названием зала.
+    final List<String> rooms = state.hall?.roomIds ?? const <String>[];
+    final bool several = rooms.length > 1;
+    String roomName(String id) => state.stations
+        .firstWhere((StationEntity s) => s.roomId == id)
+        .roomName;
+    bool clubNeeded(StationType t) =>
+        rooms.isEmpty ||
+        rooms.any((String id) => _roomHas(id, t) && _own(t, id) == null);
+    final List<PriceRateEntity> vrTiers =
+        clubNeeded(StationType.vrHeadset) ? _tiers(StationType.vrHeadset) : <PriceRateEntity>[];
+    final List<PriceRateEntity> psTiers = showPs && clubNeeded(StationType.ps5)
+        ? _tiers(StationType.ps5)
+        : <PriceRateEntity>[];
     final bool tiered = vrTiers.length > 1 || psTiers.length > 1;
     final List<({String label, String price})> rateLines = <({String label, String price})>[
       for (final PriceRateEntity r in vrTiers)
@@ -518,6 +552,17 @@ class _FormBody extends StatelessWidget {
           label: r.minQty > 1 ? 'от ${r.minQty} PS5 · $durLabel' : '1 PS5 · $durLabel',
           price: BookingFormat.money((r.pricePerHour * hrs).round()),
         ),
+      for (final String id in rooms)
+        for (final StationType t in <StationType>[
+          StationType.vrHeadset,
+          if (showPs) StationType.ps5,
+        ])
+          if (_roomHas(id, t) && _own(t, id) != null)
+            (
+              label: '${several ? '${roomName(id)} · ' : ''}'
+                  '${t == StationType.ps5 ? '1 PS5' : '1 VR-шлем'} · $durLabel',
+              price: BookingFormat.money((_own(t, id)!.pricePerHour * hrs).round()),
+            ),
     ];
 
     return <Widget>[

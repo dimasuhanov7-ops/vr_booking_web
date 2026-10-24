@@ -44,6 +44,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminClubChanged>(_onClubChanged);
     on<AdminTabChanged>(_onTabChanged);
     on<AdminVrTiersChanged>(_onVrTiersChanged);
+    on<AdminHallPricesCustomToggled>(_onHallPricesCustomToggled);
     on<AdminPriceChanged>(_onPriceChanged);
     on<AdminPackageFieldChanged>(_onPackageFieldChanged);
     on<AdminPackageToggled>(_onPackageToggled);
@@ -350,11 +351,30 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   }
 
   void _onPriceChanged(AdminPriceChanged event, Emitter<AdminState> emit) {
-    // Цены в БД — по клубу: правка распространяется на все залы клуба.
+    // Своя цена зала — правим только его.
+    if (state.priceOf(event.hallId).custom) {
+      emit(state.copyWith(prices: <String, HallPriceEntity>{
+        ...state.prices,
+        event.hallId:
+            state.priceOf(event.hallId).withField(event.field, event.value),
+      }));
+      _saveLater(
+        'hall-price-${event.hallId}-${event.field.name}',
+        () => _repository.saveHallPrice(
+          hallId: event.hallId,
+          field: event.field,
+          value: event.value,
+        ),
+      );
+      return;
+    }
+    // Тариф клуба в БД один: правка распространяется на все залы клуба,
+    // у которых нет своей цены.
     final String clubId = state.clubId;
     final Map<String, HallPriceEntity> next =
         Map<String, HallPriceEntity>.of(state.prices);
     for (final AdminHallEntity h in state.club.halls) {
+      if (state.priceOf(h.id).custom) continue;
       next[h.id] = state.priceOf(h.id).withField(event.field, event.value);
     }
     emit(state.copyWith(prices: next));
@@ -372,15 +392,67 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     final String clubId = state.clubId;
     final Map<String, HallPriceEntity> next =
         Map<String, HallPriceEntity>.of(state.prices);
+    AdminHallEntity? base;
     for (final AdminHallEntity h in state.club.halls) {
+      if (state.priceOf(h.id).custom) continue;
+      base ??= h;
       next[h.id] = state.priceOf(h.id).withTiers(event.tiers);
     }
+    // Все залы со своей ценой: клубный тариф никому не нужен, не трогаем.
+    if (base == null) return;
     emit(state.copyWith(prices: next));
     // Сохраняем уже упорядоченные ступени (withTiers убрал повторы и порог 1).
-    final List<VrTierEntity> tiers = state.priceOf(state.club.halls.first.id).vrTiers;
+    final List<VrTierEntity> tiers = next[base.id]!.vrTiers;
     _saveLater(
       'price-$clubId-tiers',
       () => _repository.saveVrTiers(clubId: clubId, tiers: tiers),
+    );
+  }
+
+  /// Клубный тариф для зала, у которого своей цены нет: из первого такого
+  /// зала клуба, иначе из самого зала.
+  HallPriceEntity _clubRatesFor(AdminHallEntity hall) {
+    for (final AdminHallEntity h in state.club.halls) {
+      if (!state.priceOf(h.id).custom && h.id != hall.id) return state.priceOf(h.id);
+    }
+    return state.priceOf(hall.id);
+  }
+
+  void _onHallPricesCustomToggled(
+    AdminHallPricesCustomToggled event,
+    Emitter<AdminState> emit,
+  ) {
+    AdminHallEntity? hall;
+    for (final AdminHallEntity h in state.club.halls) {
+      if (h.id == event.hallId) hall = h;
+    }
+    if (hall == null) return;
+    final HallPriceEntity cur = state.priceOf(hall.id);
+    final bool on = !cur.custom;
+
+    // Включая цену зала, начинаем с тарифа клуба — число не прыгает.
+    // Выключая — зал снова показывает клубный тариф со ступенями.
+    final HallPriceEntity club = _clubRatesFor(hall);
+    final HallPriceEntity next = on
+        ? cur.withRatesOf(cur, custom: true)
+        : cur.withRatesOf(club, custom: false);
+    emit(state.copyWith(
+      prices: <String, HallPriceEntity>{...state.prices, hall.id: next},
+    ));
+    // Правки полей этого зала, ещё не ушедшие на сервер, больше не нужны.
+    for (final PriceField f in PriceField.values) {
+      _dropSave('hall-price-${hall.id}-${f.name}');
+    }
+    final bool consoles = hall.consoles > 0;
+    final String hallId = hall.id;
+    _saveLater(
+      'hall-price-$hallId-toggle',
+      () => _repository.setHallPricesCustom(
+        hallId: hallId,
+        custom: on,
+        price: next,
+        consoles: consoles,
+      ),
     );
   }
 

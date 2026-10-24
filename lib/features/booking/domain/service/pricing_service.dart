@@ -9,22 +9,49 @@ import 'club_clock.dart';
 /// Тариф может идти ступенями по количеству: «до 6 шлемов 800 ₽, от 7 — 700 ₽».
 /// Ступень выбирается по числу станций этого типа в конкретном часе сеанса и
 /// применяется ко всем станциям сразу — так же, как считает сервер
-/// (`booking_station_price`), иначе итог в виджете разошёлся бы с чеком.
+/// (`booking_segment_prices`), иначе итог в виджете разошёлся бы с чеком.
+///
+/// У зала может быть собственная цена (`PriceRateEntity.roomId`): она
+/// перекрывает тариф клуба для станций этого зала и ступеней не имеет.
+/// Станции с ценой зала считаются в своей группе «зал + тип», остальные —
+/// вместе по клубу.
 class PricingService {
   /// Создаёт сервис.
   const PricingService();
 
+  /// Собственная цена зала [roomId] для [type] в [dayKind], если она есть.
+  PriceRateEntity? roomRate({
+    required List<PriceRateEntity> rates,
+    required String? roomId,
+    required StationType type,
+    required DayKind dayKind,
+  }) {
+    if (roomId == null) return null;
+    for (final PriceRateEntity r in rates) {
+      if (r.roomId == roomId && r.stationType == type && r.dayKind == dayKind) {
+        return r;
+      }
+    }
+    return null;
+  }
+
   /// Цена часа для [type] при [qty] станциях этого типа в этот же час.
+  /// Если у зала [roomId] своя цена — она, иначе тариф клуба со ступенями.
   num ratePerHour({
     required List<PriceRateEntity> rates,
     required StationType type,
     required DayKind dayKind,
     int qty = 1,
+    String? roomId,
   }) {
+    final PriceRateEntity? own =
+        roomRate(rates: rates, roomId: roomId, type: type, dayKind: dayKind);
+    if (own != null) return own.pricePerHour;
     final int n = qty < 1 ? 1 : qty;
     num rate = 0;
     int tier = 0;
     for (final PriceRateEntity r in rates) {
+      if (r.roomId != null) continue;
       if (r.stationType != type || r.dayKind != dayKind) continue;
       if (r.minQty > n || r.minQty < tier) continue;
       rate = r.pricePerHour;
@@ -49,6 +76,7 @@ class PricingService {
       type: station.type,
       dayKind: kind,
       qty: qty,
+      roomId: station.roomId,
     );
     return (rate * minutes / 60).round();
   }
@@ -71,18 +99,23 @@ class PricingService {
   }) {
     final DayKind kind = DayKind.of(ClubClock(club).toWall(startsAtUtc));
 
-    // Сколько станций каждого типа взято в каждом часе — это и есть ступень.
-    final List<Map<StationType, int>> perHour = <Map<StationType, int>>[
-      for (int h = 0; h < hourCount; h++)
-        <StationType, int>{
-          for (final StationEntity s in stations)
-            if (isPickedAt(s, h)) s.type: 0,
-        },
+    // Группа для ступени: «зал + тип» у станций с собственной ценой зала,
+    // иначе «весь клуб + тип». Сколько станций в группе взято в час — и есть
+    // ступень.
+    String groupOf(StationEntity s) {
+      final bool own = roomRate(
+              rates: rates, roomId: s.roomId, type: s.type, dayKind: kind) !=
+          null;
+      return '${s.type.name}|${own ? s.roomId : ''}';
+    }
+
+    final List<Map<String, int>> perHour = <Map<String, int>>[
+      for (int h = 0; h < hourCount; h++) <String, int>{},
     ];
     for (int h = 0; h < hourCount; h++) {
       for (final StationEntity s in stations) {
         if (!isPickedAt(s, h)) continue;
-        perHour[h].update(s.type, (int v) => v + 1, ifAbsent: () => 1);
+        perHour[h].update(groupOf(s), (int v) => v + 1, ifAbsent: () => 1);
       }
     }
 
@@ -97,7 +130,8 @@ class PricingService {
           rates: rates,
           type: s.type,
           dayKind: kind,
-          qty: perHour[h][s.type] ?? 1,
+          qty: perHour[h][groupOf(s)] ?? 1,
+          roomId: s.roomId,
         );
       }
       final String hoursTag = mins > 0 && mins != 60 ? ' · ${mins ~/ 60} ч' : '';

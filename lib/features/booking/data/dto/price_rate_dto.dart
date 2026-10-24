@@ -9,6 +9,7 @@ class PriceRateDto {
     required this.dayKind,
     required this.pricePerHour,
     this.minQty = 1,
+    this.roomId,
   });
 
   /// Разбирает JSON от Supabase.
@@ -18,6 +19,8 @@ class PriceRateDto {
         pricePerHour: json['price_per_hour'] as num,
         // Столбца может не быть в старой схеме — тогда это базовая ступень.
         minQty: (json['min_qty'] as num?)?.toInt() ?? 1,
+        // Строки booking_room_prices (цена зала) приходят с room_id.
+        roomId: json['room_id'] as String?,
       );
 
   /// Тип станции (`vr_headset` / `ps5`).
@@ -32,11 +35,15 @@ class PriceRateDto {
   /// С какого количества станций действует цена.
   final int minQty;
 
+  /// Зал, если это цена зала, а не тариф клуба.
+  final String? roomId;
+
   /// В доменную сущность.
   PriceRateEntity toEntity() => PriceRateEntity(
         stationType: StationType.fromRaw(stationType),
         dayKind: DayKind.fromRaw(dayKind),
         pricePerHour: pricePerHour,
         minQty: minQty,
+        roomId: roomId,
       );
 }

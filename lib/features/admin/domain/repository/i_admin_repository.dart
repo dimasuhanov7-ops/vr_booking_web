@@ -67,6 +67,23 @@ abstract interface class IAdminRepository {
     required int value,
   });
 
+  /// Сохранить одно поле собственной цены зала (`booking_room_prices`).
+  Future<void> saveHallPrice({
+    required String hallId,
+    required PriceField field,
+    required int value,
+  });
+
+  /// Включить цену зала: записать [price] (шлем и, если [consoles], PS5 —
+  /// будни и выходные) как цену зала. Выключить: удалить цены зала, станции
+  /// вернутся к тарифу клуба.
+  Future<void> setHallPricesCustom({
+    required String hallId,
+    required bool custom,
+    required HallPriceEntity price,
+    required bool consoles,
+  });
+
   /// Сигналы об изменениях броней, закрытий и паузы приёма — откуда угодно:
   /// с сайта, из другого телефона, из менеджера. Данные в событии не
   /// передаются: это повод перечитать их. Подписка живёт, пока есть слушатель.

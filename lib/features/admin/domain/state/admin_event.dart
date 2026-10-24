@@ -86,6 +86,19 @@ class AdminPriceChanged extends AdminEvent {
   List<Object?> get props => <Object?>[hallId, field, value];
 }
 
+/// Включить или выключить собственную цену зала: у зала свои цены шлема и PS5
+/// вместо тарифа клуба. При включении цены зала стартуют с текущих значений.
+class AdminHallPricesCustomToggled extends AdminEvent {
+  /// Создаёт событие.
+  const AdminHallPricesCustomToggled(this.hallId);
+
+  /// Зал.
+  final String hallId;
+
+  @override
+  List<Object?> get props => <Object?>[hallId];
+}
+
 /// Правка числового поля пакета.
 class AdminPackageFieldChanged extends AdminEvent {
   /// Создаёт событие.

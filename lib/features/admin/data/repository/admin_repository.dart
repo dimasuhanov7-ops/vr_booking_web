@@ -164,19 +164,46 @@ class AdminRepository implements IAdminRepository {
       byClub.putIfAbsent(clubId, () => <PriceField, int>{})[f] = value;
     }
 
+    // Собственные цены залов: room_id -> {field -> цена}. Таблицы может не
+    // быть (миграция online_booking_room_prices ещё не применена) — тогда у
+    // всех залов цена клуба.
+    final Map<String, Map<PriceField, int>> byRoom = <String, Map<PriceField, int>>{};
+    try {
+      final List<dynamic> roomPrices = await _client
+          .from('booking_room_prices')
+          .select('room_id,station_type,day_kind,price_per_hour');
+      for (final dynamic p in roomPrices) {
+        final Map<String, dynamic> m = p as Map<String, dynamic>;
+        final PriceField? f =
+            _priceField(m['station_type'] as String, m['day_kind'] as String);
+        if (f == null) continue;
+        byRoom.putIfAbsent(m['room_id'] as String, () => <PriceField, int>{})[f] =
+            (m['price_per_hour'] as num).round();
+      }
+    } on PostgrestException {
+      byRoom.clear();
+    }
+
     final List<HallPriceEntity> out = <HallPriceEntity>[];
     for (final dynamic r in rooms) {
       final Map<String, dynamic> m = r as Map<String, dynamic>;
-      final Map<PriceField, int> v = byClub[m['club_id']] ?? <PriceField, int>{};
+      final Map<PriceField, int> club = byClub[m['club_id']] ?? <PriceField, int>{};
+      final Map<PriceField, int> own = byRoom[m['id']] ?? const <PriceField, int>{};
+      // Цена зала по полю; чего нет — берём из тарифа клуба.
+      final Map<PriceField, int> v = <PriceField, int>{...club, ...own};
+      final bool ownVr = own.containsKey(PriceField.vrWeekday) ||
+          own.containsKey(PriceField.vrWeekend);
       out.add(HallPriceEntity(
         hallId: m['id'] as String,
+        custom: own.isNotEmpty,
         vrWeekday: v[PriceField.vrWeekday] ?? 0,
         vrWeekend: v[PriceField.vrWeekend] ?? 0,
         ps5Weekday: v[PriceField.ps5Weekday] ?? 0,
         ps5Weekend: v[PriceField.ps5Weekend] ?? 0,
         // Если у ступени задан только один тип дня, второй берём из базовой
         // цены — нулевой цены за шлем быть не должно.
-        vrTiers: <VrTierEntity>[
+        // У цены зала ступеней нет.
+        vrTiers: ownVr ? const <VrTierEntity>[] : <VrTierEntity>[
           for (final MapEntry<int, ({int? weekday, int? weekend})> t
               in (tiers[m['club_id']] ?? <int, ({int? weekday, int? weekend})>{})
                   .entries)
@@ -484,6 +511,58 @@ class AdminRepository implements IAdminRepository {
             .eq('min_qty', 1)
             .select('id');
         _ensureChanged(rows);
+      });
+
+  @override
+  Future<void> saveHallPrice({
+    required String hallId,
+    required PriceField field,
+    required int value,
+  }) =>
+      _guard(() async {
+        final ({String type, String day}) k = _priceKey(field);
+        await _client.from('booking_room_prices').upsert(
+          <String, dynamic>{
+            'room_id': hallId,
+            'station_type': k.type,
+            'day_kind': k.day,
+            'price_per_hour': value,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          },
+          onConflict: 'room_id,station_type,day_kind',
+        );
+      });
+
+  @override
+  Future<void> setHallPricesCustom({
+    required String hallId,
+    required bool custom,
+    required HallPriceEntity price,
+    required bool consoles,
+  }) =>
+      _guard(() async {
+        if (!custom) {
+          await _client.from('booking_room_prices').delete().eq('room_id', hallId);
+          return;
+        }
+        final String now = DateTime.now().toUtc().toIso8601String();
+        await _client.from('booking_room_prices').upsert(
+          <Map<String, dynamic>>[
+            for (final PriceField f in <PriceField>[
+              PriceField.vrWeekday,
+              PriceField.vrWeekend,
+              if (consoles) ...<PriceField>[PriceField.ps5Weekday, PriceField.ps5Weekend],
+            ])
+              <String, dynamic>{
+                'room_id': hallId,
+                'station_type': _priceKey(f).type,
+                'day_kind': _priceKey(f).day,
+                'price_per_hour': price.value(f),
+                'updated_at': now,
+              },
+          ],
+          onConflict: 'room_id,station_type,day_kind',
+        );
       });
 
   /// Таблицы, изменения которых видны на вкладках «Записи» и «Доступность».

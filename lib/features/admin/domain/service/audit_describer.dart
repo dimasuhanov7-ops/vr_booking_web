@@ -32,6 +32,7 @@ class AuditDescriber {
     final Map<String, dynamic> row = e.after ?? e.before ?? const <String, dynamic>{};
     return switch (e.entity) {
       'booking_prices' => _price(e, row),
+      'booking_room_prices' => _roomPrice(e, row),
       'booking_packages' => _package(e, row),
       'booking_availability' => _availability(e, row),
       'booking_clubs' => _club(e, row),
@@ -55,6 +56,24 @@ class AuditDescriber {
       'insert' => (title: 'Цена добавлена · $club', details: '$what: $now ₽/ч'),
       'delete' => (title: 'Цена удалена · $club', details: '$what: было $was ₽/ч'),
       _ => (title: 'Цена · $club', details: '$what: $was → $now ₽/ч'),
+    };
+  }
+
+  /// Своя цена зала (`booking_room_prices`).
+  AuditLine _roomPrice(AuditEntryEntity e, Map<String, dynamic> row) {
+    final String type = row['station_type'] == 'ps5' ? 'PS5' : 'VR';
+    final String day = row['day_kind'] == 'weekend' ? 'выходные' : 'будни';
+    final String hall = _hallName(row['room_id']);
+    final String what = '$type $day';
+    final String? was = _num(e.before?['price_per_hour']);
+    final String? now = _num(e.after?['price_per_hour']);
+    return switch (e.action) {
+      'insert' => (title: 'Цена зала задана · $hall', details: '$what: $now ₽/ч'),
+      'delete' => (
+          title: 'Цена зала убрана · $hall',
+          details: '$what: было $was ₽/ч, дальше — по тарифу клуба'
+        ),
+      _ => (title: 'Цена зала · $hall', details: '$what: $was → $now ₽/ч'),
     };
   }
 

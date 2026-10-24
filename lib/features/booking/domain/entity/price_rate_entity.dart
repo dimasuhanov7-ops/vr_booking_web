@@ -33,6 +33,7 @@ class PriceRateEntity extends Equatable {
     required this.dayKind,
     required this.pricePerHour,
     this.minQty = 1,
+    this.roomId,
   });
 
   /// Тип станции.
@@ -47,7 +48,12 @@ class PriceRateEntity extends Equatable {
   /// С какого количества станций действует цена (базовая строка — 1).
   final int minQty;
 
+  /// Зал, для которого действует цена. `null` — тариф клуба (со ступенями).
+  /// Собственная цена зала перекрывает тариф клуба для станций этого зала и
+  /// ступеней не имеет — так же считает сервер (`booking_segment_prices`).
+  final String? roomId;
+
   @override
   List<Object?> get props =>
-      <Object?>[stationType, dayKind, pricePerHour, minQty];
+      <Object?>[stationType, dayKind, pricePerHour, minQty, roomId];
 }

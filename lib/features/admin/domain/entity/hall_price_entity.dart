@@ -63,6 +63,7 @@ class HallPriceEntity extends Equatable {
     required this.ps5Weekday,
     required this.ps5Weekend,
     this.vrTiers = const <VrTierEntity>[],
+    this.custom = false,
   });
 
   /// Идентификатор зала.
@@ -82,6 +83,11 @@ class HallPriceEntity extends Equatable {
 
   /// Ступени цены шлемов по возрастанию порога. Пусто — одна цена.
   final List<VrTierEntity> vrTiers;
+
+  /// У зала своя цена (`booking_room_prices`), а не тариф клуба. Тогда правки
+  /// клубного тарифа и его ступеней этот зал не меняют; своя цена — одна на
+  /// тип и день, без ступеней.
+  final bool custom;
 
   /// Есть ли ступени у шлемов.
   bool get hasVrTiers => vrTiers.isNotEmpty;
@@ -113,6 +119,31 @@ class HallPriceEntity extends Equatable {
         ps5Weekday: field == PriceField.ps5Weekday ? v : ps5Weekday,
         ps5Weekend: field == PriceField.ps5Weekend ? v : ps5Weekend,
         vrTiers: vrTiers,
+        custom: custom,
+      );
+
+  /// Копия с включённой или выключенной своей ценой зала. При включении
+  /// ступени сбрасываются — у цены зала их нет.
+  HallPriceEntity withCustom(bool on) => HallPriceEntity(
+        hallId: hallId,
+        vrWeekday: vrWeekday,
+        vrWeekend: vrWeekend,
+        ps5Weekday: ps5Weekday,
+        ps5Weekend: ps5Weekend,
+        vrTiers: on ? const <VrTierEntity>[] : vrTiers,
+        custom: on,
+      );
+
+  /// Копия с ценами и ступенями другого тарифа (клубного), но флагом [custom].
+  HallPriceEntity withRatesOf(HallPriceEntity other, {required bool custom}) =>
+      HallPriceEntity(
+        hallId: hallId,
+        vrWeekday: other.vrWeekday,
+        vrWeekend: other.vrWeekend,
+        ps5Weekday: other.ps5Weekday,
+        ps5Weekend: other.ps5Weekend,
+        vrTiers: custom ? const <VrTierEntity>[] : other.vrTiers,
+        custom: custom,
       );
 
   /// Копия с другими ступенями — упорядоченными по порогу, без повторов и
@@ -131,6 +162,7 @@ class HallPriceEntity extends Equatable {
       ps5Weekday: ps5Weekday,
       ps5Weekend: ps5Weekend,
       vrTiers: List<VrTierEntity>.unmodifiable(sorted),
+      custom: custom,
     );
   }
 
@@ -142,5 +174,6 @@ class HallPriceEntity extends Equatable {
         ps5Weekday,
         ps5Weekend,
         vrTiers,
+        custom,
       ];
 }

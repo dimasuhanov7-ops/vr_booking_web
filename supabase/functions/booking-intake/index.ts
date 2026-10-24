@@ -164,7 +164,20 @@ async function handle(req: Request): Promise<Response> {
         .select("station_type,day_kind,price_per_hour,min_qty")
         .eq("club_id", clubId);
       if (error) return json({ error: "DB", detail: error.message }, 500);
-      return json(data);
+      // Цены залов (booking_room_prices): строки с room_id перекрывают тариф
+      // клуба для станций этого зала. Нет таблицы или цен — остаётся тариф клуба.
+      const { data: roomData } = await db
+        .from("booking_room_prices")
+        .select("room_id,station_type,day_kind,price_per_hour,booking_rooms!inner(club_id)")
+        .eq("booking_rooms.club_id", clubId);
+      const roomRows = (roomData ?? []).map((r: Record<string, unknown>) => ({
+        room_id: r.room_id,
+        station_type: r.station_type,
+        day_kind: r.day_kind,
+        price_per_hour: r.price_per_hour,
+        min_qty: 1,
+      }));
+      return json([...(data ?? []), ...roomRows]);
     }
 
     // ---- GET /packages?club_id= ----

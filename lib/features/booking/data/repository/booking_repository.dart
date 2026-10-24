@@ -73,7 +73,18 @@ class BookingRepository implements IBookingRepository {
             .from('booking_prices')
             .select()
             .eq('club_id', clubId);
-        return rows
+        // Цены залов клуба. Таблица появилась позже: пока её нет в базе,
+        // остаётся тариф клуба.
+        List<dynamic> roomRows = const <dynamic>[];
+        try {
+          roomRows = await _client
+              .from('booking_room_prices')
+              .select('room_id,station_type,day_kind,price_per_hour,booking_rooms!inner(club_id)')
+              .eq('booking_rooms.club_id', clubId);
+        } on PostgrestException {
+          roomRows = const <dynamic>[];
+        }
+        return <dynamic>[...rows, ...roomRows]
             .map((dynamic e) =>
                 PriceRateDto.fromJson(e as Map<String, dynamic>).toEntity())
             .toList(growable: false);
